@@ -18,18 +18,21 @@ Godot 4.7.2 stable, **double précision**, module Voxel Tools 1.7 compilé dedan
 Le greffon `addons/godot_ai` est actif : l'éditeur peut être piloté par MCP
 (`session_manage`, `project_run`, `editor_screenshot`, `game_manage`…).
 
-**Il n'y a pas de dépôt git.** C'est le risque le plus élevé du projet en
-l'état : ~2 300 lignes de code et trois documents sans historique. À faire en
-premier.
+Dépôt : <https://github.com/kyaminq-ui/Zentarys.git> (branche `main`).
+Le greffon `addons/godot_ai` est versionné avec le reste : sans lui, le projet
+ne s'ouvre pas proprement (il est déclaré dans `project.godot`).
 
 ## 2. Commandes
 
 ```
-# Suite de validation (44 vérifications, ~40 s)
+# Suite de validation (50 vérifications, ~40 s)
 godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd
 
 # Réimport après ajout d'un class_name (sinon l'éditeur ne le voit pas)
 godot.windows.editor.double.x86_64.exe --headless --path . --import
+
+# Réexport de la palette après modification de CWPalette
+godot.windows.editor.double.x86_64.exe --headless --path . -s tools/export_palette.gd
 ```
 
 Aperçus PNG écrits par la suite de tests dans
@@ -57,7 +60,9 @@ src/worldgen/
   cw_palette.gd           palette et règles de surface (couleurs originales)
   cw_voxel_generator.gd   VoxelGeneratorScript + cache de colonnes
 src/demo/terrain_demo.gd  scène de démonstration (arbre voxel construit en code)
-tests/worldgen_test.gd    44 vérifications, headless
+tests/worldgen_test.gd    50 vérifications, headless
+tools/export_palette.gd   régénère assets/palette/*.png depuis CWPalette
+assets/palette/           palette de projet + PALETTE.md
 ```
 
 ## 4. Invariants à ne pas casser
@@ -127,23 +132,33 @@ Effets à porter, déjà commentés à leur emplacement exact dans
 Attention : cette tranche change ce que produit le générateur, donc invalide
 tout cache d'altitude persistant. Ne pas construire de cache disque avant.
 
-## 7. Décisions ouvertes
+## 7. Assets voxels — décision prise
 
-**Authoring des assets voxels — recommandation : MagicaVoxel, pas d'éditeur
-maison.** `VoxelVoxLoader.load_from_file(chemin, VoxelBuffer, VoxelColorPalette,
-canal)` est intégré au build : un `.vox` se charge en un appel, avec sa palette,
-directement dans le modèle de rendu déjà utilisé. Écrire un éditeur qui vaille
-20 % de MagicaVoxel représente des semaines pour zéro gameplay.
+**MagicaVoxel pour l'authoring, pas d'éditeur maison.** `VoxelVoxLoader` est
+intégré au build : un `.vox` se charge en un appel, avec sa palette, directement
+dans le modèle de rendu déjà utilisé. Un éditeur maison représenterait des
+semaines pour zéro gameplay, et c'est l'auteur des assets qui en subirait chaque
+manque.
 
-Conséquence à trancher **avant** de produire des assets en série : une palette
-de projet unique, partagée par le terrain et les modèles, exportée en PNG 256×1
-pour MagicaVoxel. Sans ça, chaque `.vox` arrive avec sa propre palette et
-`COLOR_MESHER_PALETTE` ne peut plus servir de palette commune. `CWPalette`
-n'occupe que les index 0-13 ; il reste 242 entrées pour les assets.
+La palette de projet est en place : `assets/palette/zentarys_palette.png` à
+glisser sur la palette de MagicaVoxel, plages réservées documentées dans
+`assets/palette/PALETTE.md`, source unique dans `CWPalette`, et six
+vérifications qui empêchent une plage de bouger en silence.
+
+Deux faits mesurés sur l'import `.vox`, à ne pas redécouvrir :
+- les index de palette se conservent exactement (le décalage d'un cran du format
+  est absorbé par le chargeur) ;
+- les axes sont permutés : `vox(x, y, z) -> godot(y, z, x)`. Le haut reste le
+  haut, le plan horizontal est échangé.
 
 Outillage Godot à écrire plus tard, et seulement là où MagicaVoxel ne peut pas
 aider : placement et prévisualisation **en contexte** (une structure posée sur
 le terrain réellement généré), au jalon 4. Pas un éditeur généraliste.
 
-Autre décision reportée : le relief lointain paraît bleuté (ambiante du ciel sur
-les faces détournées du soleil). Réglage d'ambiance, pas un défaut de génération.
+## 8. Décisions ouvertes
+
+- Le relief lointain paraît bleuté (ambiante du ciel sur les faces détournées du
+  soleil). Réglage d'ambiance, pas un défaut de génération.
+- Les teintes des plages d'assets sont des rampes de départ, à ajuster. Le
+  découpage en plages, lui, est un contrat : le changer invalide les modèles
+  déjà peints.
