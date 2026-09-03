@@ -1,0 +1,19 @@
+[gd_scene format=3 uid="uid://c8pa07yb50eq6"]
+
+[ext_resource type="Script" uid="uid://bq2qwasu1dl74" path="res://src/demo/terrain_demo.gd" id="1_n28ww"]
+
+[sub_resource type="Sky" id="Sky_1vivr"]
+
+[sub_resource type="Environment" id="Environment_1vivr"]
+background_mode = 1
+background_color = Color(0, 0.47058824, 0.9019608, 1)
+sky = SubResource("Sky_1vivr")
+
+[node name="TerrainDemo" type="Node3D" unique_id=8275552]
+script = ExtResource("1_n28ww")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=696307768]
+environment = SubResource("Environment_1vivr")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=788953610]
+transform = Transform3D(0.7253743710122877, 0.6883545756937539, 0, -0.33056404182067667, 0.348341817403174, 0.8771461637055888, 0.6037875753389647, -0.6362593467837827, 0.4802234974431887, 0, 0, 0)
