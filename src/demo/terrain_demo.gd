@@ -30,6 +30,12 @@ const CORES_RESERVED: int = 2
 ## l'interieur d'une zone (un point par tuile).
 const SEARCH_ZONE_RINGS: int = 10
 
+## Dossier des captures prises depuis le jeu (touche F12).
+const SHOT_DIR: String = "user://shots"
+## Delai, en secondes, avant la capture automatique du gabarit d'echelle : le
+## temps que le terrain autour du gabarit soit maille.
+const BOARD_SHOT_DELAY: float = 8.0
+
 ## Cibles de teleportation, par touche.
 const BIOME_KEYS: Dictionary = {
 	KEY_1: CWPalette.GRASS,
@@ -52,6 +58,11 @@ const BIOME_KEYS: Dictionary = {
 @export var mouse_sensitivity: float = 0.0022
 ## Distance de vue initiale, en blocs. Reglable en jeu par Page haut / Page bas.
 @export var view_distance: int = 384
+
+## Pose le gabarit d'echelle (mires de hauteur connue, silhouette, modeles
+## charges) devant le point d'apparition. Sert a regler la taille des assets
+## voxels : voir nextsteps.md, §7.1.
+@export var scale_board: bool = false
 
 ## Bascule VoxelTerrain (detail unique) <-> VoxelLodTerrain (pyramide de LOD).
 ##
@@ -98,6 +109,18 @@ var _search_found: bool = false
 var _search_result: Vector2i = Vector2i.ZERO
 var _search_abort: bool = false
 var _search_status: String = ""
+## Point de depart de la recherche, releve sur le fil principal.
+##
+## `Node3D.get_position()` n'est pas lisible depuis un fil du pool : Godot le
+## refuse et rend Vector3.ZERO, ce qui faisait partir toutes les recherches de
+## l'origine du monde au lieu de la camera.
+var _search_from: Vector2i = Vector2i.ZERO
+
+## Compte a rebours de la capture automatique. Negatif = pas de capture prevue.
+var _shot_countdown: float = -1.0
+## Capture du gabarit : 0 = vue d'ensemble, 1 = gros plan sur les modeles.
+var _shot_stage: int = 0
+var _board: CWScaleBoard = null
 
 
 func _ready() -> void:
@@ -117,10 +140,17 @@ func _ready() -> void:
 		if wanted > _voxel_engine.get_thread_count():
 			_voxel_engine.set_thread_count(wanted)
 
+	# Le gabarit sert a lire une taille contre des mires : la flore dispersee
+	# n'y ferait qu'obstacle, et c'est justement elle qu'on cherche a regler.
+	generator.scatter = not scale_board
+
 	_build_environment()
 	_build_terrain()
 	_build_camera()
 	_build_hud()
+	if scale_board:
+		_build_scale_board()
+		_shot_countdown = BOARD_SHOT_DELAY
 
 
 func _build_terrain() -> void:
@@ -202,6 +232,48 @@ func _build_camera() -> void:
 	camera.rotation = Vector3(_pitch, _yaw, 0.0)
 
 
+## Pose le gabarit d'echelle au sol, devant la camera, et regarde-le.
+func _build_scale_board() -> void:
+	# Les modeles distincts, quel que soit le biome qui les emploie : un meme
+	# fichier revient dans plusieurs biomes, on ne le pose qu'une fois.
+	var lib := CWModelLibrary.shared()
+	var seen: Dictionary = {}
+	var flat: Array = []
+	for surface in CWModelLibrary.FLORA:
+		for m in lib.for_surface(surface):
+			if not seen.has(m.name):
+				seen[m.name] = true
+				flat.append(m)
+
+	# A cote de chaque modele, la meme silhouette reduite de moitie et du quart :
+	# c'est la seule facon de montrer une taille cible plutot que de la decrire.
+	# Les reductions d'abord, sinon l'original les masque.
+	var scaled: Array = []
+	for m in flat:
+		scaled.append(m.reduced(4))
+		scaled.append(m.reduced(2))
+		scaled.append(m)
+	flat = scaled
+
+	var here := _world_position()
+	var ahead: Vector2i = here + Vector2i(0, -24)
+	var ground: float = generator.field().sample_column(ahead.x, ahead.y).x
+	var board := CWScaleBoard.build(flat)
+	board.position = Vector3(
+			float(ahead.x - params.world_origin.x),
+			floorf(ground) + 1.0,
+			float(ahead.y - params.world_origin.y))
+	add_child(board)
+
+	_board = board
+	# Recul calcule pour que toute la largeur du gabarit tienne dans le champ.
+	var span: float = float(CWScaleBoard.width_of(flat)) * 0.62
+	camera.position = board.position + Vector3(0.0, 16.0, span)
+	_pitch = -0.14
+	_yaw = 0.0
+	camera.rotation = Vector3(_pitch, _yaw, 0.0)
+
+
 func _build_environment() -> void:
 	var sun := DirectionalLight3D.new()
 	sun.name = "Sun"
@@ -273,14 +345,14 @@ func start_biome_search(target: int) -> void:
 	_search_abort = false
 	_search_status = "recherche %s..." % CWPalette.name_of(target)
 	_hud_timer = 0.0
+	_search_from = _world_position()
 	_search_task = WorkerThreadPool.add_task(_run_biome_search)
 
 
 func _run_biome_search() -> void:
 	var f: CWTerrainField = generator.field()
-	var here := _world_position()
-	var cx: int = CWWorldParams.zone_of(here.x)
-	var cz: int = CWWorldParams.zone_of(here.y)
+	var cx: int = CWWorldParams.zone_of(_search_from.x)
+	var cz: int = CWWorldParams.zone_of(_search_from.y)
 	# Anneaux de zones concentriques : on rend le resultat le plus proche.
 	for ring in SEARCH_ZONE_RINGS + 1:
 		for dz in range(-ring, ring + 1):
@@ -348,6 +420,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_captured = false
 		else:
 			_shutdown()
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_F12:
+		capture_screenshot()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_F1:
 		_hud_detailed = not _hud_detailed
 		_hud_timer = 0.0
@@ -390,6 +464,20 @@ func _process(delta: float) -> void:
 
 	if _search_task != -1 and WorkerThreadPool.is_task_completed(_search_task):
 		_finish_biome_search()
+
+	if _shot_countdown > 0.0:
+		_shot_countdown -= delta
+		if _shot_countdown <= 0.0:
+			capture_screenshot()
+			if _shot_stage == 0 and _board != null:
+				# Second cliche, cadre sur les modeles : a la distance qui montre
+				# la mire de 32 blocs, un modele de trois blocs est un pixel.
+				_shot_stage = 1
+				camera.position = _board.position + Vector3(
+						_board.models_center, 5.0, _board.models_span * 1.1)
+				_pitch = -0.10
+				camera.rotation = Vector3(_pitch, _yaw, 0.0)
+				_shot_countdown = 1.5
 
 	# Chaque rafraichissement echantillonne le champ de terrain : a 8 Hz le
 	# cout est negligeable, a la frequence d'affichage il ne l'est plus.
@@ -473,6 +561,22 @@ func _update_hud() -> void:
 	else:
 		lines.append("F1 details")
 	hud.text = "\n".join(lines)
+
+
+## Enregistre l'image affichee dans `user://shots`.
+##
+## Passer par le jeu plutot que par une capture de fenetre : une fenetre en
+## arriere-plan ne rend plus, donc toute capture prise depuis l'exterieur rend
+## une image perimee ou rien du tout.
+func capture_screenshot() -> String:
+	var image: Image = get_viewport().get_texture().get_image()
+	DirAccess.make_dir_recursive_absolute(SHOT_DIR)
+	var path: String = "%s/%s.png" % [SHOT_DIR,
+			Time.get_datetime_string_from_system(false, false).replace(":", "")
+					.replace(" ", "_").replace("-", "")]
+	image.save_png(path)
+	print("[demo] capture -> ", ProjectSettings.globalize_path(path))
+	return path
 
 
 # -- Arret ---------------------------------------------------------------------

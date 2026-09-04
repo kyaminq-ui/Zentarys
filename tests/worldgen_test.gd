@@ -26,6 +26,7 @@ func _initialize() -> void:
 	_test_terrain_field()
 	_test_tile_features()
 	_test_generator()
+	_test_flora()
 	_test_palette()
 	_bench()
 	_write_previews()
@@ -291,6 +292,10 @@ const CWTileFeaturesTest := preload("res://tests/tile_features_test.gd")
 
 func _test_tile_features() -> void:
 	CWTileFeaturesTest.new().run(self)
+
+
+func _test_flora() -> void:
+	CWFloraTest.new().run(self)
 
 
 # -- 5. Generateur voxel : cache de colonnes et arret -------------------------

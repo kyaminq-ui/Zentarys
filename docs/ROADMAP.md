@@ -35,7 +35,7 @@ et des structures.
 | 1.4 | Champ d'altitude, chenaux | `World_baseHeightField` @004f9b70 | ✅ | idem |
 | 1.5 | Générateur voxel + rendu cubes | — (portage Godot) | ✅ | idem |
 | 1.6 | Éléments de tuile | `World_generateRegionFeatures` @0050e080 | ✅ | `docs/systems/01`, §2.7 |
-| 1.7 | **Contenu de biome, dispersion** | `WorldInfo_generateBiomeContent` @005e4850 | ⬜ | **prochaine tranche** |
+| 1.7 | **Contenu de biome, dispersion** | `WorldInfo_generateBiomeContent` @005e4850 | 🔶 | mécanique faite, table à lire |
 | 1.8 | Colonnes persistantes, édition | `Chunk_getColumnAt` @00406100 + `VoxelTool` | ⬜ | |
 | 1.9 | Éclairage voxel | `VoxelChunk_propagateSunlight` | ⬜ | |
 | 1.10 | Carte du monde | `WorldMap.cpp`, `NameGen_generateRegionName` | ⬜ | |
@@ -65,12 +65,35 @@ Trois points relevés à l'analyse, qui n'étaient pas dans le plan :
 `World_featureTier` @004d7870 est porté et gradue la difficulté depuis le centre
 de la carte (zone 512, 512).
 
-### 1.7 — Contenu de biome (prochaine tranche)
+### 1.7 — Contenu de biome (en cours)
 
-`WorldInfo_generateBiomeContent` (@005e4850) et `WorldInfo_scatterObjectsInArea`
-(@005f56c0). C'est la première tranche qui demande des assets : les ancres
-existent, il faut désormais poser quelque chose dessus. Voir « Assets à
-produire » ci-dessous.
+**Fait.** La mécanique de dispersion est portée, testée et mesurée :
+`CWVoxelModel` (un `.vox` en liste creuse, quatre quarts de tour précalculés,
+ancre au centre de l'empreinte et à la base), `CWModelLibrary` (chargement
+partagé, table modèle/biome, densités), `CWScatter` (cellules de 16 blocs, une
+graine par cellule, cache sous mutex), et l'estampage dans
+`CWVoxelGenerator._generate_block`. 26 vérifications dans `tests/flora_test.gd`.
+Surcoût mesuré : +14 % sur un bloc isolé, de l'ordre de 3 % en chargement réel,
+où une cellule sert aux neuf blocs qui l'entourent.
+
+**L'échelle des assets est fixée** — c'était le point bloquant, elle n'est
+déductible d'aucune décompilation. Personnage de référence à 8 blocs, touffe
+d'herbe à 2–4 blocs. Méthode et photos dans `assets/models/MODELS.md` et
+`docs/images/`. À revoir au jalon 3.1, quand la physique du joueur donnera la
+taille réelle du personnage.
+
+**Reste.** L'analyse de `WorldInfo_generateBiomeContent` (@005e4850, 4 200
+lignes) : la table modèle/biome, la génération procédurale des arbres, et
+l'identité des types d'éléments de tuile posés au jalon 1.6.
+
+**Correction de sources.** Deux noms du dépôt d'analyse sont trompeurs :
+
+- `WorldInfo_scatterObjectsInArea` (@005f56c0), listée ici comme seconde source
+  de 1.7, **ne disperse pas d'objets** : elle choisit la liste d'espèces d'un
+  point d'apparition selon le climat et le niveau, et son résultat est écrit
+  dans un `cube::Spawn`. C'est du jalon 2.6.
+- `World_generateTreeRecursive` (@005d9460) **ne génère pas d'arbres** : son
+  corps est de la gestion de cellules de région et de `cube::Spawn`.
 
 ### Assets à produire
 
@@ -114,6 +137,8 @@ L'identité de chaque type reste à établir : elle vient de
 Authoring : MagicaVoxel, palette de projet dans
 `assets/palette/zentarys_palette.png`, plages réservées documentées dans
 `assets/palette/PALETTE.md`. À l'import, `vox(x, y, z) -> godot(y, z, x)`.
+**Échelle et conventions de fichiers : `assets/models/MODELS.md`** — c'est le
+document à donner à qui modélise.
 
 ---
 
@@ -187,7 +212,9 @@ sans valeur tant que les jalons 2 et 3 ne sont pas là.
 
 | Sujet | Statut | Détail |
 |---|---|---|
-| Suite de tests headless | ✅ | 80 vérifications, `tests/worldgen_test.gd` |
+| Suite de tests headless | ✅ | 106 vérifications, `tests/worldgen_test.gd` |
+| Gabarit d'échelle en jeu | ✅ | `src/demo/scale_board.gd`, capture automatique |
+| Inventaire des modèles `.vox` | ✅ | `tools/inspect_model.gd`, contrôle des plages de palette |
 | Aperçu rapproché des éléments | ✅ | `tools/preview_features.gd`, avec et sans la couche |
 | Aperçus PNG (altitude, climat, chenaux) | ✅ | `user://worldgen_preview/` |
 | Arrêt immédiat du streaming | ✅ | `CWVoxelGenerator.request_shutdown()`, 23 ms → 1 µs par bloc en file |

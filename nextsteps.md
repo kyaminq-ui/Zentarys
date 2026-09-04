@@ -25,7 +25,7 @@ ne s'ouvre pas proprement (il est déclaré dans `project.godot`).
 ## 2. Commandes
 
 ```
-# Suite de validation (80 vérifications, ~60 s)
+# Suite de validation (106 vérifications, ~70 s)
 godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd
 
 # Réimport après ajout d'un class_name (sinon l'éditeur ne le voit pas)
@@ -38,6 +38,14 @@ godot.windows.editor.double.x86_64.exe --headless --path . -s tools/export_palet
 # (x, z, unités par pixel ; sans argument : le point de départ, 6 u/px)
 godot.windows.editor.double.x86_64.exe --headless --path . \
     -s tools/preview_features.gd -- 8397830 8399776 6
+
+# Inventaire des modèles voxels : gabarit, index employés, plages de palette
+# (sans argument : tout assets/models/)
+godot.windows.editor.double.x86_64.exe --headless --path . -s tools/inspect_model.gd
+
+# Gabarit d'échelle en jeu : mettre scale_board = true sur le nœud racine de
+# scenes/terrain_demo.tscn, puis lancer. Deux captures dans user://shots.
+godot.windows.editor.double.x86_64.exe --path . scenes/terrain_demo.tscn
 ```
 
 Aperçus PNG écrits par la suite de tests dans
@@ -46,13 +54,15 @@ Aperçus PNG écrits par la suite de tests dans
 
 Démo : `res://scenes/terrain_demo.tscn`. Clic pour capturer la souris,
 ZQSD/WASD, Maj = rapide, Espace/Ctrl = monter/descendre, **F1** détails,
-**Page haut/bas** distance de vue, **1-9** téléportation vers un biome,
-**Échap** rend la souris puis quitte.
+**F12** capture d'écran dans `user://shots`, **Page haut/bas** distance de vue,
+**1-9** téléportation vers un biome, **Échap** rend la souris puis quitte.
 
 ## 3. État
 
-Jalon 1 (le monde) : 1.1 à 1.6 faits, le reste à faire. Détail et sources
-analysées dans `docs/ROADMAP.md`. Analyse du système de terrain dans
+Jalon 1 (le monde) : 1.1 à 1.6 faits ; **1.7 à moitié** — toute la mécanique de
+dispersion est en place et testée, l'échelle des assets est fixée, il reste la
+lecture du binaire qui dira *quoi* poser *où*. Le reste à faire. Détail et
+sources analysées dans `docs/ROADMAP.md`. Analyse du système de terrain dans
 `docs/systems/01_generation_terrain.md`.
 
 ```
@@ -66,12 +76,20 @@ src/worldgen/
   cw_terrain_field.gd      climat + altitude + chenaux + éléments  ← le cœur
   cw_palette.gd            palette et règles de surface (couleurs originales)
   cw_voxel_generator.gd    VoxelGeneratorScript + cache de colonnes
+  cw_voxel_model.gd        modèle .vox préparé (liste creuse, 4 quarts de tour)
+  cw_model_library.gd      chargement des modèles + table modèle/biome
+  cw_scatter.gd            grille de dispersion 16², cellules en cache
 src/demo/terrain_demo.gd   scène de démonstration (arbre voxel construit en code)
-tests/worldgen_test.gd     suite headless, 80 vérifications
+src/demo/scale_board.gd    gabarit d'échelle : mires, silhouette, modèles
+tests/worldgen_test.gd     suite headless, 106 vérifications
 tests/tile_features_test.gd  la moitié qui concerne les éléments de tuile
+tests/flora_test.gd        modèles, dispersion, estampage (jalon 1.7)
 tools/export_palette.gd    régénère assets/palette/*.png depuis CWPalette
 tools/preview_features.gd  gros plan ombré, avec et sans la couche d'éléments
+tools/inspect_model.gd     inventaire d'un .vox : gabarit, index, plages
 assets/palette/            palette de projet + PALETTE.md
+assets/models/             modèles voxels + MODELS.md (échelle et conventions)
+docs/images/               gabarit d'échelle photographié en jeu
 ```
 
 ## 4. Invariants à ne pas casser
@@ -114,6 +132,19 @@ assets/palette/            palette de projet + PALETTE.md
 9. **Le poids d'influence d'un élément est déformé.** Le fond d'un cratère n'est
    pas à son centre géométrique mais à une centaine d'unités de là. Un test qui
    échantillonne le centre exact mesure autre chose que ce qu'il croit.
+10. **La flore se consulte *avant* les chemins rapides de `_generate_block`.**
+    Une plante posée sur une colonne voisine plus haute déborde dans un bloc que
+    la carte de hauteurs de ce bloc-ci croit entièrement vide. Court-circuiter ce
+    bloc coupe les plantes à l'horizontale, exactement à la frontière d'un bloc de
+    seize — et seulement sur les pentes. Le test « le bloc au-dessus du sol porte
+    sa part de flore » est là pour ça.
+11. **Une plante n'écrit que dans l'air et dans l'eau.** Sur une pente, une part
+    de son gabarit tombe dans le flanc de la colline ; y substituer du feuillage
+    creuserait un trou dans le terrain. L'eau, elle, se laisse remplacer : c'est
+    ainsi qu'une algue se voit depuis la surface.
+12. **L'ancre d'un modèle est au centre de son empreinte et à sa base.** Le
+    déplacer décale toute la flore déjà produite, et un modèle dessiné avec un
+    socle vide sous lui flotte de la hauteur du socle.
 
 ## 5. Pièges connus
 
@@ -137,6 +168,13 @@ assets/palette/            palette de projet + PALETTE.md
   `sample_patch` n'en fait qu'une par tuile traversée. Pour tout nouveau
   consommateur en volume — l'étage de terrain lointain, par exemple — passer par
   `sample_patch`.
+- **La couche de flore coûte +14 % sur un bloc isolé, bien moins en streaming.**
+  Une cellule de dispersion coûte 1 + n échantillonnages de colonne (un pour
+  décider la densité, un par plante posée). Mesuré à 18,3 ms → 20,9 ms sur des
+  blocs sans voisinage ; en chargement réel une cellule sert aux neuf blocs qui
+  l'entourent et à toute leur pile verticale, donc le surcoût réel est de
+  l'ordre de 3 %. Ne pas revenir à un tirage à rejet : échantillonner un
+  candidat pour le jeter ensuite triplait la facture.
 - **Ne pas mettre d'appel de liaison moteur sur le chemin chaud.**
   `OS.get_thread_caller_id()` dans `CWTileFeatureGrid.get_zone` coûtait ~15 µs
   par colonne avant d'être déplacé sur le chemin froid. Mesurer avant de
@@ -144,24 +182,56 @@ assets/palette/            palette de projet + PALETTE.md
 
 ## 6. Prochaine tâche — jalon 1.7, contenu de biome
 
-Les ancres sont posées : chaque tuile de 2048 unités porte au plus un élément,
-typé et varianté. Reste à poser quelque chose dessus.
+### Ce qui est fait (2026-09-04)
+
+La **mécanique** de dispersion est en place, testée et mesurée. Ce qui manque
+n'est plus du code d'infrastructure, c'est la lecture du binaire.
+
+- `CWVoxelModel` : un `.vox` chargé, converti en liste creuse, quatre quarts de
+  tour précalculés, ancre au centre de l'empreinte et à la base. Plus une
+  réduction par union (`reduced(n)`), qui ne sert qu'à montrer une échelle cible.
+- `CWModelLibrary` : chargement partagé et table modèle/biome. Un modèle absent
+  du disque est ignoré en silence — la production des assets est étalée.
+- `CWScatter` : grille de cellules de 16, une graine par cellule, densité décidée
+  sur le centre de la cellule et position tirée dedans. Cellules en cache sous
+  mutex, comme les cartes de hauteurs.
+- `CWVoxelGenerator` estampe les plantes dans le bloc, n'écrit que dans l'air et
+  l'eau, et consulte la flore avant ses chemins rapides.
+- 26 vérifications de plus dans la suite (`tests/flora_test.gd`) : rotations,
+  déterminisme, huit fils concurrents, continuité entre blocs empilés, coût.
+- **L'échelle des assets est fixée** : voir §7.1, c'était le point bloquant.
+
+### Ce qui reste — l'analyse de `WorldInfo_generateBiomeContent` (@005e4850)
+
+4 200 lignes, non analysées. Trois choses à en tirer :
+
+1. **la table qui dit quel modèle va dans quel biome.** La répartition de §7.2 et
+   les densités de `CWModelLibrary.DENSITY` sont des propositions de bon sens ;
+   les remplacer coûte quelques lignes ;
+2. **la génération procédurale des arbres.** Aucun modèle d'arbre parmi les 154
+   du binaire : c'est un algorithme, pas un asset ;
+3. **l'identité de chaque type d'élément de tuile** — ce que sont réellement les
+   types 2, 3, 5, 10, 11, 12, 14 et 15 posés au jalon 1.6.
 
 | fonction | adresse | rôle |
 |---|---|---|
-| `WorldInfo_generateBiomeContent` | `@005e4850` | contenu par biome |
-| `WorldInfo_scatterObjectsInArea` | `@005f56c0` | dispersion (végétation) |
+| `WorldInfo_generateBiomeContent` | `@005e4850` | contenu par biome, arbres, décor |
+| `World_populateRegionDecorations` | `game_misc.cpp:36135` | dispersion du décor |
+| `World_carveTerrainFeatureA` / `B` | `game_misc.cpp:35597` / `35872` | formes creusées dans le terrain |
 | `WorldInfo_placeStructure` | `@005f0ce0` | placement de structures (jalon 4) |
 
-**C'est la première tranche qui demande des assets** : liste par biome et noms
-de fichiers en §7.2. Un asset de test est fourni au début de cette session —
-**le poser en jeu et fixer l'échelle avant toute autre chose** (§7.1).
+**Deux noms trompeurs relevés à l'analyse**, à ne pas redécouvrir :
 
-Trois choses à établir pendant l'analyse de `WorldInfo_generateBiomeContent` :
-la table qui dit quel modèle va dans quel biome (la répartition de §7.2 est pour
-l'instant une proposition de bon sens), la génération procédurale des arbres
-(aucun modèle d'arbre n'existe dans l'original), et l'identité de chaque type
-d'élément de tuile.
+- **`WorldInfo_scatterObjectsInArea` (@005f56c0) ne disperse pas d'objets.** Elle
+  échantillonne température et humidité, puis empile des identifiants dans un
+  vecteur selon le climat et le niveau ; son résultat est écrit dans un objet
+  `cube::Spawn` fraîchement construit. C'est le **choix d'espèce d'un point
+  d'apparition** — jalon 2.6, pas 1.7. La feuille de route la listait comme la
+  seconde source de 1.7 : c'est corrigé.
+- **`World_generateTreeRecursive` (@005d9460) ne génère pas d'arbres.** Le corps
+  est de la gestion de cellules de région et de `cube::Spawn` (décalages de 3 et
+  6 bits, bornes 0x2000 et 0x400). Le générateur d'arbres est ailleurs, sans
+  doute inliné dans `generateBiomeContent`.
 
 Ce qui reste ouvert dans la couche 1.6, à reprendre si l'occasion se présente :
 
@@ -176,37 +246,54 @@ Ce qui reste ouvert dans la couche 1.6, à reprendre si l'occasion se présente 
   du site de région le plus proche du point déformé, portée en
   `CWTerrainField.nearest_site`. Rien à voir avec les entités.
 
-Attention : la couche d'éléments change ce que produit le générateur, donc
-invalide tout cache d'altitude persistant. Ne pas construire de cache disque
-tant que 1.7 n'est pas figé non plus.
+Attention : la couche de flore change ce que produit le générateur, donc
+invalide tout cache d'altitude persistant, au même titre que la couche
+d'éléments. Ne pas construire de cache disque tant que 1.7 n'est pas figé.
 
 ## 7. Assets voxels
 
-### 7.1 Le conseil le plus important : commencer par UN SEUL
+### 7.1 L'échelle — fixée le 2026-09-04
 
-**Fais un seul modèle — un buisson, par exemple — et envoie-le. On le pose en
-jeu sur le terrain généré, tu vois l'échelle en vrai, et ensuite tu produis les
-27 autres.**
+**Le personnage de référence mesure 8 blocs. Une touffe d'herbe lui arrive au
+genou : 2 à 4 blocs de haut, empreinte d'au plus 4 × 4.** Le détail complet, par
+catégorie d'objet, est dans `assets/models/MODELS.md` — c'est le fichier à
+donner à qui modélise.
 
-Pourquoi : l'échelle n'est déductible d'aucune décompilation. Vingt-huit
-modèles faits d'un coup et sortis deux fois trop gros, c'est tout à refaire.
-Une demi-heure de calage contre plusieurs jours de reprise.
+Comment c'est tranché : `herbe_01` a été chargé, posé sur le terrain généré à
+côté de mires de 1, 2, 3, 4, 6, 8, 12, 16, 24 et 32 blocs et d'une silhouette de
+référence, puis photographié. Voir `docs/images/echelle_gabarit.png` et
+`echelle_gros_plan.png`. Le verdict est sans ambiguïté : à 14 × 14 × 10, le
+modèle témoin fait près de deux fois la taille du personnage, et une prairie en
+est un champ de piliers verts.
 
-> **État au 2026-09-04 :** un asset de test sera fourni au début de la prochaine
-> session. Première chose à faire alors : le charger avec `VoxelVoxLoader`, le
-> poser sur le terrain généré, faire une capture, et **fixer l'échelle de
-> référence ici même** avant que quoi que ce soit d'autre soit modélisé.
+Les 8 blocs du personnage ne sortent d'aucune décompilation — le binaire ne dit
+nulle part combien de blocs fait un personnage, et le `GameController` qui
+porterait sa physique fait 115 000 lignes non analysées. C'est un choix, fait à
+l'œil contre le relief. **À revoir au jalon 3.1** : quand le contrôleur sera
+porté, la taille réelle sortira de la physique, et si elle s'écarte de 8, c'est
+ce seul nombre qui change — toutes les tailles se remettent à l'échelle avec
+lui. D'ici là c'est le contrat : mieux vaut vingt-huit modèles cohérents entre
+eux et à retailler ensemble que vingt-huit modèles qui ne s'accordent pas.
 
-Le seul repère sûr en attendant : **1 voxel de modèle = 1 bloc de terrain**, et
-le relief monte à ~600 blocs. Quand la table de §7.3 parle d'un rayon de 150
-pour un élément de tuile, c'est la zone qu'il *revendique* sur la carte — un
-quartier — pas l'encombrement du modèle qu'on y posera.
+Le reste du repère est solide : **1 voxel de modèle = 1 bloc de terrain**, sans
+facteur d'échelle à l'import, et le relief monte à ~600 blocs. Quand la table de
+§7.3 parle d'un rayon de 150 pour un élément de tuile, c'est la zone qu'il
+*revendique* sur la carte — un quartier — pas l'encombrement du modèle qu'on y
+posera.
+
+Pour revoir l'échelle soi-même : mettre `scale_board = true` sur le nœud racine
+de `scenes/terrain_demo.tscn` et lancer la démo. Le gabarit se pose devant le
+point d'apparition, la caméra le cadre, et deux captures partent dans
+`user://shots`. Un `.vox` déposé dans `assets/models/flore/` y apparaît sans
+qu'il y ait rien à déclarer.
 
 ### 7.2 Ce qu'il faut produire, par biome
 
 **Rien pour le jalon 1.6** : il ne fait que déformer l'altitude, rendue avec la
 palette existante. Le jalon 1.7 (dispersion sur le terrain) est le premier qui
-demande des modèles.
+demande des modèles — et la mécanique qui les pose est en place : déposer un
+`.vox` dans `assets/models/flore/` suffit à le voir dans le monde, dès lors que
+son nom figure dans la table de `CWModelLibrary`.
 
 La liste des *rôles* n'est plus une estimation : le binaire d'origine charge
 **154 modèles voxels nommés**. On n'en reprend aucun — ce sont des créations
