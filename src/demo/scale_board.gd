@@ -41,24 +41,34 @@ const FIGURE_HAIR: int = 40
 const FIGURE_EYE: int = 64
 const FIGURE_CLOTH: int = 100
 
-## Decalage en X, depuis le centre du gabarit, du milieu de la zone des modeles,
-## et largeur de cette zone. Sert a cadrer un gros plan sur les modeles seuls :
-## de loin, une plante d'un demi-bloc ne se lit plus.
+## Nombre de modeles par rangee. Au-dela, le gabarit continue en profondeur.
+## Une rangee unique de trente-neuf modeles fait plus de cent blocs de large ; le
+## gros plan qui rend lisible une plante d'un demi-bloc n'en cadre alors que
+## trois, et la photo ne sert plus a rien.
+const MODELS_PER_ROW: int = 10
+
+## Cadre de la zone des modeles, en blocs, dans le repere local du gabarit :
+## milieu et etendue sur X, milieu et etendue sur Z. Sert a poser la camera d'un
+## gros plan sur les modeles seuls — de loin, une plante d'un demi-bloc ne se lit
+## plus.
 var models_center: float = 0.0
 var models_span: float = 0.0
+var models_z: float = 0.0
+var models_depth: float = 0.0
 
 
 ## Largeur du gabarit, en blocs, pour la liste de modeles donnee.
 static func width_of(models: Array) -> int:
-	return (TICKS.size() + 1 + models.size()) * SPACING + PAD * 2
+	var slots: int = maxi(TICKS.size() + 1, mini(models.size(), MODELS_PER_ROW))
+	return slots * SPACING + PAD * 2
 
 
 static func build(models: Array) -> CWScaleBoard:
 	var board := CWScaleBoard.new()
 	board.name = "ScaleBoard"
 
-	var slots: int = TICKS.size() + 1 + models.size()
-	var width: int = slots * SPACING + PAD * 2
+	var per_row: int = mini(maxi(models.size(), 1), MODELS_PER_ROW)
+	var width: int = width_of(models)
 	@warning_ignore("integer_division")
 	var slot_mid: int = SPACING / 2
 	# Abscisse locale du milieu d'un emplacement, gabarit centre sur l'origine.
@@ -66,22 +76,26 @@ static func build(models: Array) -> CWScaleBoard:
 		return float(PAD + slot * SPACING + slot_mid) - float(width) * 0.5
 
 	board.add_child(_build_ticks(width))
+	board.add_child(_build_figure(Vector3(slot_x.call(TICKS.size()), 0.0, 0.0)))
 
-	var slot: int = TICKS.size()
-	board.add_child(_build_figure(Vector3(slot_x.call(slot), 0.0, 0.0)))
-	slot += 1
-
-	var first_model_slot: int = slot
-	for m in models:
-		var mi: MeshInstance3D = _build_model(m, Vector3(slot_x.call(slot), 0.0, 0.0))
+	# Les modeles occupent leurs propres rangees, **devant** les mires : rien ne
+	# les masque, et les mires continuent de donner l'echelle au-dessus d'eux.
+	var rows: int = 0
+	for i in models.size():
+		@warning_ignore("integer_division")
+		var row: int = i / per_row
+		rows = maxi(rows, row + 1)
+		var mi: MeshInstance3D = _build_model(models[i], Vector3(
+				slot_x.call(i % per_row), 0.0, float((row + 1) * SPACING)))
 		if mi != null:
 			board.add_child(mi)
-		slot += 1
 
-	# La silhouette reste dans le cadre du gros plan : c'est elle qui donne son
-	# sens a la taille des modeles.
-	board.models_span = float((models.size() + 1) * SPACING)
-	board.models_center = slot_x.call(first_model_slot - 1) + board.models_span * 0.5
+	if models.is_empty():
+		return board
+	board.models_span = float(per_row * SPACING)
+	board.models_center = (slot_x.call(0) + slot_x.call(per_row - 1)) * 0.5
+	board.models_depth = float(rows * SPACING)
+	board.models_z = float(SPACING) + board.models_depth * 0.5
 	return board
 
 

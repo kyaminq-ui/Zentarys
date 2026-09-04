@@ -63,7 +63,7 @@ En **voxels de modèle** — c'est l'unité dans laquelle on dessine :
 | champignon | 5 – 10 | ≤ 10 × 10 |
 | caillou | 4 – 8 | ≤ 12 × 12 |
 | buisson, broussaille, roseau, algue, corail | 16 – 28 | ≤ 32 × 32 |
-| cactus, grès | 32 – 56 | ≤ 32 × 32 |
+| cactus, grès | 32 – 56 | ≤ 48 × 48 |
 
 Et en **blocs**, pour situer ça dans le monde généré :
 
@@ -99,14 +99,15 @@ La démo pose le gabarit devant le point d'apparition, cadre dessus, et écrit
 deux captures dans `user://shots` (vue d'ensemble, puis gros plan). **F12**
 capture à tout moment. Le gabarit montre des mires de hauteur connue **en
 blocs**, la silhouette du personnage **à la grille fine**, puis chaque modèle
-chargé. Poser un nouveau `.vox` dans `assets/models/flore/` suffit à le faire
-apparaître — rien d'autre à déclarer.
+chargé, par rangées de dix devant les mires. Ajouter le `.vox` à la table de
+`CWModelLibrary.FLORA` suffit à le faire apparaître.
 
 Le résultat est dans `docs/images/` : `echelle_gabarit.png` montre les mires de
-1 à 16 blocs, la silhouette et `herbe_01` alignés — le personnage tombe
-exactement sur la mire de 2 ; `echelle_gros_plan.png` cadre la silhouette et sa
-touffe d'herbe, qui lui arrive au genou. Ces deux images sont la référence :
-si une modification les invalide, c'est qu'elle a changé l'échelle.
+1 à 16 blocs, la silhouette et les trente-neuf modèles du premier lot — le
+personnage tombe exactement sur la mire de 2 ; `echelle_gros_plan.png` cadre les
+modèles contre la silhouette, les touffes d'herbe au genou, le grand cactus au
+dessus de la tête. Ces deux images sont la référence : si une modification les
+invalide, c'est qu'elle a changé l'échelle.
 
 ---
 
@@ -116,14 +117,37 @@ Une seule palette de 256 entrées sert au terrain **et** aux modèles : le rendu
 stocke un index par voxel, pas une couleur. Un modèle peint ailleurs arrive avec
 des couleurs fausses, sans le moindre message d'erreur.
 
-Charger `assets/palette/zentarys_palette.png` dans MagicaVoxel (glisser sur la
-palette), plages réservées dans `assets/palette/PALETTE.md`. Pour la flore :
+**Ouvrir `assets/palette/zentarys_palette.vox` dans MagicaVoxel**, et modéliser
+dans ce fichier ou copier sa palette. C'est le seul geste qui aligne les index —
+et c'est l'index, jamais la couleur, que le rendu lit.
+
+> **Ne pas glisser `zentarys_palette_ref.png` sur le nuancier.** MagicaVoxel
+> rééchantillonne la planche et rend une palette où chaque couleur apparaît deux
+> fois, la vraie puis la même assombrie, dans un ordre décalé. Les teintes ont
+> l'air justes, les index ne le sont pas, et rien ne le signale avant l'écran.
+> C'est ce qui est arrivé au premier lot ; le détail est dans `PALETTE.md`.
+
+Plages réservées, détail dans `assets/palette/PALETTE.md`. Pour la flore :
 
 * **Végétation, indices 128 – 175** — feuillages, automne, écorces, fleurs,
-  champignons, cactus ;
-* **Terrain, indices 1 – 31** — pour les cailloux et le grès seulement.
+  champignons, algues et coraux, cactus ;
+* **Terrain, indices 1 – 31** — pour tout ce qui est minéral : cailloux, grès,
+  basalte. Les entrées 14 – 31 sont là pour ça ; 1 – 13 sont les blocs que le
+  générateur écrit lui-même.
 
 L'index **0 est l'air** et ne peut pas servir.
+
+Un modèle déjà peint dans une autre palette n'est pas perdu :
+
+```
+godot --headless --path . -s tools/repaint_models.gd            # rapport
+godot --headless --path . -s tools/repaint_models.gd -- --write  # applique
+```
+
+L'outil relit la couleur que le fichier associe à chacun de ses index, cherche la
+plus proche parmi celles que la flore a le droit d'employer, et réécrit les
+index **et** la palette embarquée. Rouvert dans MagicaVoxel, le modèle porte
+alors la bonne palette. Il ne touche à aucun voxel : seule la couleur change.
 
 Vérification :
 
@@ -139,15 +163,28 @@ signale tout index sorti des plages autorisées.
 
 ## 3. Fichiers
 
-* Dossier `assets/models/flore/`, un `.vox` par entrée de la liste de
-  `nextsteps.md`, §7.2 ; `assets/models/culture/` pour les cinq cultures.
+* **Un dossier par biome** sous `assets/models/flore/` : `herbe/`,
+  `herbe_seche/`, `jungle/`, `marais/`, `sable_desert/`, `neige/`, `toundra/`,
+  `roche/`, `gravier_fond_marin/`. `assets/models/culture/` pour les cinq
+  cultures.
 * Noms en minuscules sans accent, souligné pour séparer, variante numérotée sur
   deux chiffres quand les modèles sont interchangeables : `herbe_01`,
-  `fleur_bleuet`, `caillou_02`.
-* Un même fichier sert plusieurs biomes — on ne le produit qu'une fois.
-* Gabarit du `.vox` : le plus juste possible autour de la matière. Un tampon de
-  40³ pour une plante de 10 ne coûte rien au chargement — la matière est extraite
-  et le vide jeté — mais il rend la relecture pénible.
+  `fleur_bleuet`, `caillou_02`. Rien d'autre dans le nom — ni la taille du
+  gabarit, ni le biome, qui est déjà le dossier.
+* **Un même rôle peut avoir un modèle par biome.** `caillou_01` existe trois
+  fois — prairie, neige, roche — et ce sont trois modèles, chacun dans les
+  teintes de son biome. C'est le lot livré le 2026-09-05 qui en a décidé ainsi,
+  et c'est mieux qu'un fichier partagé. Deux biomes peuvent quand même pointer le
+  même chemin dans `CWModelLibrary.FLORA` : le modèle n'est alors chargé et
+  maillé qu'une fois.
+* Le fichier doit figurer dans la table de `CWModelLibrary.FLORA`, chemin
+  complet, biome compris : `"herbe/herbe_01"`. Un test vérifie que chaque entrée
+  de la table existe sur le disque.
+* Gabarit du `.vox` : **libre**, le plus juste possible autour de la matière.
+  16³ suffit à presque tout ; un cactus de 3 blocs demande 48³. La matière est
+  extraite au chargement et le vide jeté, donc un tampon large ne coûte rien —
+  il rend seulement la relecture pénible. Ce qui est un contrat, c'est le rapport
+  de **16 voxels par bloc**, pas la taille de la boîte.
 
 ### Orientation
 

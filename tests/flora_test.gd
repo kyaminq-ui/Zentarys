@@ -55,6 +55,22 @@ func _test_models() -> void:
 			no_density.append(CWPalette.name_of(surface))
 	_ok("chaque biome garni a une densite", no_density.is_empty(), str(no_density))
 
+	# Le lot des 28 modeles de flore est clos depuis le 2026-09-05. Un modele
+	# absent du disque reste ignore en silence a l'execution — c'est voulu, un
+	# monde a moitie fleuri vaut mieux qu'un monde qui ne demarre pas — mais ici
+	# c'est une faute : une faute de frappe dans un chemin fait disparaitre une
+	# plante d'un biome sans que rien ne le dise.
+	var missing: Array = []
+	var entries: int = 0
+	for surface in CWModelLibrary.FLORA:
+		for entry in CWModelLibrary.FLORA[surface]:
+			entries += 1
+			var path: String = CWModelLibrary.FLORA_DIR + entry + ".vox"
+			if not FileAccess.file_exists(path) and not missing.has(entry):
+				missing.append(entry)
+	_ok("tous les modeles de la table sont sur le disque (%d entrees)" % entries,
+			missing.is_empty(), str(missing))
+
 	var grass: Array = lib.for_surface(CWPalette.GRASS)
 	if grass.is_empty():
 		_skip("chargement d'un modele", "aucun modele pour l'herbe")
@@ -114,6 +130,19 @@ func _test_models() -> void:
 		if not (in_flora or in_terrain) and not strays.has(i):
 			strays.append(i)
 	_ok("indices dans les plages vegetation ou terrain", strays.is_empty(), str(strays))
+
+	# Translucidite : `VoxelMesherCubes` range les voxels d'une entree a alpha < 1
+	# dans une seconde surface, que `CWVoxelModel.mesh()` habille du materiau
+	# opaque. Un modele qui en porte un sort donc opaque la ou l'auteur voulait du
+	# translucide — ou l'inverse le jour ou le materiau changera.
+	var colors: PackedColorArray = CWPalette.colors()
+	var translucent: Array = []
+	for k in _distinct_models(lib):
+		for i in k.values(0):
+			if colors[i].a < 1.0 and not translucent.has(i):
+				translucent.append(i)
+	_ok("aucun modele ne porte un index translucide", translucent.is_empty(),
+			str(translucent))
 
 	# Ancre : la base du modele est a l'offset 0 en Y, sinon une plante posee sur
 	# le sol flotte ou s'enterre.
@@ -413,8 +442,9 @@ func _bench_cells(sc: CWScatter, origin: Vector2i) -> void:
 			"%.2f ms" % (per / 1000.0))
 
 
-## Les modeles distincts de la bibliotheque : un meme fichier sert plusieurs
-## biomes, on ne le compte qu'une fois.
+## Les modeles distincts de la bibliotheque. Les noms portent le dossier de
+## biome, donc trois `caillou_01` sont bien trois modeles ; deux biomes qui
+## pointeraient le meme chemin n'en donneraient qu'un.
 func _distinct_models(lib: CWModelLibrary) -> Array:
 	var seen: Dictionary = {}
 	var out: Array = []

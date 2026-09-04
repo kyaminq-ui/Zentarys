@@ -38,8 +38,9 @@ const COUNT: int = 14
 #
 # L'index 0 est l'air et ne peut pas servir : le mailleur le traite comme vide.
 
-## Terrain. 0-13 sont pris ; le reste est de la reserve pour de futurs blocs
-## (lave, argile, gres, obsidienne...).
+## Terrain. 0-13 sont ecrits par le generateur ; 14-31 sont de la matiere de
+## terrain destinee aux modeles — roche nue, gres, argile, basalte, lave. C'est
+## la seule plage ou un modele trouve du gris : la vegetation n'en a aucun.
 const RANGE_TERRAIN_BEGIN: int = 1
 const RANGE_TERRAIN_END: int = 31
 
@@ -110,6 +111,22 @@ static func _ramp(c: PackedColorArray, start: int, count: int,
 ## pas bouger, c'est le decoupage en plages : il garantit qu'un modele peint
 ## aujourd'hui reste lisible quand la palette evoluera.
 static func _fill_asset_ranges(c: PackedColorArray) -> void:
+	# -- Terrain, reserve 14-31 --
+	#
+	# Les 13 premieres entrees sont ecrites par le generateur ; celles-ci ne le
+	# sont par personne. Elles existent pour les modeles : un caillou, un bloc
+	# de gres ou une paroi de basalte sont de la *matiere de terrain*, et la
+	# plage vegetation n'a aucun gris. Sans elles, tout ce qui est mineral se
+	# rabat sur STONE et les six cailloux du lot de flore rendent la meme
+	# couleur.
+	_ramp(c, 14, 6, Color8(178, 180, 186), Color8(54, 56, 62))    # roche nue
+	_ramp(c, 20, 5, Color8(226, 198, 140), Color8(118, 94, 56))   # gres, argile
+	_ramp(c, 25, 3, Color8(58, 56, 62), Color8(22, 20, 26))       # basalte, obsidienne
+	c[28] = Color8(96, 104, 70)     # roche lichenee, claire
+	c[29] = Color8(58, 64, 44)      # roche lichenee, sombre
+	c[30] = Color8(255, 152, 48)    # lave, incandescente
+	c[31] = Color8(176, 44, 20)     # lave, refroidie
+
 	# -- Creatures 32-95 --
 	_ramp(c, 32, 8, Color8(247, 216, 185), Color8(92, 58, 40))    # peaux
 	_ramp(c, 40, 8, Color8(198, 138, 78), Color8(74, 44, 24))     # fourrure rousse
@@ -146,7 +163,12 @@ static func _fill_asset_ranges(c: PackedColorArray) -> void:
 	c[161] = Color8(168, 206, 255)
 	c[162] = Color8(168, 108, 214)  # fleur violette
 	c[163] = Color8(216, 178, 248)
-	_ramp(c, 164, 8, Color8(214, 118, 92), Color8(70, 96, 62))    # champignons, mousse
+	_ramp(c, 164, 6, Color8(214, 118, 92), Color8(70, 96, 62))    # champignons, mousse
+	# Algues et coraux. Le fond marin est l'une des neuf surfaces que le
+	# generateur produit, et rien d'autre dans la palette n'est froid et sature :
+	# sans ces deux entrees, un corail se rabat sur le vert de prairie.
+	c[170] = Color8(58, 178, 190)   # eau claire, corail vif
+	c[171] = Color8(16, 104, 124)   # profondeur, corail sombre
 	_ramp(c, 172, 4, Color8(112, 168, 108), Color8(48, 92, 62))   # cactus
 
 	# -- Structures 176-239 --

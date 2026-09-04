@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://cndgat1ajbifk"
+path="res://.godot/imported/caillou_01.vox-a9742f8165761ea87d31ec0782f81565.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/toundra/caillou_01.vox"
+dest_files=["res://.godot/imported/caillou_01.vox-a9742f8165761ea87d31ec0782f81565.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

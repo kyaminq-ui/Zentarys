@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://77tlgb1x6t82"
+path="res://.godot/imported/lierre.vox-9405ebac3aa1cb5c5ed96c0782aee5ae.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/marais/lierre.vox"
+dest_files=["res://.godot/imported/lierre.vox-9405ebac3aa1cb5c5ed96c0782aee5ae.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

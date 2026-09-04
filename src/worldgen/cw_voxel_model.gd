@@ -67,7 +67,13 @@ static var _mesher: VoxelMesherCubes = null
 
 
 ## Charge un `.vox` et le prepare. Rend `null` si le fichier manque ou est vide.
-static func load_from(model_path: String, palette: Resource) -> CWVoxelModel:
+##
+## `model_name` nomme le modele dans les traces et les tests. Par defaut le nom
+## de fichier, ce qui ne suffit plus depuis que les modeles sont ranges par
+## biome : trois dossiers portent un `caillou_01`, et ce sont trois modeles
+## differents. `CWModelLibrary` passe donc le chemin relatif, biome compris.
+static func load_from(model_path: String, palette: Resource,
+		model_name: String = "") -> CWVoxelModel:
 	if not ResourceLoader.exists(model_path) and not FileAccess.file_exists(model_path):
 		return null
 	var buffer := VoxelBuffer.new()
@@ -79,7 +85,7 @@ static func load_from(model_path: String, palette: Resource) -> CWVoxelModel:
 
 	var m := CWVoxelModel.new()
 	m.path = model_path
-	m.name = model_path.get_file().get_basename()
+	m.name = model_name if model_name != "" else model_path.get_file().get_basename()
 
 	var size: Vector3i = buffer.get_size()
 	var lo := Vector3i(size)

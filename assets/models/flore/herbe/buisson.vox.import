@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://cauqlgwlpncx0"
+path="res://.godot/imported/buisson.vox-a70ae556cb719182d61058b733b1c429.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/herbe/buisson.vox"
+dest_files=["res://.godot/imported/buisson.vox-a70ae556cb719182d61058b733b1c429.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://065jhe14mouo"
+path="res://.godot/imported/cactus_02.vox-60b82eef5b9bc90565941ebcac9a893a.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/sable_desert/cactus_02.vox"
+dest_files=["res://.godot/imported/cactus_02.vox-60b82eef5b9bc90565941ebcac9a893a.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

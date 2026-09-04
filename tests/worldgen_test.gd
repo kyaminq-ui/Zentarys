@@ -402,6 +402,17 @@ func _test_palette() -> void:
 	_ok("tous les blocs de terrain ont une couleur", undefined.is_empty(),
 			"index sans couleur : %s" % str(undefined))
 
+	# Reserve de terrain 14-31. Elle n'est ecrite par aucun generateur, et elle
+	# n'est pas decorative pour autant : c'est le seul endroit de la palette ou un
+	# modele trouve du gris ou de l'ocre. Vide, tous les cailloux du lot de flore
+	# se rabattent sur la meme entree.
+	var terrain_holes: Array[int] = []
+	for i in range(CWPalette.COUNT, CWPalette.RANGE_TERRAIN_END + 1):
+		if c[i].a <= 0.0:
+			terrain_holes.append(i)
+	_ok("reserve de terrain renseignee (matiere des modeles mineraux)",
+			terrain_holes.is_empty(), "index sans couleur : %s" % str(terrain_holes))
+
 	var asset_holes: int = 0
 	for i in range(CWPalette.RANGE_CREATURES_BEGIN, 256):
 		if c[i].a <= 0.0 and not (i >= 228 and i <= 233):

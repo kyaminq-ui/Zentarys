@@ -3,7 +3,7 @@ extends SceneTree
 ## Inventaire d'un modele .vox : dimensions, index de palette employes, densite.
 ##
 ##   godot --headless --path . -s tools/inspect_model.gd
-##   godot --headless --path . -s tools/inspect_model.gd -- res://assets/models/flore/herbe_01.vox
+##   godot --headless --path . -s tools/inspect_model.gd -- res://assets/models/flore/herbe/herbe_01.vox
 ##
 ## Sans argument, passe en revue tout `assets/models/`. Sert a deux choses :
 ## verifier qu'un modele reste dans sa plage de palette (un index hors plage

@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://bexg7p07qp8fu"
+path="res://.godot/imported/broussaille.vox-22f43b40ed374d80b10c459ebb87bf46.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/sable_desert/broussaille.vox"
+dest_files=["res://.godot/imported/broussaille.vox-22f43b40ed374d80b10c459ebb87bf46.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

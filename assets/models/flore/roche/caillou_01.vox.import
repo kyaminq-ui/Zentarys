@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://eg7f13xwd8js"
+path="res://.godot/imported/caillou_01.vox-4100def10f335f28c4fca1de24755a44.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/roche/caillou_01.vox"
+dest_files=["res://.godot/imported/caillou_01.vox-4100def10f335f28c4fca1de24755a44.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

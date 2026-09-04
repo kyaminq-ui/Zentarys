@@ -488,9 +488,16 @@ func _process(delta: float) -> void:
 				# Second cliche, cadre sur les modeles : a la distance qui montre
 				# la mire de 16 blocs, une plante d'un demi-bloc est un pixel.
 				_shot_stage = 1
+				# Recul cadre sur la *zone des modeles*, pas sur le gabarit
+				# entier : les mires vont a 16 blocs, les plantes a un demi.
+				# Recul cale sur la largeur d'une rangee, pas sur toute la
+				# zone : a 16/9 le champ horizontal couvre un peu plus de deux
+				# fois la distance, donc 0.4 fois la largeur cadre la rangee
+				# entiere en laissant une marge.
 				camera.position = _board.position + Vector3(
-						_board.models_center, 1.5, _board.models_span * 1.1)
-				_pitch = -0.10
+						_board.models_center, 3.5,
+						_board.models_z + _board.models_span * 0.4)
+				_pitch = -0.22
 				camera.rotation = Vector3(_pitch, _yaw, 0.0)
 				_shot_countdown = 1.5
 

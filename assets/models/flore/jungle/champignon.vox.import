@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://tmsdih16c46k"
+path="res://.godot/imported/champignon.vox-b9d39ae32d7bdd7e118efeac9b394ae1.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/jungle/champignon.vox"
+dest_files=["res://.godot/imported/champignon.vox-b9d39ae32d7bdd7e118efeac9b394ae1.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

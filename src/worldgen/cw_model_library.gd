@@ -15,6 +15,18 @@ extends RefCounted
 ## Un modele absent du disque est ignore en silence : la production des assets
 ## est etalee, et un monde a moitie fleuri vaut mieux qu'un monde qui ne se
 ## genere pas.
+##
+## -- Chemins, et pourquoi ils portent le biome --------------------------------
+##
+## Les entrees sont des chemins relatifs a `FLORA_DIR`, dossier de biome compris.
+## `nextsteps.md` prevoyait un fichier unique par nom, partage entre biomes ; le
+## lot livre le 2026-09-05 en a decide autrement, et mieux : un `caillou_01` de
+## prairie, un de neige et un de roche sont trois modeles differents, chacun
+## peint dans les teintes de son biome. La table le reflete telle quelle.
+##
+## Rien n'oblige a en rester la : deux biomes peuvent pointer le meme chemin, et
+## le modele n'est alors charge et maille qu'une fois — le cache est indexe par
+## chemin, pas par biome.
 
 const FLORA_DIR: String = "res://assets/models/flore/"
 
@@ -44,21 +56,29 @@ const DENSITY: Dictionary = {
 }
 
 ## Modeles candidats par biome, dans l'ordre de la table de nextsteps.md, §7.2.
+## Chemins relatifs a `FLORA_DIR`, sans l'extension.
 const FLORA: Dictionary = {
-	CWPalette.GRASS: ["herbe_01", "herbe_02", "herbe_03", "buisson",
-			"bouquet_01", "bouquet_02", "fleur_bleuet", "fleur_tournesol",
-			"caillou_01", "caillou_02"],
-	CWPalette.GRASS_DRY: ["herbe_seche", "broussaille", "fleur_echinacea",
-			"caillou_01", "caillou_02"],
-	CWPalette.GRASS_JUNGLE: ["liane", "vrille", "lierre", "feuille",
-			"fleur_coeur", "champignon"],
-	CWPalette.SWAMP: ["roseau", "champignon", "lierre", "fleur_ame"],
-	CWPalette.SAND: ["cactus_01", "cactus_02", "broussaille", "gres"],
-	CWPalette.SNOW: ["caillou_01", "broussaille"],
-	CWPalette.TUNDRA: ["broussaille", "fleur_ginseng", "caillou_01"],
-	CWPalette.STONE: ["caillou_01", "caillou_02"],
-	CWPalette.GRAVEL: ["algue", "corail", "etoile_de_mer"],
+	CWPalette.GRASS: ["herbe/herbe_01", "herbe/herbe_02", "herbe/herbe_03",
+			"herbe/buisson", "herbe/bouquet_01", "herbe/bouquet_02",
+			"herbe/fleur_bleuet", "herbe/fleur_tournesol",
+			"herbe/caillou_01", "herbe/caillou_02"],
+	CWPalette.GRASS_DRY: ["herbe_seche/herbe_seche", "herbe_seche/broussaille",
+			"herbe_seche/fleur_echinacea",
+			"herbe_seche/caillou_01", "herbe_seche/caillou_02"],
+	CWPalette.GRASS_JUNGLE: ["jungle/liane", "jungle/vrille", "jungle/lierre",
+			"jungle/feuille", "jungle/fleur_coeur", "jungle/champignon"],
+	CWPalette.SWAMP: ["marais/roseau", "marais/champignon", "marais/lierre",
+			"marais/fleur_ame"],
+	CWPalette.SAND: ["sable_desert/cactus_01", "sable_desert/cactus_02",
+			"sable_desert/broussaille", "sable_desert/gres"],
+	CWPalette.SNOW: ["neige/caillou_01", "neige/broussaille"],
+	CWPalette.TUNDRA: ["toundra/broussaille", "toundra/fleur_ginseng",
+			"toundra/caillou_01"],
+	CWPalette.STONE: ["roche/caillou_01", "roche/caillou_02"],
+	CWPalette.GRAVEL: ["gravier_fond_marin/algue", "gravier_fond_marin/corail",
+			"gravier_fond_marin/etoile_de_mer"],
 }
+
 
 static var _shared: CWModelLibrary = null
 static var _shared_mutex: Mutex = Mutex.new()
@@ -108,10 +128,13 @@ func _load_all() -> void:
 			_by_surface[surface] = available
 
 
+## Charge un modele, ou rend celui deja en cache. La cle est le chemin : deux
+## biomes qui pointent le meme fichier partagent le modele et son maillage.
 func _get_or_load(model_name: String, palette: Resource) -> CWVoxelModel:
 	if _models.has(model_name):
 		return _models[model_name]
-	var m: CWVoxelModel = CWVoxelModel.load_from(FLORA_DIR + model_name + ".vox", palette)
+	var m: CWVoxelModel = CWVoxelModel.load_from(
+			FLORA_DIR + model_name + ".vox", palette, model_name)
 	# Meme absent, on retient la reponse : sans cela chaque biome qui reference
 	# un modele manquant retente un acces disque a chaque construction.
 	_models[model_name] = m
