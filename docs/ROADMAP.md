@@ -79,10 +79,11 @@ Le jalon 1.6 n'a demandé aucun asset. Le jalon 1.7 est le premier qui en demand
 Le binaire d'origine charge **154 modèles voxels nommés** ; leurs noms donnent la
 liste sûre des *rôles* que le monde doit remplir. Aucun n'est repris — ce sont
 des créations originales — mais la liste des besoins, elle, ne se devine plus.
-Détail et ordre de production dans `nextsteps.md`, §7.1. En résumé :
+Liste par biome, noms de fichiers et ordre de production dans `nextsteps.md`,
+§7.2. En résumé :
 
-- **~35 modèles pour le jalon 1.7** : herbes, fleurs, cactus, sous-bois,
-  aquatique, pierres, cultures ;
+- **28 modèles pour le jalon 1.7**, repartis sur les neuf surfaces que
+  `CWPalette.surface_index` sait produire, plus 5 cultures pour les champs ;
 - **~50 pour le jalon 4** : mobilier, artisanat, décor extérieur et de donjon ;
 - le reste (objets d'inventaire, créatures, interface) vient plus tard.
 

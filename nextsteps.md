@@ -153,11 +153,15 @@ typé et varianté. Reste à poser quelque chose dessus.
 | `WorldInfo_scatterObjectsInArea` | `@005f56c0` | dispersion (végétation) |
 | `WorldInfo_placeStructure` | `@005f0ce0` | placement de structures (jalon 4) |
 
-**C'est la première tranche qui demande des assets** : liste et ordre de
-production en §7.1. Deux points à trancher pendant l'analyse de
-`WorldInfo_generateBiomeContent` : la génération procédurale des arbres (aucun
-modèle d'arbre n'existe dans l'original), et l'identité de chaque type
-d'élément de tuile, qui n'est pas encore établie.
+**C'est la première tranche qui demande des assets** : liste par biome et noms
+de fichiers en §7.2. Un asset de test est fourni au début de cette session —
+**le poser en jeu et fixer l'échelle avant toute autre chose** (§7.1).
+
+Trois choses à établir pendant l'analyse de `WorldInfo_generateBiomeContent` :
+la table qui dit quel modèle va dans quel biome (la répartition de §7.2 est pour
+l'instant une proposition de bon sens), la génération procédurale des arbres
+(aucun modèle d'arbre n'existe dans l'original), et l'identité de chaque type
+d'élément de tuile.
 
 Ce qui reste ouvert dans la couche 1.6, à reprendre si l'occasion se présente :
 
@@ -178,62 +182,103 @@ tant que 1.7 n'est pas figé non plus.
 
 ## 7. Assets voxels
 
-### 7.1 Ce qu'il faut produire — et dans quel ordre
+### 7.1 Le conseil le plus important : commencer par UN SEUL
 
-**Rien pour le jalon 1.6.** Il ne fait que déformer l'altitude, rendue avec la
-palette existante.
+**Fais un seul modèle — un buisson, par exemple — et envoie-le. On le pose en
+jeu sur le terrain généré, tu vois l'échelle en vrai, et ensuite tu produis les
+27 autres.**
 
-Le jalon 1.7 (dispersion sur le terrain) est le premier qui en demande. La liste
-n'est plus une estimation : le binaire d'origine charge **154 modèles voxels**
-nommés, et leurs noms disent exactement de quels objets le monde a besoin. On
-n'en reprend évidemment aucun — ce sont des créations originales — mais la
-liste des *rôles* à remplir, elle, est sûre.
+Pourquoi : l'échelle n'est déductible d'aucune décompilation. Vingt-huit
+modèles faits d'un coup et sortis deux fois trop gros, c'est tout à refaire.
+Une demi-heure de calage contre plusieurs jours de reprise.
 
-**Deux choses ne sont pas des assets, contrairement à ce qu'on croirait :**
+> **État au 2026-09-04 :** un asset de test sera fourni au début de la prochaine
+> session. Première chose à faire alors : le charger avec `VoxelVoxLoader`, le
+> poser sur le terrain généré, faire une capture, et **fixer l'échelle de
+> référence ici même** avant que quoi que ce soit d'autre soit modélisé.
 
-- **Les arbres.** Aucun modèle d'arbre dans les 154. Ils sont construits par le
-  code, dans `WorldInfo_generateBiomeContent`. C'est un algorithme à porter, pas
-  un modèle à dessiner.
-- **Les maisons.** `cube::House::ctor_0(3, 3, 4)` : une maison est une grille de
-  3 × 3 × 4 cellules remplie procéduralement. Là encore un algorithme (jalon
-  4.3). Ce sont les *meubles* qui sont des modèles, pas le bâtiment.
+Le seul repère sûr en attendant : **1 voxel de modèle = 1 bloc de terrain**, et
+le relief monte à ~600 blocs. Quand la table de §7.3 parle d'un rayon de 150
+pour un élément de tuile, c'est la zone qu'il *revendique* sur la carte — un
+quartier — pas l'encombrement du modèle qu'on y posera.
 
-**Lot A — jalon 1.7, la végétation et le sol.** ~35 modèles, c'est par là qu'il
-faut commencer :
+### 7.2 Ce qu'il faut produire, par biome
 
-| famille | rôles à remplir |
+**Rien pour le jalon 1.6** : il ne fait que déformer l'altitude, rendue avec la
+palette existante. Le jalon 1.7 (dispersion sur le terrain) est le premier qui
+demande des modèles.
+
+La liste des *rôles* n'est plus une estimation : le binaire d'origine charge
+**154 modèles voxels nommés**. On n'en reprend aucun — ce sont des créations
+originales — mais ce dont un monde comme celui-là a besoin est établi.
+
+**Deux choses ne sont pas des assets**, contrairement à ce qu'on croirait :
+
+- **Les arbres.** Aucun modèle d'arbre parmi les 154. Ils sont construits par le
+  code, dans `WorldInfo_generateBiomeContent`. Algorithme à porter, pas modèle à
+  dessiner.
+- **Les maisons.** `cube::House::ctor_0(3, 3, 4)` : une grille de 3 × 3 × 4
+  cellules remplie procéduralement (jalon 4.3). Ce sont les *meubles* qui sont
+  des modèles, pas le bâtiment.
+
+#### Convention de nommage
+
+Dossier `assets/models/flore/`, un fichier `.vox` par entrée. Noms en minuscules
+sans accent, souligné pour séparer, variante numérotée sur deux chiffres quand
+les modèles sont interchangeables. Les couleurs viennent de la plage
+**Végétation, indices 128 – 175** de la palette de projet (voir
+`assets/palette/PALETTE.md`) — sauf les cailloux et le grès, qui prennent la
+plage **Terrain, 1 – 31**.
+
+#### Les neuf surfaces que le générateur produit
+
+Ce sont les biomes réels : `CWPalette.surface_index` ne peut en rendre aucun
+autre. Touches **1** à **9** de la démo pour s'y téléporter.
+
+| biome | fichiers à produire |
 |---|---|
-| herbes | 3 variantes d'herbe, 1 buisson, 1 broussaille, 1 roseau |
-| fleurs | 2 bouquets génériques + 5 fleurs distinctes (dont une « rare » lumineuse) |
-| désert | 2 cactus |
-| sous-bois | 1 champignon, 1 lierre, 1 liane, 1 vrille, 1 feuille au sol |
-| aquatique | 1 algue, 1 corail, 1 étoile de mer |
-| minéral | 2 pierres, 1 grès |
-| cultures | blé, maïs, carotte, coton, citrouille — pour les champs des villages |
+| **herbe** (tempéré) | `herbe_01` `herbe_02` `herbe_03` `buisson` `bouquet_01` `bouquet_02` `fleur_bleuet` `fleur_tournesol` `caillou_01` `caillou_02` |
+| **herbe sèche** (steppe) | `herbe_seche` `broussaille` `fleur_echinacea` `caillou_01` `caillou_02` |
+| **jungle** (chaud, humide) | `liane` `vrille` `lierre` `feuille` `fleur_coeur` `champignon` |
+| **marais** | `roseau` `champignon` `lierre` `fleur_ame` |
+| **sable** (désert et plage) | `cactus_01` `cactus_02` `broussaille` `gres` |
+| **neige** | `caillou_01` `broussaille` |
+| **toundra** | `broussaille` `fleur_ginseng` `caillou_01` |
+| **roche** | `caillou_01` `caillou_02` |
+| **gravier** (fond marin) | `algue` `corail` `etoile_de_mer` |
 
-**Lot B — jalon 4, le décor bâti.** ~50 modèles : mobilier (table, tabouret,
-banc, lit, table de chevet, buffet, 3 étagères, comptoir, 3 tapis, 2 tableaux,
-4 vases, lustre, 3 bougies), artisanat (enclume, four, établi, scie, métier à
-tisser, rouet, fourche), extérieur (4 clôtures, portail, porte, fenêtre, torche,
-lanterne, feu de camp, tente, abri, épouvantail, tonneau, caisse, sac, obélisque,
-pierre runique), ambiance de donjon (toiles d'araignée, crâne, dépouille).
+Beaucoup de fichiers reviennent dans plusieurs biomes : **c'est voulu**, on n'en
+produit qu'un seul exemplaire. Total réel : **28 modèles**.
 
-**Hors périmètre pour l'instant** : objets d'inventaire (~40 : nourriture, armes,
-équipement — jalon 3.2), créatures et poissons (jalon 2, et l'apparence des
-créatures est explicitement hors périmètre), effets et icônes d'interface.
+#### Plus cinq cultures, pour les champs des villages
 
-### 7.2 Avant de dessiner 35 modèles : en faire un seul
+`ble` `mais` `carotte` `coton` `citrouille` — mêmes conventions, dossier
+`assets/models/culture/`. Elles ne sont pas dispersées par biome mais posées en
+rangées par le système de champs (`Field.cpp`, jalon 4.3). À faire après les 28.
 
-L'échelle n'est pas déductible de la décompilation. **Fais un seul modèle de
-test — un buisson, par exemple — et on le pose en jeu sur le terrain généré
-avant que tu produises la suite.** Une demi-heure pour caler l'échelle, contre
-plusieurs jours de modèles à refaire s'ils sortent deux fois trop gros.
+#### Une réserve d'honnêteté sur l'affectation
 
-Repères sûrs en attendant :
-- 1 voxel de modèle = 1 bloc de terrain. Le monde monte à ~600 blocs de relief ;
-- un élément de tuile de type 14 (l'unité d'agglomération) revendique un rayon
-  de 150 blocs, calé sur la grille de 256 : c'est un *quartier*, pas un bâtiment.
-  Le modèle qu'on y posera est bien plus petit que ce rayon.
+Quels modèles vont dans quel biome **n'est pas encore lu dans le binaire** : la
+table de correspondance est dans `WorldInfo_generateBiomeContent` (@005e4850),
+3 100 lignes, pas encore analysée. La répartition ci-dessus est une proposition
+de bon sens (cactus au désert, corail sous l'eau).
+
+Ça ne change rien à ce qu'il faut produire — la *liste* des 28 est sûre, elle
+vient des noms de modèles du binaire. Seule l'affectation peut bouger, et
+réaffecter un modèle existant coûte une ligne de code.
+
+#### Les lots suivants, pour information
+
+- **Jalon 4, décor bâti (~50)** : mobilier (table, tabouret, banc, lit, table de
+  chevet, buffet, 3 étagères, comptoir, 3 tapis, 2 tableaux, 4 vases, lustre,
+  3 bougies), artisanat (enclume, four, établi, scie, métier à tisser, rouet,
+  fourche), extérieur (4 clôtures, portail, porte, fenêtre, torche, lanterne,
+  feu de camp, tente, abri, épouvantail, tonneau, caisse, sac, obélisque, pierre
+  runique), donjon (toiles d'araignée, crâne, dépouille).
+- **Jalon 3.2, objets d'inventaire (~40)** : nourriture, armes, équipement.
+- **Jalon 2, créatures et poissons.** L'apparence des créatures est
+  explicitement hors périmètre : c'est le gréement et l'animation procédurale
+  qui sont portés, pas les modèles.
 
 ### 7.3 Décision d'authoring — prise
 
@@ -252,6 +297,17 @@ Deux faits mesurés sur l'import `.vox`, à ne pas redécouvrir :
   est absorbé par le chargeur) ;
 - les axes sont permutés : `vox(x, y, z) -> godot(y, z, x)`. Le haut reste le
   haut, le plan horizontal est échangé.
+
+Gabarits mesurés en sortie du générateur d'éléments de tuile, utiles pour situer
+les échelles — le rayon est un rayon d'*influence*, pas l'encombrement du modèle :
+
+| type | par zone | rayon | position |
+|---|---|---|---|
+| 14 | ~16 | 150 u | calée sur la grille de 256 |
+| 11, 12 | ~2 chacun | 128 u | calée sur la grille de 256 |
+| 10 (donjon) | ≤ 5 | 512–767 u | libre dans la tuile |
+| 2, 3 | ~2 chacun | 512–767 u | libre dans la tuile |
+| 5 | ~2 | 256–511 u | libre dans la tuile |
 
 Outillage Godot à écrire plus tard, et seulement là où MagicaVoxel ne peut pas
 aider : placement et prévisualisation **en contexte** (une structure posée sur le
