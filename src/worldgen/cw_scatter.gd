@@ -4,13 +4,13 @@ extends RefCounted
 ## Dispersion de la flore sur le terrain genere (jalon 1.7).
 ##
 ## -- Pourquoi une grille de cellules ------------------------------------------
-## Le generateur remplit des blocs de 16 sans etat partage, et une plante
-## deborde de la colonne qui la porte : un bloc doit donc connaitre non
-## seulement ses propres plantes mais celles des cellules voisines dont le
-## gabarit mord dedans. On decoupe le monde en cellules de CELL_SIZE, chaque
-## cellule tire ses plantes a partir de son seul indice — donc de facon
-## reproductible, sans ordre d'evaluation ni voisinage — et un bloc consulte la
-## couronne de cellules qui peuvent l'atteindre.
+## La dispersion doit etre reproductible sans etat partage : le monde est
+## parcouru dans un ordre imprevisible, par le rendu comme par les tests, et une
+## plante doit tomber au meme endroit quel que soit ce qui a ete visite avant.
+## On decoupe donc le monde en cellules de CELL_SIZE, et chaque cellule tire ses
+## plantes a partir de son seul indice — sans ordre d'evaluation, sans
+## voisinage. La cellule est du meme coup l'unite de rendu : un jeu de
+## `MultiMesh` par cellule, cree et detruit d'un bloc (`CWFloraRenderer`).
 ##
 ## -- Cout ---------------------------------------------------------------------
 ## Chaque plante coute un echantillonnage de colonne (~75 us) : il faut son
@@ -18,10 +18,10 @@ extends RefCounted
 ## le droit d'y etre. Le *nombre* de plantes, lui, se decide sur un seul
 ## echantillon au centre de la cellule : un biome s'etend sur des milliers de
 ## blocs, il ne change pas a l'interieur d'une cellule de seize. Une cellule
-## coute donc 1 + n echantillons au lieu d'un par candidat rejete, soit ~7 pour
-## 256 colonnes de terrain en prairie — moins de 3 % du cout d'un bloc. Le
-## resultat est mis en cache par cellule, comme les cartes de hauteurs : une
-## cellule sert aux neuf blocs qui l'entourent et a toute leur pile verticale.
+## coute donc 1 + n echantillons au lieu d'un par candidat rejete — de l'ordre
+## d'une milliseconde en prairie. C'est trop pour le fil principal quand la vue
+## en demande deux cents d'un coup : le rendu les fait construire par lots sur
+## un fil du pool, ce que le cache sous mutex ci-dessous rend sur.
 ##
 ## -- Ce qui n'est pas encore porte --------------------------------------------
 ## L'original disperse depuis `WorldInfo_generateBiomeContent` (@005e4850), non
@@ -37,8 +37,9 @@ const CELL_SIZE: int = 16
 const CELL_SHIFT: int = 4
 
 ## Plafond dur du nombre de plantes par cellule. Garde-fou : une densite mal
-## reglee ne doit pas pouvoir faire exploser le cout d'un bloc en silence.
-const MAX_PER_CELL: int = 16
+## reglee ne doit pas pouvoir faire exploser le cout d'une cellule en silence.
+## Chaque plante coute un echantillonnage de colonne (~75 us).
+const MAX_PER_CELL: int = 32
 
 ## Plafond du cache de cellules. Meme raisonnement que HEIGHTMAP_CACHE_CAP :
 ## il doit couvrir l'empreinte chargee, sinon le cache s'auto-evince en boucle.
@@ -60,8 +61,18 @@ class Placement extends RefCounted:
 	var z: int = 0
 	## Altitude du premier bloc du modele : le bloc d'air juste au-dessus du sol.
 	var y: int = 0
+	## Position a l'interieur de la colonne, dans [0, 1). Le modele est seize
+	## fois plus fin que le bloc : le poser au coin de sa colonne alignerait
+	## toute la flore sur la grille du terrain, ce qui se voit immediatement.
+	## Tire au pas d'un voxel, donc reproductible comme le reste.
+	var fx: float = 0.0
+	var fz: float = 0.0
 	var model: CWVoxelModel = null
 	var rotation: int = 0
+
+	## Position de l'ancre, en blocs, coordonnees monde.
+	func origin() -> Vector3:
+		return Vector3(float(x) + fx, float(y), float(z) + fz)
 
 
 var _field: CWTerrainField
@@ -92,12 +103,18 @@ static func cell_of(v: int) -> int:
 
 
 ## Plantes dont le gabarit mord dans l'empreinte [x0, x0 + nx) x [z0, z0 + nz),
-## en coordonnees monde.
+## en coordonnees monde, exprimee en blocs.
+##
+## Le rendu de la flore, lui, travaille cellule par cellule (`cell`) : une
+## instance n'est pas rognee sur les bornes d'un bloc, elle n'a donc pas besoin
+## d'etre reclamee par chacun d'eux. Cette requete reste la requete d'empreinte
+## de la couche — celle dont auront besoin les tests, les collisions du jalon
+## 1.8 et tout modele qui, lui, s'estampe.
 func placements_in(x0: int, z0: int, nx: int, nz: int) -> Array:
 	var out: Array = []
 	if not _lib.has_any():
 		return out
-	var margin: int = _lib.max_radius
+	var margin: int = _lib.max_radius_blocks
 	var cx0: int = cell_of(x0 - margin)
 	var cx1: int = cell_of(x0 + nx - 1 + margin)
 	var cz0: int = cell_of(z0 - margin)
@@ -107,7 +124,7 @@ func placements_in(x0: int, z0: int, nx: int, nz: int) -> Array:
 	for cz in range(cz0, cz1 + 1):
 		for cx in range(cx0, cx1 + 1):
 			for p in cell(cx, cz):
-				var r: int = p.model.radius
+				var r: int = p.model.radius_blocks
 				if p.x + r < x0 or p.x - r >= x1:
 					continue
 				if p.z + r < z0 or p.z - r >= z1:
@@ -173,6 +190,8 @@ func _build_cell(cx: int, cz: int) -> Array:
 	for i in count:
 		var x: int = base_x + rng.mod(CELL_SIZE)
 		var z: int = base_z + rng.mod(CELL_SIZE)
+		var sub_x: int = rng.mod(CWVoxelModel.VOXELS_PER_BLOCK)
+		var sub_z: int = rng.mod(CWVoxelModel.VOXELS_PER_BLOCK)
 		var turn: int = rng.mod(CWVoxelModel.ROTATIONS)
 		var pick: float = rng.unit()
 
@@ -192,6 +211,8 @@ func _build_cell(cx: int, cz: int) -> Array:
 		p.x = x
 		p.z = z
 		p.y = floori(c.x) + 1
+		p.fx = float(sub_x) / float(CWVoxelModel.VOXELS_PER_BLOCK)
+		p.fz = float(sub_z) / float(CWVoxelModel.VOXELS_PER_BLOCK)
 		p.model = choices[mini(int(pick * float(choices.size())), choices.size() - 1)]
 		p.rotation = turn
 		out.append(p)

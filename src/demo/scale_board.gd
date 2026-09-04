@@ -2,8 +2,9 @@
 class_name CWScaleBoard
 extends Node3D
 
-## Gabarit d'echelle : les modeles charges, poses a cote de mires de hauteur
-## connue et d'une silhouette de reference.
+## Gabarit d'echelle : des mires de hauteur connue en blocs, la silhouette du
+## personnage de reference, et les modeles charges — tous a leur taille reelle,
+## cote a cote.
 ##
 ## Raison d'etre. L'echelle d'un modele voxel n'est deductible d'aucune
 ## decompilation : le binaire ne dit nulle part combien de blocs de terrain fait
@@ -11,24 +12,38 @@ extends Node3D
 ## faut une regle. Ce noeud est cette regle — a poser sur le terrain genere, a
 ## cote de la plante, et a photographier.
 ##
-## Ce n'est pas du contenu de jeu : rien ici n'est ecrit dans le terrain, c'est
-## un maillage isole qu'on ajoute et qu'on retire sans rien changer au monde.
+## Il montre du meme coup les **deux grilles** : les mires sont a l'echelle du
+## terrain (un cube = un bloc), la silhouette et les modeles a l'echelle fine
+## (1 / CWVoxelModel.VOXELS_PER_BLOCK). C'est exactement ce rapport qu'on vient
+## verifier.
+##
+## Ce n'est pas du contenu de jeu : rien ici n'est ecrit dans le terrain, ce sont
+## des maillages isoles qu'on ajoute et qu'on retire sans rien changer au monde.
 
-## Hauteurs des mires, en blocs.
-const TICKS: Array[int] = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32]
+## Hauteurs des mires, en blocs. Le personnage en fait 2 : au-dela de 16, une
+## mire ne sert plus qu'a situer le relief.
+const TICKS: Array[int] = [1, 2, 3, 4, 6, 8, 12, 16]
 ## Espacement entre deux objets du gabarit, en blocs.
-const SPACING: int = 6
+const SPACING: int = 3
 ## Marge d'air autour du contenu : le mailleur en cubes a besoin de voir du vide
 ## sur le pourtour, sinon il ferme les faces de bord.
 const PAD: int = 2
 
-## Silhouette de reference, en blocs, vue de face. Volontairement grossiere :
-## elle ne sert qu'a donner une taille humaine a l'oeil, ce n'est pas un modele.
-const FIGURE_HEIGHT: int = 8
+## Silhouette de reference, en **voxels de modele**. 32 voxels = 2 blocs, le
+## contrat de MODELS.md §1. Volontairement sommaire : elle ne sert qu'a donner
+## une taille a l'oeil, ce n'est pas un modele de personnage.
+const FIGURE_HEIGHT: int = 32
+
+# Index de palette de la silhouette. Plages creatures et equipement : elle n'est
+# pas de la vegetation, et une silhouette peinte en herbe se lit mal.
+const FIGURE_SKIN: int = 32
+const FIGURE_HAIR: int = 40
+const FIGURE_EYE: int = 64
+const FIGURE_CLOTH: int = 100
 
 ## Decalage en X, depuis le centre du gabarit, du milieu de la zone des modeles,
 ## et largeur de cette zone. Sert a cadrer un gros plan sur les modeles seuls :
-## de loin, un modele de trois blocs ne se lit plus.
+## de loin, une plante d'un demi-bloc ne se lit plus.
 var models_center: float = 0.0
 var models_span: float = 0.0
 
@@ -42,99 +57,142 @@ static func build(models: Array) -> CWScaleBoard:
 	var board := CWScaleBoard.new()
 	board.name = "ScaleBoard"
 
-	# Largeur : les mires, la silhouette, puis un modele par emplacement.
 	var slots: int = TICKS.size() + 1 + models.size()
-	var depth: int = 1
-	var height: int = 1
-	for m in models:
-		depth = maxi(depth, m.extent.z)
-		height = maxi(height, m.height)
-	height = maxi(height, TICKS[TICKS.size() - 1])
-	height = maxi(height, FIGURE_HEIGHT)
-
-	var size := Vector3i(slots * SPACING + PAD * 2, height + PAD * 2, depth + 4 + PAD * 2)
-	var buf := VoxelBuffer.new()
-	buf.create(size.x, size.y, size.z)
-	buf.fill(CWPalette.AIR, VoxelBuffer.CHANNEL_COLOR)
-
-	@warning_ignore("integer_division")
-	var cz: int = size.z / 2
-	# Milieu d'un emplacement : c'est la que se pose chaque objet du gabarit.
+	var width: int = slots * SPACING + PAD * 2
 	@warning_ignore("integer_division")
 	var slot_mid: int = SPACING / 2
-	var slot: int = 0
-	# Mires : une colonne de pierre par hauteur de reference, avec un bloc de
-	# repere criard tous les quatre blocs pour pouvoir compter sur la photo.
-	for t in TICKS:
-		var cx: int = PAD + slot * SPACING + slot_mid
-		for y in t:
-			var value: int = CWPalette.STONE if (y % 4) != 0 else 250
-			buf.set_voxel(value, cx, PAD + y, cz, VoxelBuffer.CHANNEL_COLOR)
-		slot += 1
+	# Abscisse locale du milieu d'un emplacement, gabarit centre sur l'origine.
+	var slot_x := func(slot: int) -> float:
+		return float(PAD + slot * SPACING + slot_mid) - float(width) * 0.5
 
-	_draw_figure(buf, PAD + slot * SPACING + slot_mid, PAD, cz)
+	board.add_child(_build_ticks(width))
+
+	var slot: int = TICKS.size()
+	board.add_child(_build_figure(Vector3(slot_x.call(slot), 0.0, 0.0)))
 	slot += 1
 
 	var first_model_slot: int = slot
 	for m in models:
-		_draw_model(buf, m, PAD + slot * SPACING + slot_mid, PAD, cz)
+		var mi: MeshInstance3D = _build_model(m, Vector3(slot_x.call(slot), 0.0, 0.0))
+		if mi != null:
+			board.add_child(mi)
 		slot += 1
+
 	# La silhouette reste dans le cadre du gros plan : c'est elle qui donne son
 	# sens a la taille des modeles.
 	board.models_span = float((models.size() + 1) * SPACING)
-	board.models_center = float(PAD + (first_model_slot - 1) * SPACING) \
-			+ board.models_span * 0.5 - float(size.x) * 0.5
+	board.models_center = slot_x.call(first_model_slot - 1) + board.models_span * 0.5
+	return board
 
+
+## Les mires, a l'echelle du terrain : une colonne d'un bloc de section par
+## hauteur de reference, dont les blocs alternent pour pouvoir les compter.
+static func _build_ticks(width: int) -> MeshInstance3D:
+	var height: int = TICKS[TICKS.size() - 1]
+	var depth: int = 1
+	var buf := VoxelBuffer.new()
+	buf.create(width, height + PAD * 2, depth + PAD * 2)
+	buf.fill(CWPalette.AIR, VoxelBuffer.CHANNEL_COLOR)
+
+	@warning_ignore("integer_division")
+	var cz: int = (depth + PAD * 2) / 2
+	@warning_ignore("integer_division")
+	var slot_mid: int = SPACING / 2
+	for slot in TICKS.size():
+		var t: int = TICKS[slot]
+		var cx: int = PAD + slot * SPACING + slot_mid
+		for y in t:
+			var value: int = CWPalette.STONE if (y % 2) == 0 else 250
+			buf.set_voxel(value, cx, PAD + y, cz, VoxelBuffer.CHANNEL_COLOR)
+
+	var mi := MeshInstance3D.new()
+	mi.name = "Mires"
+	mi.mesh = _mesh_of(buf)
+	# Le mailleur consomme sa marge : l'origine du maillage tombe sur le premier
+	# voxel utile, pas sur le coin du tampon. On recentre sur la base du gabarit
+	# pour pouvoir poser le noeud a meme le sol.
+	var pad: float = float(CWVoxelModel.mesher_padding())
+	mi.position = Vector3(
+			pad - float(width) * 0.5, pad - float(PAD), pad - float(cz))
+	return mi
+
+
+## Silhouette humanoide de FIGURE_HEIGHT voxels, a la grille fine.
+##
+## Elle a des yeux d'un voxel : c'est tout l'interet de la demonstration. A
+## 1 voxel = 1 bloc, un personnage de 2 blocs serait deux cubes.
+static func _build_figure(at: Vector3) -> MeshInstance3D:
+	var ch: int = VoxelBuffer.CHANNEL_COLOR
+	var w: int = 14
+	var d: int = 10
+	var buf := VoxelBuffer.new()
+	buf.create(w + PAD * 2, FIGURE_HEIGHT + PAD * 2, d + PAD * 2)
+	buf.fill(CWPalette.AIR, ch)
+
+	@warning_ignore("integer_division")
+	var cx: int = PAD + w / 2
+	@warning_ignore("integer_division")
+	var cz: int = PAD + d / 2
+	var base: int = PAD
+
+	var box := func(x0: int, x1: int, y0: int, y1: int, z0: int, z1: int,
+			value: int) -> void:
+		for y in range(y0, y1 + 1):
+			for z in range(z0, z1 + 1):
+				for x in range(x0, x1 + 1):
+					buf.set_voxel(value, cx + x, base + y, cz + z, ch)
+
+	# Jambes, tronc, bras, tete : les proportions d'un personnage de jeu, tete
+	# large et corps court.
+	box.call(-4, -2, 0, 11, -2, 1, FIGURE_CLOTH)
+	box.call(2, 4, 0, 11, -2, 1, FIGURE_CLOTH)
+	box.call(-4, 4, 12, 21, -2, 2, FIGURE_CLOTH)
+	box.call(-6, -5, 12, 20, -1, 1, FIGURE_SKIN)
+	box.call(5, 6, 12, 20, -1, 1, FIGURE_SKIN)
+	box.call(-5, 4, 22, 31, -4, 4, FIGURE_SKIN)
+	box.call(-5, 4, 30, 31, -4, 4, FIGURE_HAIR)
+	# Les yeux, dans la face de la tete tournee vers l'observateur du gabarit
+	# (+Z). Un voxel de pupille : c'est la demonstration que 32 voxels suffisent
+	# a un visage, la ou 2 blocs ne feraient que deux cubes.
+	box.call(-3, -3, 26, 27, 4, 4, FIGURE_EYE)
+	box.call(2, 2, 26, 27, 4, 4, FIGURE_EYE)
+
+	var mi := MeshInstance3D.new()
+	mi.name = "Silhouette"
+	mi.mesh = _mesh_of(buf)
+	var scale: float = 1.0 / float(CWVoxelModel.VOXELS_PER_BLOCK)
+	var pad: float = float(CWVoxelModel.mesher_padding())
+	mi.scale = Vector3(scale, scale, scale)
+	# Meme correction de marge que pour les mires, puis le milieu de la
+	# silhouette et sa base sur le point demande.
+	mi.position = at + Vector3(
+			(pad - float(cx)) * scale,
+			(pad - float(base)) * scale,
+			(pad - float(cz)) * scale)
+	return mi
+
+
+## Un modele charge, a sa taille reelle : maille par le modele lui-meme, pose
+## par son ancre.
+static func _build_model(m: CWVoxelModel, at: Vector3) -> MeshInstance3D:
+	var mesh: ArrayMesh = m.mesh()
+	if mesh == null:
+		return null
+	var scale: float = 1.0 / float(CWVoxelModel.VOXELS_PER_BLOCK)
+	var mi := MeshInstance3D.new()
+	mi.name = m.name
+	mi.mesh = mesh
+	mi.scale = Vector3(scale, scale, scale)
+	# L'ancre du modele doit tomber sur `at` : le maillage porte le decalage de
+	# son tampon, on le compense a l'echelle.
+	mi.position = at + m.mesh_offset() * scale
+	return mi
+
+
+static func _mesh_of(buf: VoxelBuffer) -> ArrayMesh:
 	var mesher := VoxelMesherCubes.new()
 	mesher.color_mode = VoxelMesherCubes.COLOR_MESHER_PALETTE
 	mesher.palette = CWPalette.build_voxel_palette()
 	mesher.greedy_meshing_enabled = true
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.vertex_color_is_srgb = true
-	mat.roughness = 0.95
-	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
-	mesher.opaque_material = mat
-
-	var mesh: Mesh = mesher.build_mesh(buf, [mat, mat], {})
-	var mi := MeshInstance3D.new()
-	mi.name = "Board"
-	mi.mesh = mesh
-	# Le maillage sort en coordonnees locales du tampon : on recentre sur la
-	# base du gabarit pour pouvoir poser le noeud a meme le sol.
-	mi.position = Vector3(-float(size.x) * 0.5, -float(PAD), -float(cz))
-	board.add_child(mi)
-	return board
-
-
-## Silhouette humanoide de FIGURE_HEIGHT blocs : tete, tronc, deux jambes.
-static func _draw_figure(buf: VoxelBuffer, cx: int, base: int, cz: int) -> void:
-	var ch: int = VoxelBuffer.CHANNEL_COLOR
-	var skin: int = 32
-	var cloth: int = 220
-	for y in 3:
-		buf.set_voxel(cloth, cx - 1, base + y, cz, ch)
-		buf.set_voxel(cloth, cx + 1, base + y, cz, ch)
-	for y in range(3, 6):
-		for dx in range(-1, 2):
-			buf.set_voxel(cloth, cx + dx, base + y, cz, ch)
-	for y in range(6, FIGURE_HEIGHT):
-		for dx in range(-1, 2):
-			buf.set_voxel(skin, cx + dx, base + y, cz, ch)
-
-
-static func _draw_model(buf: VoxelBuffer, m: CWVoxelModel, cx: int, base: int,
-		cz: int) -> void:
-	var ch: int = VoxelBuffer.CHANNEL_COLOR
-	var dx: PackedInt32Array = m.offsets_x(0)
-	var dy: PackedInt32Array = m.offsets_y(0)
-	var dz: PackedInt32Array = m.offsets_z(0)
-	var values: PackedByteArray = m.values(0)
-	var size: Vector3i = buf.get_size()
-	for i in values.size():
-		var x: int = cx + dx[i]
-		var y: int = base + dy[i]
-		var z: int = cz + dz[i]
-		if x < 0 or y < 0 or z < 0 or x >= size.x or y >= size.y or z >= size.z:
-			continue
-		buf.set_voxel(values[i], x, y, z, ch)
+	var mat: Material = CWPalette.build_opaque_material()
+	return mesher.build_mesh(buf, [mat, mat], {}) as ArrayMesh

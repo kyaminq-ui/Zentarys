@@ -22,7 +22,7 @@ colorés.
 ## Démarrer
 
 ```
-godot --headless --path . -s tests/worldgen_test.gd   # 80 vérifications
+godot --headless --path . -s tests/worldgen_test.gd   # 113 vérifications
 ```
 
 Scène de démonstration : `scenes/terrain_demo.tscn`. Clic pour capturer la

@@ -182,6 +182,23 @@ static func build_voxel_palette() -> Resource:
 	return pal
 
 
+## Materiau opaque du rendu en cubes : couleur portee par les sommets, pas de
+## speculaire.
+##
+## Partage par le terrain, les modeles instancies et le gabarit d'echelle. Ce
+## n'est pas de la coquetterie : les modeles sont sur une grille seize fois plus
+## fine que le terrain, et le seul lien qui les fait lire comme un meme monde est
+## d'avoir exactement la meme palette et le meme materiau. Un reglage qui derive
+## d'un cote se voit immediatement.
+static func build_opaque_material() -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.vertex_color_is_srgb = true
+	mat.roughness = 0.95
+	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	return mat
+
+
 ## Bloc de surface d'une colonne.
 ## height : altitude de la colonne, en blocs. sea_level : niveau de la mer.
 static func surface_index(height: float, temperature: float, humidity: float,

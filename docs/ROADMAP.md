@@ -67,20 +67,40 @@ de la carte (zone 512, 512).
 
 ### 1.7 — Contenu de biome (en cours)
 
-**Fait.** La mécanique de dispersion est portée, testée et mesurée :
+**Fait.** La mécanique de dispersion et le rendu sont portés, testés et mesurés :
 `CWVoxelModel` (un `.vox` en liste creuse, quatre quarts de tour précalculés,
-ancre au centre de l'empreinte et à la base), `CWModelLibrary` (chargement
-partagé, table modèle/biome, densités), `CWScatter` (cellules de 16 blocs, une
-graine par cellule, cache sous mutex), et l'estampage dans
-`CWVoxelGenerator._generate_block`. 26 vérifications dans `tests/flora_test.gd`.
-Surcoût mesuré : +14 % sur un bloc isolé, de l'ordre de 3 % en chargement réel,
-où une cellule sert aux neuf blocs qui l'entourent.
+ancre au centre de l'empreinte et à la base, maillage à l'échelle fine),
+`CWModelLibrary` (chargement partagé, table modèle/biome, densités), `CWScatter`
+(cellules de 16 blocs, une graine par cellule, position sous le bloc, cache sous
+mutex) et `CWFloraRenderer` (un `MultiMesh` par modèle et par cellule, cellules
+construites par lots sur un fil du pool, détruites au-delà de la distance de vue
+de la flore). 30 vérifications dans `tests/flora_test.gd`. Coût : **1,1 ms par
+cellule** de 256 colonnes en prairie, hors du fil principal — et **plus rien** sur
+le chemin de génération du terrain.
 
 **L'échelle des assets est fixée** — c'était le point bloquant, elle n'est
-déductible d'aucune décompilation. Personnage de référence à 8 blocs, touffe
-d'herbe à 2–4 blocs. Méthode et photos dans `assets/models/MODELS.md` et
-`docs/images/`. À revoir au jalon 3.1, quand la physique du joueur donnera la
-taille réelle du personnage.
+déductible d'aucune décompilation.
+
+> **Deux grilles.** Le terrain a un pas d'un bloc, les modèles un pas seize fois
+> plus fin : **1 bloc = 16 voxels de modèle**, **personnage de référence = 2
+> blocs = 32 voxels**, touffe d'herbe à un demi-bloc. C'est ce rapport qui sépare
+> ce rendu de celui de Minecraft, et il est mesuré au pixel sur une capture du
+> jeu d'origine — le brin d'herbe et la pupille du personnage y font la même
+> largeur, donc la flore et les personnages sont sur la même grille fine.
+
+Conséquence d'architecture, prise le 2026-09-04 : **la flore n'est plus estampée
+dans les données voxels du monde**, elle y serait seize fois trop grosse. Elle
+est maillée à part — même mailleur, même palette, même matériau que le terrain,
+ce qui est la condition pour que les deux grilles lisent comme un seul monde —
+puis instanciée. Ce qu'on perd : la flore ne se creuse pas, ne porte pas de
+collision, ne participera pas à l'éclairage voxel du jalon 1.9. Ce qu'on gagne :
+elle quitte le chemin critique de génération, qui est le poste dominant du
+chargement.
+
+Méthode, mesures et gabarits dans `assets/models/MODELS.md`. À revoir au jalon
+3.1, quand la physique du joueur donnera la taille réelle du personnage : c'est
+alors le nombre de blocs qui bougera, pas le rapport de 16, qui est un contrat
+d'authoring.
 
 **Reste.** L'analyse de `WorldInfo_generateBiomeContent` (@005e4850, 4 200
 lignes) : la table modèle/biome, la génération procédurale des arbres, et
@@ -139,6 +159,13 @@ Authoring : MagicaVoxel, palette de projet dans
 `assets/palette/PALETTE.md`. À l'import, `vox(x, y, z) -> godot(y, z, x)`.
 **Échelle et conventions de fichiers : `assets/models/MODELS.md`** — c'est le
 document à donner à qui modélise.
+
+Pas d'éditeur voxel maison : la seule objection sérieuse était l'impossibilité de
+descendre sous le voxel dans MagicaVoxel, et elle tombe avec le rapport de 16 —
+sa grille est sans unité, on ne réduit pas le pinceau, on agrandit la boîte.
+L'établi de personnalisation façon Cube World reste au programme comme
+*fonctionnalité de jeu* (jalon 3.2/4, sur l'inventaire), pas comme outil de
+production ; il réutilisera `CWVoxelModel` tel quel.
 
 ---
 
@@ -212,8 +239,12 @@ sans valeur tant que les jalons 2 et 3 ne sont pas là.
 
 | Sujet | Statut | Détail |
 |---|---|---|
-| Suite de tests headless | ✅ | 106 vérifications, `tests/worldgen_test.gd` |
-| Gabarit d'échelle en jeu | ✅ | `src/demo/scale_board.gd`, capture automatique |
+| Suite de tests headless | ✅ | 113 vérifications, `tests/worldgen_test.gd` |
+| Gabarit d'échelle en jeu | ✅ | `src/demo/scale_board.gd`, capture automatique ; mires en blocs et modèles à la grille fine |
+| Capture différée de la démo | ✅ | `TerrainDemo.auto_shot_delay` + `--quit-after` : regarder une couche sans piloter la fenêtre |
+| Flore instanciée (MultiMesh par cellule) | ✅ | `src/worldgen/cw_flora_renderer.gd`, 1,1 ms/cellule hors fil principal |
+| Groupement de la flore en grappes | ⬜ | l'original sème par paquets de 3 à 6 ; le tirage uniforme par cellule ne sait pas le faire |
+| Éclairage et LOD des modèles instanciés | ⬜ | ils ne profitent ni de l'éclairage voxel (1.9) ni d'une réduction en distance ; `CWVoxelModel.reduced(n)` est prêt |
 | Inventaire des modèles `.vox` | ✅ | `tools/inspect_model.gd`, contrôle des plages de palette |
 | Aperçu rapproché des éléments | ✅ | `tools/preview_features.gd`, avec et sans la couche |
 | Aperçus PNG (altitude, climat, chenaux) | ✅ | `user://worldgen_preview/` |
@@ -328,6 +359,7 @@ de le résoudre.
 
 | Date | Fait |
 |---|---|
+| 2026-09-04 | Echelle des assets refixee sur une mesure au pixel d'une capture du jeu d'origine : deux grilles, 1 bloc = 16 voxels de modele, personnage a 2 blocs (contre 8 blocs et 1 voxel = 1 bloc, tranches a l'oeil le matin meme). La flore quitte les donnees voxels du monde : maillage a part, instanciation par `CWFloraRenderer`. Le generateur ne connait plus la flore, ses +14 % par bloc disparaissent ; une cellule de flore coute 1,1 ms hors du fil principal. Gabarit d'echelle refait : mires en blocs, silhouette de 32 voxels avec des yeux d'un voxel. |
 | 2026-09-04 | Jalon 1.6. Grille d'elements de tuile, cinq effets d'altitude, relevement des ilots oceaniques, champ de routes. Recursion generateur/champ cassee comme dans l'original, et rendue sure sur plusieurs fils. 30 verifications de plus. Cout : +0 us/colonne hors influence sur le chemin de streaming, +13 us dedans. |
 | 2026-09-03 | Debit de chargement : doublons entre fils, plafond de cache, distance aux aretes inutile, pool de fils. Vue 384 stabilisee en 27 s au lieu de > 3 min. Teleportation par biome et reglage de la vue au clavier. |
 | 2026-09-03 | Corrige : tranchee d'une colonne le long des aretes du graphe de sites (defaut d'unites, signale par l'utilisateur). Saut max entre colonnes voisines 2,35 -> 0,37 bloc. Test de non-regression par balayage dense ajoute. |

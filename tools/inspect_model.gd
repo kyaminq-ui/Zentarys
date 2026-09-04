@@ -8,7 +8,8 @@ extends SceneTree
 ## Sans argument, passe en revue tout `assets/models/`. Sert a deux choses :
 ## verifier qu'un modele reste dans sa plage de palette (un index hors plage
 ## sort avec la couleur d'un autre lot, sans le moindre message d'erreur), et
-## connaitre son encombrement en blocs de terrain avant de le poser en jeu.
+## connaitre sa taille reelle avant de le poser en jeu — en voxels, l'unite dans
+## laquelle on dessine, et en blocs de terrain, l'unite dans laquelle on juge.
 
 const MODELS_DIR: String = "res://assets/models"
 
@@ -70,6 +71,12 @@ func _inspect(path: String) -> void:
 	var extent: Vector3i = hi - lo + Vector3i.ONE
 	print("  tampon %d x %d x %d (godot x,y,z)   matiere %d x %d x %d, coin bas %s"
 			% [size.x, size.y, size.z, extent.x, extent.y, extent.z, lo])
+	# La taille en blocs est la seule qui dise quelque chose : un modele se juge
+	# contre le personnage de reference, qui fait 2 blocs. Voir MODELS.md, §1.
+	var per: float = float(CWVoxelModel.VOXELS_PER_BLOCK)
+	print("  soit %.2f x %.2f x %.2f blocs   (%.2f fois la hauteur du personnage)"
+			% [float(extent.x) / per, float(extent.y) / per, float(extent.z) / per,
+			float(extent.y) / (per * 2.0)])
 	print("  %d voxels pleins, %.1f %% du tampon"
 			% [filled, 100.0 * float(filled) / float(size.x * size.y * size.z)])
 

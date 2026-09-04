@@ -1,13 +1,25 @@
 class_name CWVoxelModel
 extends RefCounted
 
-## Un modele .vox prepare pour etre estampe dans un VoxelBuffer.
+## Un modele .vox prepare pour etre pose dans le monde.
+##
+## -- Les deux grilles ---------------------------------------------------------
+## Le terrain a un pas d'un bloc ; les modeles ont un pas seize fois plus fin
+## (VOXELS_PER_BLOCK). C'est cette difference qui distingue le rendu vise de
+## celui de Minecraft : de gros cubes de terrain, mais du detail sur ce qui est
+## pose dessus — une touffe d'herbe est faite de lames d'un voxel d'epaisseur,
+## un personnage de 2 blocs a des yeux d'un voxel. Mesure et justification dans
+## `assets/models/MODELS.md`, §1.
+##
+## Un modele fin ne peut donc pas etre ecrit dans les donnees voxels du monde :
+## il est maille a part (`mesh()`) et instancie a l'echelle 1 / VOXELS_PER_BLOCK.
+## Les offsets creux ci-dessous servent a ce maillage, et restent utilisables
+## tels quels pour un futur modele a l'echelle du terrain, qui lui s'estampe.
 ##
 ## Le chargeur rend un VoxelBuffer dense ; un modele de flore n'en remplit que
 ## quelques pour cent (80 voxels pleins sur 1960 pour `herbe_01`). On le
 ## convertit donc en liste creuse, et on precalcule les quatre quarts de tour
-## autour de Y : le chemin d'estampage est appele une fois par plante et par
-## bloc traverse, il ne doit contenir qu'une boucle et des additions.
+## autour de Y.
 ##
 ## Repere. Les offsets sont relatifs a l'**ancre** : centre du gabarit au sol
 ## sur X et Z, base de la matiere sur Y. Poser une plante revient donc a donner
@@ -19,20 +31,39 @@ extends RefCounted
 
 const ROTATIONS: int = 4
 
+## Voxels de modele dans un bloc de terrain. **Contrat d'authoring** : le
+## changer invalide tous les modeles deja dessines. Voir MODELS.md, §1.
+const VOXELS_PER_BLOCK: int = 16
+
+## Marge d'air autour de la matiere dans le tampon de maillage. Le mailleur en
+## cubes a besoin de voir du vide sur le pourtour, sinon il ferme les faces de
+## bord et le modele sort creux.
+const MESH_MARGIN: int = 2
+
 var name: String = ""
 var path: String = ""
-## Gabarit de la matiere, en blocs.
+## Gabarit de la matiere, en voxels de modele.
 var extent: Vector3i = Vector3i.ZERO
-## Rayon horizontal, en blocs : de combien la plante deborde de sa colonne.
+## Rayon horizontal, en voxels : de combien la plante deborde de son axe.
 var radius: int = 0
 var height: int = 0
 var voxel_count: int = 0
+## Les deux memes mesures, arrondies au bloc superieur. C'est dans cette unite
+## que raisonnent la dispersion et le terrain.
+var radius_blocks: int = 0
+var height_blocks: int = 0
 
 # Offsets par rotation, en tableaux paralleles. Indexes par le quart de tour.
 var _dx: Array[PackedInt32Array] = []
 var _dy: Array[PackedInt32Array] = []
 var _dz: Array[PackedInt32Array] = []
 var _v: Array[PackedByteArray] = []
+
+# Maillage, construit au premier besoin.
+var _mesh: ArrayMesh = null
+var _mesh_offset: Vector3 = Vector3.ZERO
+
+static var _mesher: VoxelMesherCubes = null
 
 
 ## Charge un `.vox` et le prepare. Rend `null` si le fichier manque ou est vide.
@@ -104,6 +135,7 @@ static func load_from(model_path: String, palette: Resource) -> CWVoxelModel:
 		m._dy[r] = by
 		m._dz[r] = rz
 		m._v[r] = bv
+	m._derive()
 	return m
 
 
@@ -112,8 +144,13 @@ static func load_from(model_path: String, palette: Resource) -> CWVoxelModel:
 ##
 ## Une reduction par moyenne effacerait le modele — la flore est faite de lames
 ## d'un seul voxel d'epaisseur, qui sont minoritaires dans n'importe quelle
-## cellule. L'union garde la silhouette, ce qui est tout ce qu'on lui demande :
-## montrer a quoi ressemblerait le meme modele a une autre echelle.
+## cellule. L'union garde la silhouette, ce qui est tout ce qu'on lui demande.
+##
+## Destinee au LOD des modeles instancies : au-dela de quelques dizaines de
+## blocs, une plante ne couvre plus assez de pixels pour que ses lames se
+## distinguent, et un maillage reduit d'un facteur 2 ou 4 rend la meme image
+## pour une fraction des triangles. Le rapport etant une puissance de deux, la
+## reduction tombe juste. Pas encore branchee sur le rendu.
 func reduced(factor: int) -> CWVoxelModel:
 	if factor <= 1:
 		return self
@@ -175,7 +212,83 @@ func reduced(factor: int) -> CWVoxelModel:
 		out._dy[r] = by
 		out._dz[r] = rz
 		out._v[r] = bv
+	out._derive()
 	return out
+
+
+## Mesures derivees, une fois les offsets en place.
+func _derive() -> void:
+	radius_blocks = ceili(float(radius) / float(VOXELS_PER_BLOCK))
+	height_blocks = ceili(float(height) / float(VOXELS_PER_BLOCK))
+
+
+## Maillage du modele, construit une fois et garde.
+##
+## Meme mailleur, meme palette et meme materiau que le terrain : c'est ce qui
+## fait que les deux grilles se ressemblent au lieu de se voir. Rend `null` pour
+## un modele vide.
+func mesh() -> ArrayMesh:
+	if _mesh != null or voxel_count == 0:
+		return _mesh
+
+	var ch: int = VoxelBuffer.CHANNEL_COLOR
+	var dx: PackedInt32Array = _dx[0]
+	var dy: PackedInt32Array = _dy[0]
+	var dz: PackedInt32Array = _dz[0]
+	var values: PackedByteArray = _v[0]
+
+	var lo := Vector3i(0x7FFFFFFF, 0x7FFFFFFF, 0x7FFFFFFF)
+	for i in voxel_count:
+		lo = lo.min(Vector3i(dx[i], dy[i], dz[i]))
+
+	var m: int = MESH_MARGIN
+	var buf := VoxelBuffer.new()
+	buf.create(extent.x + m * 2, extent.y + m * 2, extent.z + m * 2)
+	buf.fill(CWPalette.AIR, ch)
+	for i in voxel_count:
+		buf.set_voxel(values[i], dx[i] - lo.x + m, dy[i] - lo.y + m,
+				dz[i] - lo.z + m, ch)
+
+	# Le maillage ne sort pas en coordonnees du tampon : le mailleur consomme sa
+	# marge de remplissage et son origine tombe sur le premier voxel utile, donc
+	# a `get_minimum_padding()` du bord. Sans ce terme, tout ce qui est instancie
+	# est enterre d'un voxel — assez peu pour rester plausible a l'oeil, ce qui
+	# est exactement la raison de le mesurer dans les tests.
+	var pad: int = _shared_mesher().get_minimum_padding()
+	_mesh_offset = Vector3(
+			float(lo.x - m + pad), float(lo.y - m + pad), float(lo.z - m + pad))
+	var mat: Material = CWPalette.build_opaque_material()
+	_mesh = _shared_mesher().build_mesh(buf, [mat, mat], {}) as ArrayMesh
+	return _mesh
+
+
+## Decalage, en voxels de modele, du repere du maillage par rapport a l'ancre.
+## Construit le maillage si besoin : le decalage en sort, et le lire avant
+## serait un piege d'ordonnancement pour rien.
+func mesh_offset() -> Vector3:
+	if _mesh == null:
+		mesh()
+	return _mesh_offset
+
+
+## Marge que le mailleur consomme sur le pourtour d'un tampon. Un maillage
+## construit a la main doit la retrancher de ses coordonnees, sinon il est pose
+## un voxel trop bas et trop a gauche.
+static func mesher_padding() -> int:
+	return _shared_mesher().get_minimum_padding()
+
+
+## Mailleur partage. Construit une fois : il ne porte que la palette et le mode
+## de couleur, et les modeles sont mailles depuis le fil principal.
+static func _shared_mesher() -> VoxelMesherCubes:
+	if _mesher != null:
+		return _mesher
+	var mesher := VoxelMesherCubes.new()
+	mesher.color_mode = VoxelMesherCubes.COLOR_MESHER_PALETTE
+	mesher.palette = CWPalette.build_voxel_palette()
+	mesher.greedy_meshing_enabled = true
+	_mesher = mesher
+	return _mesher
 
 
 ## Quart de tour autour de Y, sens direct.
@@ -204,5 +317,6 @@ func values(rotation: int) -> PackedByteArray:
 
 
 func _to_string() -> String:
-	return "%s %dx%dx%d, %d voxels, rayon %d" % [
-		name, extent.x, extent.y, extent.z, voxel_count, radius]
+	return "%s %dx%dx%d voxels (%.2f bloc de haut), %d pleins, rayon %d" % [
+		name, extent.x, extent.y, extent.z,
+		float(height) / float(VOXELS_PER_BLOCK), voxel_count, radius]

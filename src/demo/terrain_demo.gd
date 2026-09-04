@@ -58,11 +58,21 @@ const BIOME_KEYS: Dictionary = {
 @export var mouse_sensitivity: float = 0.0022
 ## Distance de vue initiale, en blocs. Reglable en jeu par Page haut / Page bas.
 @export var view_distance: int = 384
+## Distance de vue de la flore, en blocs. Sans rapport avec celle du terrain :
+## une touffe d'un demi-bloc ne couvre plus un pixel bien avant l'horizon.
+@export var flora_distance: int = 128
 
 ## Pose le gabarit d'echelle (mires de hauteur connue, silhouette, modeles
 ## charges) devant le point d'apparition. Sert a regler la taille des assets
 ## voxels : voir nextsteps.md, §7.1.
 @export var scale_board: bool = false
+
+## Capture automatique apres ce delai, en secondes. Negatif = aucune.
+##
+## Sert a regarder une couche de rendu sans piloter la fenetre : lancer avec
+## `--quit-after`, recuperer le PNG dans `user://shots`. Le gabarit d'echelle a
+## deja son propre enchainement de captures, celui-ci est pour le reste.
+@export var auto_shot_delay: float = -1.0
 
 ## Bascule VoxelTerrain (detail unique) <-> VoxelLodTerrain (pyramide de LOD).
 ##
@@ -83,6 +93,7 @@ const BIOME_KEYS: Dictionary = {
 var params: CWWorldParams
 var generator: CWVoxelGenerator
 var terrain: VoxelNode
+var flora: CWFloraRenderer
 var camera: Camera3D
 var hud: Label
 
@@ -140,17 +151,16 @@ func _ready() -> void:
 		if wanted > _voxel_engine.get_thread_count():
 			_voxel_engine.set_thread_count(wanted)
 
-	# Le gabarit sert a lire une taille contre des mires : la flore dispersee
-	# n'y ferait qu'obstacle, et c'est justement elle qu'on cherche a regler.
-	generator.scatter = not scale_board
-
 	_build_environment()
 	_build_terrain()
 	_build_camera()
+	_build_flora()
 	_build_hud()
 	if scale_board:
 		_build_scale_board()
 		_shot_countdown = BOARD_SHOT_DELAY
+	elif auto_shot_delay > 0.0:
+		_shot_countdown = auto_shot_delay
 
 
 func _build_terrain() -> void:
@@ -232,6 +242,20 @@ func _build_camera() -> void:
 	camera.rotation = Vector3(_pitch, _yaw, 0.0)
 
 
+## Couche de flore : instanciee par-dessus le terrain, pas ecrite dedans. Les
+## modeles sont seize fois plus fins que la grille des blocs, voir
+## `assets/models/MODELS.md`, §1.
+func _build_flora() -> void:
+	flora = CWFloraRenderer.new()
+	flora.name = "Flora"
+	flora.view_distance = flora_distance
+	# Le gabarit sert a lire une taille contre des mires : la flore dispersee
+	# n'y ferait qu'obstacle, et c'est justement elle qu'on cherche a regler.
+	flora.enabled = not scale_board
+	flora.setup(generator.scatter_grid(), params.world_origin, camera)
+	add_child(flora)
+
+
 ## Pose le gabarit d'echelle au sol, devant la camera, et regarde-le.
 func _build_scale_board() -> void:
 	# Les modeles distincts, quel que soit le biome qui les emploie : un meme
@@ -244,16 +268,6 @@ func _build_scale_board() -> void:
 			if not seen.has(m.name):
 				seen[m.name] = true
 				flat.append(m)
-
-	# A cote de chaque modele, la meme silhouette reduite de moitie et du quart :
-	# c'est la seule facon de montrer une taille cible plutot que de la decrire.
-	# Les reductions d'abord, sinon l'original les masque.
-	var scaled: Array = []
-	for m in flat:
-		scaled.append(m.reduced(4))
-		scaled.append(m.reduced(2))
-		scaled.append(m)
-	flat = scaled
 
 	var here := _world_position()
 	var ahead: Vector2i = here + Vector2i(0, -24)
@@ -472,10 +486,10 @@ func _process(delta: float) -> void:
 			capture_screenshot()
 			if _shot_stage == 0 and _board != null:
 				# Second cliche, cadre sur les modeles : a la distance qui montre
-				# la mire de 32 blocs, un modele de trois blocs est un pixel.
+				# la mire de 16 blocs, une plante d'un demi-bloc est un pixel.
 				_shot_stage = 1
 				camera.position = _board.position + Vector3(
-						_board.models_center, 5.0, _board.models_span * 1.1)
+						_board.models_center, 1.5, _board.models_span * 1.1)
 				_pitch = -0.10
 				camera.rotation = Vector3(_pitch, _yaw, 0.0)
 				_shot_countdown = 1.5
@@ -555,6 +569,11 @@ func _update_hud() -> void:
 			lod_view_distance if use_lod else view_distance,
 			("   LOD x%d" % lod_count) if use_lod else "",
 			_voxel_engine.get_thread_count() if _voxel_engine != null else 0])
+		if flora != null:
+			var fs: Vector2i = flora.stats()
+			lines.append("flore : %d plantes sur %d cellules, vue %d blocs%s" % [
+				fs.y, fs.x, flora.view_distance,
+				"" if flora.enabled else "   (coupee)"])
 		lines.append("ZQSD/WASD + souris · Maj vite · Espace/Ctrl · Echap souris puis quitter")
 		lines.append("Page haut/bas : distance de vue")
 		lines.append("1 herbe · 2 herbe seche · 3 jungle · 4 marais · 5 sable")

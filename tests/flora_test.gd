@@ -2,7 +2,7 @@ class_name CWFloraTest
 extends RefCounted
 
 ## Verifications de la couche de flore (jalon 1.7) : chargement des modeles,
-## dispersion, estampage dans les blocs.
+## dispersion, maillage et pose des instances.
 ##
 ## Pilote par tests/worldgen_test.gd, qui tient le compte des verifications :
 ##   CWFloraTest.new().run(self)
@@ -21,7 +21,7 @@ func run(runner: Object) -> void:
 	_runner = runner
 	_test_models()
 	_test_scatter()
-	_test_stamping()
+	_test_rendering()
 
 
 func _ok(label: String, condition: bool, detail: String = "") -> void:
@@ -64,6 +64,44 @@ func _test_models() -> void:
 	_ok("modele non vide", m.voxel_count > 0, str(m))
 	_ok("gabarit coherent avec les offsets",
 			m.height == m.extent.y and m.radius > 0, str(m))
+
+	# Echelle. Le rapport est un contrat d'authoring : le changer invalide tous
+	# les modeles deja dessines, donc il est verrouille ici et pas seulement
+	# ecrit dans MODELS.md.
+	_ok("un bloc de terrain vaut 16 voxels de modele",
+			CWVoxelModel.VOXELS_PER_BLOCK == 16,
+			"%d" % CWVoxelModel.VOXELS_PER_BLOCK)
+	_ok("mesures en blocs coherentes avec les mesures en voxels",
+			m.height_blocks == ceili(float(m.height) / 16.0)
+			and m.radius_blocks == ceili(float(m.radius) / 16.0),
+			"%d voxels -> %d blocs" % [m.height, m.height_blocks])
+
+	# Enveloppe de la flore : le personnage de reference fait 2 blocs, une
+	# plante ne le depasse pas de plus du double. Un modele dessine a l'ancienne
+	# regle (1 voxel = 1 bloc) sortirait ici a huit fois sa taille.
+	var oversize: Array = []
+	for k in _distinct_models(lib):
+		if k.height > 4 * CWVoxelModel.VOXELS_PER_BLOCK \
+				or k.radius > 2 * CWVoxelModel.VOXELS_PER_BLOCK:
+			oversize.append(str(k))
+	_ok("aucun modele de flore hors de l'enveloppe (4 blocs de haut, 2 de rayon)",
+			oversize.is_empty(), str(oversize))
+
+	# Maillage : c'est par la que le modele arrive a l'ecran, puisqu'il n'est
+	# plus ecrit dans les donnees du monde.
+	var mesh: ArrayMesh = m.mesh()
+	_ok("le modele se maille", mesh != null and mesh.get_surface_count() > 0,
+			str(mesh))
+	if mesh != null:
+		# Le maillage sort en coordonnees de tampon ; ramene sur l'ancre par
+		# `mesh_offset`, il doit poser a zero et monter a sa hauteur.
+		var box: AABB = mesh.get_aabb()
+		box.position += m.mesh_offset()
+		_ok("le maillage pose sur l'ancre", absf(box.position.y) < 0.001,
+				"base a %.3f voxel" % box.position.y)
+		_ok("le maillage a la hauteur de la matiere",
+				absf(box.size.y - float(m.height)) < 0.001,
+				"%.2f voxels pour %d" % [box.size.y, m.height])
 
 	# Plage de palette : un index hors plage ne leve rien, il ressortira avec la
 	# couleur d'un autre lot le jour ou la palette bougera.
@@ -201,11 +239,12 @@ func _test_scatter() -> void:
 	var wz: int = p.world_origin.y
 	var got: Array = sc.placements_in(wx, wz, 16, 16)
 	var want: Array = []
-	var margin: int = sc.library().max_radius + CWScatter.CELL_SIZE
+	# Rayons en blocs : l'empreinte est une requete de terrain, pas de modele.
+	var margin: int = sc.library().max_radius_blocks + CWScatter.CELL_SIZE
 	for cz in range(CWScatter.cell_of(wz - margin), CWScatter.cell_of(wz + 16 + margin) + 1):
 		for cx in range(CWScatter.cell_of(wx - margin), CWScatter.cell_of(wx + 16 + margin) + 1):
 			for pl in sc.cell(cx, cz):
-				var r: int = pl.model.radius
+				var r: int = pl.model.radius_blocks
 				if pl.x + r < wx or pl.x - r >= wx + 16:
 					continue
 				if pl.z + r < wz or pl.z - r >= wz + 16:
@@ -241,144 +280,150 @@ func _test_scatter() -> void:
 	_ok("meme dispersion depuis huit fils concurrents", concurrent_ok)
 
 
-# -- 3. Estampage dans les blocs ----------------------------------------------
 
-func _test_stamping() -> void:
-	print("[estampage de la flore]")
+
+# -- 3. Maillage et pose des instances ----------------------------------------
+
+func _test_rendering() -> void:
+	print("[rendu de la flore]")
 	var p := CWWorldParams.new()
 	p.world_seed = 2024
 	var g := CWVoxelGenerator.new()
 	g.params = p
-	if not g.scatter_grid().library().has_any():
-		_skip("estampage", "aucun modele charge")
+	var sc: CWScatter = g.scatter_grid()
+	if not sc.library().has_any():
+		_skip("rendu", "aucun modele charge")
 		return
 
+	# La flore a quitte les donnees du monde : un bloc de surface ne doit plus
+	# contenir un seul index de vegetation. Sans cette verification, un reste
+	# d'estampage passerait inapercu — il ferait juste doublon avec l'instance.
 	var ground: int = roundi(g.field().sample_column(p.world_origin.x, p.world_origin.y).x)
 	@warning_ignore("integer_division")
 	var oy: int = (ground / 16) * 16
-
-	var sown := VoxelBuffer.new()
-	sown.create(16, 16, 16)
-	g._generate_block(sown, Vector3i(0, oy, 0), 0)
-
-	g.scatter = false
-	g.clear_caches()
-	var bare := VoxelBuffer.new()
-	bare.create(16, 16, 16)
-	g._generate_block(bare, Vector3i(0, oy, 0), 0)
-	g.scatter = true
-	g.clear_caches()
-
-	# La flore ne creuse pas le terrain : elle n'ecrit que dans l'air et l'eau.
-	var carved: int = 0
-	var added: int = 0
-	for y in 16:
-		for z in 16:
-			for x in 16:
-				var a: int = sown.get_voxel(x, y, z, CHANNEL)
-				var b: int = bare.get_voxel(x, y, z, CHANNEL)
-				if a == b:
-					continue
-				if b == CWPalette.AIR or b == CWPalette.WATER \
-						or b == CWPalette.WATER_DEEP:
-					added += 1
-				else:
-					carved += 1
-	print("     %d voxels de flore ajoutes dans le bloc de surface" % added)
-	_ok("la flore ne remplace jamais du terrain solide", carved == 0,
-			"%d voxels ecrases" % carved)
-	_ok("la flore est bien ecrite", added > 0)
-
-	# Deux generations du meme bloc doivent coincider : sans cela le monde ne se
-	# regenere pas a l'identique apres un dechargement.
-	var again := VoxelBuffer.new()
-	again.create(16, 16, 16)
-	g.clear_caches()
-	g._generate_block(again, Vector3i(0, oy, 0), 0)
-	var mismatch: int = 0
-	for y in 16:
-		for z in 16:
-			for x in 16:
-				if again.get_voxel(x, y, z, CHANNEL) != sown.get_voxel(x, y, z, CHANNEL):
-					mismatch += 1
-	_ok("un bloc regenere est identique", mismatch == 0, "%d ecarts" % mismatch)
-
-	# Continuite verticale : une plante a cheval sur deux blocs doit apparaitre
-	# entiere, chaque bloc portant sa part. Le bloc du dessus n'a plus de sol : si
-	# le chemin rapide « bloc vide » le rendait sans regarder la flore, la moitie
-	# haute des plantes hautes disparaitrait.
-	var upper := VoxelBuffer.new()
-	upper.create(16, 16, 16)
-	g._generate_block(upper, Vector3i(0, oy + 16, 0), 0)
-
-	var plants: Array = g.scatter_grid().placements_in(
-			p.world_origin.x, p.world_origin.y, 16, 16)
-	var expected: int = 0
-	var spans_up: int = 0
-	for pl in plants:
-		var dx: PackedInt32Array = pl.model.offsets_x(pl.rotation)
-		var dy: PackedInt32Array = pl.model.offsets_y(pl.rotation)
-		var dz: PackedInt32Array = pl.model.offsets_z(pl.rotation)
-		for i in dy.size():
-			var lx: int = pl.x - p.world_origin.x + dx[i]
-			var lz: int = pl.z - p.world_origin.y + dz[i]
-			var wy: int = pl.y + dy[i]
-			if lx < 0 or lx >= 16 or lz < 0 or lz >= 16:
-				continue
-			if wy >= oy and wy < oy + 32:
-				expected += 1
-			if wy >= oy + 16 and wy < oy + 32:
-				spans_up += 1
-	var seen: int = _flora_voxels(sown) + _flora_voxels(upper)
-	# `<=` et non `==` : une plante posee au pied d'une pente peut avoir une part
-	# de son gabarit dans le flanc de la colline, ou elle n'ecrit rien.
-	_ok("aucune plante n'est perdue entre deux blocs empiles",
-			seen <= expected and seen > 0,
-			"%d voxels vus pour %d attendus au plus" % [seen, expected])
-	if spans_up > 0:
-		_ok("le bloc au-dessus du sol porte sa part de flore",
-				_flora_voxels(upper) > 0,
-				"%d voxels attendus dans le bloc haut" % spans_up)
-	else:
-		_skip("le bloc au-dessus du sol porte sa part de flore",
-				"aucune plante ne franchit la frontiere ici")
-
-	_bench_scatter(g, oy)
-
-
-## Surcout de la couche de flore sur le chemin de generation.
-##
-## Le cout par bloc est le plafond de tout le reste : c'est lui qui decide de la
-## distance de vue tenable. Une couche qui le double ne se voit pas a l'oeil, on
-## la mesure.
-func _bench_scatter(g: CWVoxelGenerator, oy: int) -> void:
 	var buf := VoxelBuffer.new()
 	buf.create(16, 16, 16)
-	var runs: int = 12
-	var stride: int = 4096  # colonnes distinctes : chaque bloc paie plein tarif
+	g._generate_block(buf, Vector3i(0, oy, 0), 0)
+	_ok("le terrain ne contient plus de flore", _flora_voxels(buf) == 0,
+			"%d voxels de vegetation dans le bloc de surface" % _flora_voxels(buf))
 
-	g.scatter = false
-	g.clear_caches()
+	# Une plante a poser, prise sur le terrain reellement genere.
+	var sample: CWScatter.Placement = null
+	for dz in 8:
+		for dx in 8:
+			for pl in sc.cell(CWScatter.cell_of(p.world_origin.x) + dx,
+					CWScatter.cell_of(p.world_origin.y) + dz):
+				if sample == null:
+					sample = pl
+	if sample == null:
+		_skip("pose des instances", "aucune plante autour du point de depart")
+		return
+
+	# Position sous le bloc : sans elle, toute la flore s'aligne sur la grille du
+	# terrain, ce qui se voit au premier coup d'oeil sur une prairie.
+	var sub_used: int = 0
+	var sub_bad: int = 0
+	var seen: int = 0
+	for dz in 8:
+		for dx in 8:
+			for pl in sc.cell(CWScatter.cell_of(p.world_origin.x) + dx,
+					CWScatter.cell_of(p.world_origin.y) + dz):
+				seen += 1
+				if pl.fx < 0.0 or pl.fx >= 1.0 or pl.fz < 0.0 or pl.fz >= 1.0:
+					sub_bad += 1
+				if pl.fx != 0.0 or pl.fz != 0.0:
+					sub_used += 1
+	_ok("position sous le bloc dans [0, 1)", sub_bad == 0, "%d hors" % sub_bad)
+	_ok("la flore n'est pas alignee sur la grille du terrain",
+			sub_used > seen / 2, "%d sur %d decalees" % [sub_used, seen])
+
+	# La transformation d'instance est le seul endroit ou les deux grilles se
+	# rencontrent. Une plante enterree d'un demi-bloc ou glissee d'un quart de
+	# gabarit a chaque quart de tour reste plausible a l'oeil : on la mesure.
+	var model: CWVoxelModel = sample.model
+	var mesh: ArrayMesh = model.mesh()
+	var voxel: float = 1.0 / float(CWVoxelModel.VOXELS_PER_BLOCK)
+	var base_ok: bool = true
+	var tall_ok: bool = true
+	var centred_ok: bool = true
+	var worst: float = 0.0
+	for r in CWVoxelModel.ROTATIONS:
+		var pl := CWScatter.Placement.new()
+		pl.x = sample.x
+		pl.z = sample.z
+		pl.y = sample.y
+		pl.fx = sample.fx
+		pl.fz = sample.fz
+		pl.model = model
+		pl.rotation = r
+		var box: AABB = CWFloraRenderer.instance_transform(pl, p.world_origin) \
+				* mesh.get_aabb()
+		var want := Vector3(
+				float(pl.x - p.world_origin.x) + pl.fx,
+				float(pl.y),
+				float(pl.z - p.world_origin.y) + pl.fz)
+		if absf(box.position.y - want.y) > 0.001:
+			base_ok = false
+		if absf(box.size.y - float(model.height) * voxel) > 0.001:
+			tall_ok = false
+		# Ancre au centre de l'empreinte : l'ecart tolere est d'un voxel, ce que
+		# laisse la division entiere du centre du gabarit.
+		var off: Vector3 = box.position + box.size * 0.5 - want
+		worst = maxf(worst, maxf(absf(off.x), absf(off.z)))
+		if worst > voxel:
+			centred_ok = false
+	_ok("la plante pose sur le sol, quelle que soit son orientation", base_ok)
+	_ok("la plante garde sa hauteur reelle une fois a l'echelle", tall_ok,
+			"%d voxels = %.3f bloc" % [model.height, float(model.height) * voxel])
+	_ok("la plante reste centree sur son ancre aux quatre quarts de tour",
+			centred_ok, "ecart max %.4f bloc (un voxel = %.4f)" % [worst, voxel])
+
+	_bench_cells(sc, p.world_origin)
+
+
+## Cout de construction d'une cellule de flore.
+##
+## C'est le poste qui decide de la distance de vue tenable pour la couche : le
+## rendu en construit par lots sur un fil du pool, et une cellule trop chere se
+## paie en flore qui apparait en retard derriere le terrain.
+func _bench_cells(sc: CWScatter, origin: Vector2i) -> void:
+	# Un carre de cellules contigues autour du point de depart, cache vide :
+	# c'est exactement le lot que construit le rendu quand la vue avance. Les
+	# mesurer eloignees les unes des autres donnerait un chiffre trois fois pire
+	# et sans rapport avec l'usage — chaque cellule repaierait la fenetre de
+	# sites de sa zone.
+	var side: int = 12
+	var runs: int = side * side
+	var cx0: int = CWScatter.cell_of(origin.x)
+	var cz0: int = CWScatter.cell_of(origin.y)
+	sc.clear_cache()
+	var plants: int = 0
 	var t0: int = Time.get_ticks_usec()
-	for k in runs:
-		g._generate_block(buf, Vector3i(k * stride, oy, 0), 0)
-	var bare: float = float(Time.get_ticks_usec() - t0) / float(runs)
+	for dz in side:
+		for dx in side:
+			plants += sc.cell(cx0 + dx, cz0 + dz).size()
+	var per: float = float(Time.get_ticks_usec() - t0) / float(runs)
+	print("     cellule de flore : %.2f ms, %.1f plantes (%d colonnes couvertes)"
+			% [per / 1000.0, float(plants) / float(runs),
+			CWScatter.CELL_SIZE * CWScatter.CELL_SIZE])
+	# Large expres : la mesure est bruitee sur vingt-quatre cellules, et le
+	# nombre de plantes depend du biome tire. Le seuil attrape un ordre de
+	# grandeur — un echantillonnage par candidat rejete, par exemple.
+	_ok("une cellule de flore reste sous 8 ms", per < 8000.0,
+			"%.2f ms" % (per / 1000.0))
 
-	g.scatter = true
-	g.clear_caches()
-	var t1: int = Time.get_ticks_usec()
-	for k in runs:
-		g._generate_block(buf, Vector3i(k * stride, oy, 0), 0)
-	var sown: float = float(Time.get_ticks_usec() - t1) / float(runs)
 
-	var overhead: float = 100.0 * (sown - bare) / maxf(bare, 1.0)
-	print("     bloc a froid : %.1f ms sans flore, %.1f ms avec (%+.1f %%)"
-			% [bare / 1000.0, sown / 1000.0, overhead])
-	# Large exprès : la mesure est bruitee sur douze blocs. Le seuil n'est pas
-	# la pour valider un reglage fin, mais pour attraper une regression d'ordre
-	# de grandeur — un echantillonnage par candidat rejete, par exemple.
-	_ok("la flore ne double pas le cout d'un bloc", sown < bare * 1.6,
-			"%.1f ms contre %.1f ms" % [sown / 1000.0, bare / 1000.0])
+## Les modeles distincts de la bibliotheque : un meme fichier sert plusieurs
+## biomes, on ne le compte qu'une fois.
+func _distinct_models(lib: CWModelLibrary) -> Array:
+	var seen: Dictionary = {}
+	var out: Array = []
+	for surface in CWModelLibrary.FLORA:
+		for m in lib.for_surface(surface):
+			if not seen.has(m.name):
+				seen[m.name] = true
+				out.append(m)
+	return out
 
 
 func _flora_voxels(buf: VoxelBuffer) -> int:

@@ -61,15 +61,6 @@ class ColumnPatch extends RefCounted:
 ## Epaisseur de la couche meuble sous la surface.
 @export_range(0, 8, 1) var subsurface_depth: int = 3
 
-## Couche de flore (jalon 1.7) : modeles voxels estampes sur le terrain.
-## Bascule conservee pour comparer un meme monde avec et sans, et pour isoler
-## une regression du champ d'altitude.
-@export var scatter: bool = true:
-	set(value):
-		scatter = value
-		if _scatter != null:
-			_scatter.clear_cache()
-
 var _field: CWTerrainField
 var _scatter: CWScatter
 var _field_mutex: Mutex = Mutex.new()
@@ -115,6 +106,11 @@ func field() -> CWTerrainField:
 
 
 ## Grille de dispersion de la flore. Construite avec le champ de terrain.
+##
+## Le generateur ne s'en sert pas : la flore est instanciee par-dessus le
+## terrain, pas ecrite dedans. Elle vit ici parce que c'est ici qu'est le champ
+## sur lequel elle s'appuie, et que le rendu (`CWFloraRenderer`) doit disperser
+## sur exactement le meme relief que celui qui est genere.
 func scatter_grid() -> CWScatter:
 	field()
 	return _scatter
@@ -153,26 +149,17 @@ func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: i
 	var y_min: int = origin_in_voxels.y
 	var y_max: int = origin_in_voxels.y + (size.y - 1) * stride  # borne incluse
 
-	# Flore. Consultee avant les chemins rapides : une plante posee sur une
-	# colonne voisine plus haute peut depasser dans un bloc que la carte de
-	# hauteurs de ce bloc-ci croit entierement vide. Le cout est celui de neuf
-	# consultations de cellules, deja calculees par les blocs voisins ou par le
-	# reste de la pile verticale.
-	var plants: Array = []
-	var plants_top: float = -INF
-	if scatter and lod == 0:
-		plants = _scatter.placements_in(
-				p.world_origin.x + origin_in_voxels.x,
-				p.world_origin.y + origin_in_voxels.z, size.x, size.z)
-		for pl in plants:
-			plants_top = maxf(plants_top, float(pl.y + pl.model.height - 1))
-
 	# Chemins rapides : bloc entierement vide ou entierement plein. Ce sont eux
 	# qui rendent praticable un monde de mille blocs de haut.
-	if float(y_min) > patch.highest and float(y_min) > plants_top and y_min > sea:
+	#
+	# La flore ne s'invite pas ici : ses modeles sont seize fois plus fins que la
+	# grille du terrain (CWVoxelModel.VOXELS_PER_BLOCK), donc ils ne sont pas
+	# ecrits dans les donnees du monde mais instancies par-dessus
+	# (`CWFloraRenderer`). Le generateur n'a plus a les consulter, ni a garder
+	# vivant un bloc vide pour la moitie haute d'une plante.
+	if float(y_min) > patch.highest and y_min > sea:
 		return
 	if float(y_max) < patch.lowest - float(subsurface_depth):
-		# Sous la roche : une plante qui deborderait jusqu'ici serait enterree.
 		out_buffer.fill(CWPalette.STONE, ch)
 		return
 
@@ -198,43 +185,6 @@ func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: i
 			if top < sea:
 				_fill_run(out_buffer, lx, lz, y_min, y_max, stride,
 						top + 1, sea, CWPalette.water_index(float(sea - top)), ch)
-
-	for pl in plants:
-		_stamp(out_buffer, pl, p.world_origin.x + origin_in_voxels.x,
-				p.world_origin.y + origin_in_voxels.z, y_min, y_max, size, ch)
-
-
-## Ecrit un modele dans le bloc, rogne sur ses bornes.
-##
-## N'ecrase que l'air et l'eau : sur une pente, une partie du gabarit tombe dans
-## le flanc de la colline, et y substituer du feuillage creuserait un trou dans
-## le terrain. L'eau, elle, se laisse remplacer — c'est ainsi qu'une algue se
-## voit depuis la surface.
-func _stamp(buf: VoxelBuffer, pl: CWScatter.Placement, ox: int, oz: int,
-		y_min: int, y_max: int, size: Vector3i, ch: int) -> void:
-	var m: CWVoxelModel = pl.model
-	var dx: PackedInt32Array = m.offsets_x(pl.rotation)
-	var dy: PackedInt32Array = m.offsets_y(pl.rotation)
-	var dz: PackedInt32Array = m.offsets_z(pl.rotation)
-	var values: PackedByteArray = m.values(pl.rotation)
-	var ax: int = pl.x - ox
-	var az: int = pl.z - oz
-	for i in values.size():
-		var lx: int = ax + dx[i]
-		if lx < 0 or lx >= size.x:
-			continue
-		var lz: int = az + dz[i]
-		if lz < 0 or lz >= size.z:
-			continue
-		var wy: int = pl.y + dy[i]
-		if wy < y_min or wy > y_max:
-			continue
-		var ly: int = wy - y_min
-		var here: int = buf.get_voxel(lx, ly, lz, ch)
-		if here != CWPalette.AIR and here != CWPalette.WATER \
-				and here != CWPalette.WATER_DEEP:
-			continue
-		buf.set_voxel(values[i], lx, ly, lz, ch)
 
 
 func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,

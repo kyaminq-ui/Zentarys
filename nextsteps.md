@@ -25,7 +25,7 @@ ne s'ouvre pas proprement (il est déclaré dans `project.godot`).
 ## 2. Commandes
 
 ```
-# Suite de validation (106 vérifications, ~70 s)
+# Suite de validation (113 vérifications, ~70 s)
 godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd
 
 # Réimport après ajout d'un class_name (sinon l'éditeur ne le voit pas)
@@ -76,14 +76,15 @@ src/worldgen/
   cw_terrain_field.gd      climat + altitude + chenaux + éléments  ← le cœur
   cw_palette.gd            palette et règles de surface (couleurs originales)
   cw_voxel_generator.gd    VoxelGeneratorScript + cache de colonnes
-  cw_voxel_model.gd        modèle .vox préparé (liste creuse, 4 quarts de tour)
+  cw_voxel_model.gd        modèle .vox préparé : liste creuse, maillage 1/16
   cw_model_library.gd      chargement des modèles + table modèle/biome
   cw_scatter.gd            grille de dispersion 16², cellules en cache
+  cw_flora_renderer.gd     instanciation de la flore (MultiMesh par cellule)
 src/demo/terrain_demo.gd   scène de démonstration (arbre voxel construit en code)
 src/demo/scale_board.gd    gabarit d'échelle : mires, silhouette, modèles
-tests/worldgen_test.gd     suite headless, 106 vérifications
+tests/worldgen_test.gd     suite headless, 113 vérifications
 tests/tile_features_test.gd  la moitié qui concerne les éléments de tuile
-tests/flora_test.gd        modèles, dispersion, estampage (jalon 1.7)
+tests/flora_test.gd        modèles, dispersion, maillage et pose (jalon 1.7)
 tools/export_palette.gd    régénère assets/palette/*.png depuis CWPalette
 tools/preview_features.gd  gros plan ombré, avec et sans la couche d'éléments
 tools/inspect_model.gd     inventaire d'un .vox : gabarit, index, plages
@@ -132,17 +133,23 @@ docs/images/               gabarit d'échelle photographié en jeu
 9. **Le poids d'influence d'un élément est déformé.** Le fond d'un cratère n'est
    pas à son centre géométrique mais à une centaine d'unités de là. Un test qui
    échantillonne le centre exact mesure autre chose que ce qu'il croit.
-10. **La flore se consulte *avant* les chemins rapides de `_generate_block`.**
-    Une plante posée sur une colonne voisine plus haute déborde dans un bloc que
-    la carte de hauteurs de ce bloc-ci croit entièrement vide. Court-circuiter ce
-    bloc coupe les plantes à l'horizontale, exactement à la frontière d'un bloc de
-    seize — et seulement sur les pentes. Le test « le bloc au-dessus du sol porte
-    sa part de flore » est là pour ça.
-11. **Une plante n'écrit que dans l'air et dans l'eau.** Sur une pente, une part
-    de son gabarit tombe dans le flanc de la colline ; y substituer du feuillage
-    creuserait un trou dans le terrain. L'eau, elle, se laisse remplacer : c'est
-    ainsi qu'une algue se voit depuis la surface.
-12. **L'ancre d'un modèle est au centre de son empreinte et à sa base.** Le
+10. **Un bloc de terrain vaut 16 voxels de modèle, et rien ne doit l'assouplir.**
+    `CWVoxelModel.VOXELS_PER_BLOCK` est un contrat d'authoring : le changer
+    invalide tous les `.vox` déjà dessinés, qui sont irrécupérables autrement
+    qu'en les redessinant. Un test le verrouille. Ce qui *peut* bouger au jalon
+    3.1, c'est la taille du personnage en blocs (2 aujourd'hui) — les modèles,
+    eux, se remettent à l'échelle ensemble.
+11. **La flore n'est jamais écrite dans les données voxels du monde.** Elle est
+    seize fois plus fine que la grille du terrain. Le générateur ne la consulte
+    plus du tout ; elle est instanciée par `CWFloraRenderer`. Le test « le
+    terrain ne contient plus de flore » attrape un retour en arrière — qui, sans
+    lui, ferait juste doublon avec l'instance, sans erreur.
+12. **Le mailleur consomme sa marge.** L'origine d'un maillage tombe sur le
+    premier voxel utile du tampon, pas sur son coin : tout maillage construit à
+    la main doit retrancher `CWVoxelModel.mesher_padding()`. L'oublier enterre
+    l'objet d'un voxel — assez peu pour passer inaperçu à l'œil, d'où le test
+    « la plante pose sur le sol, quelle que soit son orientation ».
+13. **L'ancre d'un modèle est au centre de son empreinte et à sa base.** Le
     déplacer décale toute la flore déjà produite, et un modèle dessiné avec un
     socle vide sous lui flotte de la hauteur du socle.
 
@@ -168,13 +175,14 @@ docs/images/               gabarit d'échelle photographié en jeu
   `sample_patch` n'en fait qu'une par tuile traversée. Pour tout nouveau
   consommateur en volume — l'étage de terrain lointain, par exemple — passer par
   `sample_patch`.
-- **La couche de flore coûte +14 % sur un bloc isolé, bien moins en streaming.**
-  Une cellule de dispersion coûte 1 + n échantillonnages de colonne (un pour
-  décider la densité, un par plante posée). Mesuré à 18,3 ms → 20,9 ms sur des
-  blocs sans voisinage ; en chargement réel une cellule sert aux neuf blocs qui
-  l'entourent et à toute leur pile verticale, donc le surcoût réel est de
-  l'ordre de 3 %. Ne pas revenir à un tirage à rejet : échantillonner un
-  candidat pour le jeter ensuite triplait la facture.
+- **La couche de flore ne coûte plus rien au générateur.** Depuis qu'elle est
+  instanciée au lieu d'être estampée, `_generate_block` ne la consulte plus : les
+  +14 % par bloc mesurés le 2026-09-04 ont disparu du chemin de génération. Le
+  coût s'est déplacé sur `CWFloraRenderer`, qui construit ses cellules sur un
+  fil du pool — **1,1 ms par cellule** de 256 colonnes en prairie (1 + n
+  échantillonnages : un pour décider la densité, un par plante posée). Ne pas
+  revenir à un tirage à rejet : échantillonner un candidat pour le jeter ensuite
+  triplait la facture.
 - **Ne pas mettre d'appel de liaison moteur sur le chemin chaud.**
   `OS.get_thread_caller_id()` dans `CWTileFeatureGrid.get_zone` coûtait ~15 µs
   par colonne avant d'être déplacé sur le chemin froid. Mesurer avant de
@@ -195,11 +203,15 @@ n'est plus du code d'infrastructure, c'est la lecture du binaire.
 - `CWScatter` : grille de cellules de 16, une graine par cellule, densité décidée
   sur le centre de la cellule et position tirée dedans. Cellules en cache sous
   mutex, comme les cartes de hauteurs.
-- `CWVoxelGenerator` estampe les plantes dans le bloc, n'écrit que dans l'air et
-  l'eau, et consulte la flore avant ses chemins rapides.
-- 26 vérifications de plus dans la suite (`tests/flora_test.gd`) : rotations,
-  déterminisme, huit fils concurrents, continuité entre blocs empilés, coût.
-- **L'échelle des assets est fixée** : voir §7.1, c'était le point bloquant.
+- `CWFloraRenderer` instancie : un `MultiMeshInstance3D` par modèle et par
+  cellule, cellules construites par lots sur un fil du pool, détruites au-delà
+  de la distance de vue de la flore. `CWVoxelGenerator`, lui, ne connaît plus la
+  flore du tout.
+- 30 vérifications dans la suite (`tests/flora_test.gd`) : rotations,
+  déterminisme, huit fils concurrents, pose sur le sol aux quatre quarts de
+  tour, absence de flore dans les données du terrain, coût d'une cellule.
+- **L'échelle des assets est fixée** : voir §7.1. Deux grilles, 16 voxels par
+  bloc, personnage à 2 blocs. C'était le point bloquant.
 
 ### Ce qui reste — l'analyse de `WorldInfo_generateBiomeContent` (@005e4850)
 
@@ -246,46 +258,65 @@ Ce qui reste ouvert dans la couche 1.6, à reprendre si l'occasion se présente 
   du site de région le plus proche du point déformé, portée en
   `CWTerrainField.nearest_site`. Rien à voir avec les entités.
 
-Attention : la couche de flore change ce que produit le générateur, donc
-invalide tout cache d'altitude persistant, au même titre que la couche
-d'éléments. Ne pas construire de cache disque tant que 1.7 n'est pas figé.
+Un cache disque du terrain reste prématuré tant que 1.7 n'est pas figé — non
+plus à cause de la flore, qui a quitté les données du monde, mais parce que la
+couche d'éléments de tuile, elle, y écrit encore.
 
 ## 7. Assets voxels
 
 ### 7.1 L'échelle — fixée le 2026-09-04
 
-**Le personnage de référence mesure 8 blocs. Une touffe d'herbe lui arrive au
-genou : 2 à 4 blocs de haut, empreinte d'au plus 4 × 4.** Le détail complet, par
-catégorie d'objet, est dans `assets/models/MODELS.md` — c'est le fichier à
-donner à qui modélise.
+**Il y a deux grilles.** Le terrain a un pas d'un bloc ; les modèles ont un pas
+seize fois plus fin. **Un bloc de terrain vaut 16 voxels de modèle
+(`CWVoxelModel.VOXELS_PER_BLOCK`), et le personnage de référence mesure 2 blocs,
+soit 32 voxels.** Le détail par catégorie d'objet est dans
+`assets/models/MODELS.md` — c'est le fichier à donner à qui modélise.
 
-Comment c'est tranché : `herbe_01` a été chargé, posé sur le terrain généré à
-côté de mires de 1, 2, 3, 4, 6, 8, 12, 16, 24 et 32 blocs et d'une silhouette de
-référence, puis photographié. Voir `docs/images/echelle_gabarit.png` et
-`echelle_gros_plan.png`. Le verdict est sans ambiguïté : à 14 × 14 × 10, le
-modèle témoin fait près de deux fois la taille du personnage, et une prairie en
-est un champ de piliers verts.
+C'est ce rapport, et lui seul, qui sépare ce rendu de celui de Minecraft : de
+gros cubes de terrain, mais du détail sur ce qui est posé dessus. Une touffe
+d'herbe est faite de lames d'un voxel d'épaisseur ; un personnage de 2 blocs a
+des yeux d'un voxel.
 
-Les 8 blocs du personnage ne sortent d'aucune décompilation — le binaire ne dit
-nulle part combien de blocs fait un personnage, et le `GameController` qui
-porterait sa physique fait 115 000 lignes non analysées. C'est un choix, fait à
-l'œil contre le relief. **À revoir au jalon 3.1** : quand le contrôleur sera
-porté, la taille réelle sortira de la physique, et si elle s'écarte de 8, c'est
-ce seul nombre qui change — toutes les tailles se remettent à l'échelle avec
-lui. D'ici là c'est le contrat : mieux vaut vingt-huit modèles cohérents entre
-eux et à retailler ensemble que vingt-huit modèles qui ne s'accordent pas.
+**D'où sort le nombre.** D'une mesure au pixel sur une capture du jeu d'origine,
+pas d'un jugement à l'œil : brin d'herbe 7 px de large, pupille du personnage
+6 px, écart entre les yeux 28 px, hauteur du personnage 205 px, face verticale
+d'une marche de terrain 90 px. Le brin d'herbe et la pupille font la même
+largeur — **la flore et le personnage sont sur la même grille fine**. Rapport
+mesuré : ~13 voxels par bloc ; on retient 16, la puissance de deux la plus
+proche.
 
-Le reste du repère est solide : **1 voxel de modèle = 1 bloc de terrain**, sans
-facteur d'échelle à l'import, et le relief monte à ~600 blocs. Quand la table de
-§7.3 parle d'un rayon de 150 pour un élément de tuile, c'est la zone qu'il
-*revendique* sur la carte — un quartier — pas l'encombrement du modèle qu'on y
-posera.
+**À revoir au jalon 3.1**, quand le contrôleur donnera la taille réelle du
+personnage. Si elle s'écarte de 2 blocs, c'est ce seul nombre qui change. Le
+rapport de 16, lui, est un contrat d'authoring : le changer invalide tous les
+modèles déjà dessinés, et il est verrouillé par un test.
 
-Pour revoir l'échelle soi-même : mettre `scale_board = true` sur le nœud racine
-de `scenes/terrain_demo.tscn` et lancer la démo. Le gabarit se pose devant le
-point d'apparition, la caméra le cadre, et deux captures partent dans
-`user://shots`. Un `.vox` déposé dans `assets/models/flore/` y apparaît sans
-qu'il y ait rien à déclarer.
+**Ce que ça a changé dans le code** (2026-09-04) :
+
+- la flore n'est **plus estampée** dans les données voxels du monde — elle y
+  serait seize fois trop grosse. `CWVoxelGenerator` ne la consulte plus du tout,
+  et le surcoût de +14 % par bloc a disparu du chemin de génération ;
+- `CWVoxelModel.mesh()` maille le modèle une fois, avec **le même mailleur, la
+  même palette et le même matériau que le terrain** — c'est la condition pour
+  que les deux grilles lisent comme un seul monde ;
+- `CWFloraRenderer` instancie : un `MultiMeshInstance3D` par modèle et par
+  cellule de dispersion, construit par lots sur un fil du pool, détruit au-delà
+  de `view_distance` (128 blocs par défaut) ;
+- les plantes se posent **sous le bloc** (`Placement.fx`, `fz`, au pas d'un
+  voxel) : sans ça toute la flore s'alignerait sur la grille du terrain ;
+- les densités de `CWModelLibrary` sont doublées — à nombre égal, des plantes
+  huit fois plus courtes laissent le sol nu.
+
+Conséquences à connaître : la flore ne se creuse pas, ne porte pas de collision,
+et ne participera pas à l'éclairage voxel du jalon 1.9.
+
+**Pour revoir l'échelle soi-même** : mettre `scale_board = true` sur le nœud
+racine de `scenes/terrain_demo.tscn` et lancer la démo. Le gabarit pose des mires
+de 1 à 16 blocs, la silhouette du personnage à la grille fine, puis chaque modèle
+chargé ; deux captures partent dans `user://shots`. Un `.vox` déposé dans
+`assets/models/flore/` y apparaît sans qu'il y ait rien à déclarer.
+
+Pour regarder autre chose que le gabarit sans piloter la fenêtre :
+`auto_shot_delay` sur le même nœud, puis `--quit-after`.
 
 ### 7.2 Ce qu'il faut produire, par biome
 
@@ -367,23 +398,45 @@ réaffecter un modèle existant coûte une ligne de code.
   explicitement hors périmètre : c'est le gréement et l'animation procédurale
   qui sont portés, pas les modèles.
 
-### 7.3 Décision d'authoring — prise
+### 7.3 Décision d'authoring — prise, et confirmée
 
 **MagicaVoxel, pas d'éditeur maison.** `VoxelVoxLoader` est intégré au build : un
 `.vox` se charge en un appel, avec sa palette, directement dans le modèle de
 rendu déjà utilisé. Un éditeur maison représenterait des semaines pour zéro
 gameplay, et c'est l'auteur des assets qui en subirait chaque manque.
 
+**La seule objection sérieuse est levée.** On ne peut pas réduire le pinceau de
+MagicaVoxel sous un voxel — et il n'y en a pas besoin : sa grille est *sans
+unité*. On ne descend pas sous le voxel, on agrandit la boîte, et c'est le moteur
+qui applique le 1/16 à l'import. Un personnage détaillé se dessine dans un
+gabarit de 32 de haut, une touffe d'herbe dans 12.
+
+Pour garder l'œil juste en modélisant, poser dans la scène MagicaVoxel un cube de
+16³ (= un bloc de terrain) et une silhouette de 32 de haut (= le personnage).
+C'est ça qui remplace le réglage de taille du pinceau.
+
+**L'établi de personnalisation façon Cube World reste au programme** — il est
+d'ailleurs dans la liste du mobilier du jalon 4. Mais c'est une *fonctionnalité
+de jeu*, pas un outil d'authoring : grille fixe et petite, palette contrainte par
+le matériau, sortie = un objet d'inventaire et ses statistiques. Il se pose sur
+l'inventaire (3.2), qui se pose sur le contrôleur (3.1). Il réutilisera
+`CWVoxelModel` et son maillage tels quels — le travail est déjà fait.
+
 La palette de projet est en place : `assets/palette/zentarys_palette.png` à
 glisser sur la palette de MagicaVoxel, plages réservées documentées dans
 `assets/palette/PALETTE.md`, source unique dans `CWPalette`, et six
 vérifications qui empêchent une plage de bouger en silence.
 
-Deux faits mesurés sur l'import `.vox`, à ne pas redécouvrir :
+Trois faits mesurés sur l'import et le maillage, à ne pas redécouvrir :
 - les index de palette se conservent exactement (le décalage d'un cran du format
   est absorbé par le chargeur) ;
 - les axes sont permutés : `vox(x, y, z) -> godot(y, z, x)`. Le haut reste le
-  haut, le plan horizontal est échangé.
+  haut, le plan horizontal est échangé ;
+- **le mailleur consomme sa marge** : l'origine du maillage tombe sur le premier
+  voxel utile, pas sur le coin du tampon. Sans retrancher
+  `CWVoxelModel.mesher_padding()`, tout ce qui est instancié est enterré d'un
+  voxel — assez peu pour rester plausible à l'œil, ce qui est exactement la
+  raison pour laquelle un test le mesure.
 
 Gabarits mesurés en sortie du générateur d'éléments de tuile, utiles pour situer
 les échelles — le rayon est un rayon d'*influence*, pas l'encombrement du modèle :

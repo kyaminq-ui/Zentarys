@@ -22,20 +22,25 @@ const FLORA_DIR: String = "res://assets/models/flore/"
 ## dispersion (CWScatter.CELL_SIZE au carre, soit 256 colonnes). Provisoire,
 ## meme reserve — la loi de densite de l'original n'est pas encore lue.
 ##
-## Reglees pour des modeles a l'echelle de reference (une touffe d'herbe fait
-## trois a quatre blocs, cf. assets/models/MODELS.md) : six touffes par cellule,
-## c'est une plante tous les six ou sept blocs, ce qui lit comme un couvert
-## herbace sans faire une foret.
+## Doublees le 2026-09-04, avec le passage a l'echelle fine : une touffe d'herbe
+## est passee de trois blocs de haut a un demi, donc a nombre egal le sol
+## paraissait nu. Douze par cellule, c'est une plante tous les quatre blocs
+## environ — un couvert herbace clairsseme, pas une prairie fournie.
+##
+## Ce qui manque encore, et qui se voit sur les captures de l'original : la
+## flore y vient par **grappes**, trois a six pieds serres puis de larges vides.
+## Un tirage uniforme par cellule ne sait pas produire ca. A reprendre avec la
+## lecture de `WorldInfo_generateBiomeContent`.
 const DENSITY: Dictionary = {
-	CWPalette.GRASS: 6.0,
-	CWPalette.GRASS_DRY: 3.0,
-	CWPalette.GRASS_JUNGLE: 8.0,
-	CWPalette.SWAMP: 4.0,
-	CWPalette.SAND: 0.6,
-	CWPalette.SNOW: 0.25,
-	CWPalette.TUNDRA: 1.5,
-	CWPalette.STONE: 0.4,
-	CWPalette.GRAVEL: 1.2,
+	CWPalette.GRASS: 12.0,
+	CWPalette.GRASS_DRY: 6.0,
+	CWPalette.GRASS_JUNGLE: 16.0,
+	CWPalette.SWAMP: 8.0,
+	CWPalette.SAND: 1.2,
+	CWPalette.SNOW: 0.5,
+	CWPalette.TUNDRA: 3.0,
+	CWPalette.STONE: 0.8,
+	CWPalette.GRAVEL: 2.5,
 }
 
 ## Modeles candidats par biome, dans l'ordre de la table de nextsteps.md, §7.2.
@@ -61,10 +66,13 @@ static var _shared_mutex: Mutex = Mutex.new()
 var _models: Dictionary = {}
 ## Par biome : les modeles reellement disponibles sur le disque.
 var _by_surface: Dictionary = {}
-## Plus grand rayon horizontal, tous modeles confondus. Sert a savoir combien de
-## cellules voisines peuvent deborder dans un bloc.
+## Plus grand rayon horizontal, tous modeles confondus, en voxels de modele.
 var max_radius: int = 0
 var max_height: int = 0
+## Les memes, en blocs : c'est l'unite dans laquelle raisonnent les empreintes.
+## Sert a savoir combien de cellules voisines peuvent deborder dans un cadre.
+var max_radius_blocks: int = 0
+var max_height_blocks: int = 0
 
 
 ## Bibliotheque partagee, construite au premier appel.
@@ -110,6 +118,8 @@ func _get_or_load(model_name: String, palette: Resource) -> CWVoxelModel:
 	if m != null:
 		max_radius = maxi(max_radius, m.radius)
 		max_height = maxi(max_height, m.height)
+		max_radius_blocks = maxi(max_radius_blocks, m.radius_blocks)
+		max_height_blocks = maxi(max_height_blocks, m.height_blocks)
 	return m
 
 
