@@ -71,9 +71,9 @@ var _cells_prev: Dictionary = {}
 var _mutex: Mutex = Mutex.new()
 
 
-func _init(terrain_field: CWTerrainField, library: CWModelLibrary = null) -> void:
+func _init(terrain_field: CWTerrainField, models: CWModelLibrary = null) -> void:
 	_field = terrain_field
-	_lib = library if library != null else CWModelLibrary.shared()
+	_lib = models if models != null else CWModelLibrary.shared()
 
 
 func library() -> CWModelLibrary:

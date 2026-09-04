@@ -40,8 +40,10 @@ static func load_from(model_path: String, palette: Resource) -> CWVoxelModel:
 	if not ResourceLoader.exists(model_path) and not FileAccess.file_exists(model_path):
 		return null
 	var buffer := VoxelBuffer.new()
-	var loader := VoxelVoxLoader.new()
-	if loader.load_from_file(model_path, buffer, palette, VoxelBuffer.CHANNEL_COLOR) != OK:
+	# `load_from_file` est statique : l'appeler sur une instance marche mais
+	# alloue un chargeur pour rien, et Godot le signale.
+	if VoxelVoxLoader.load_from_file(model_path, buffer, palette,
+			VoxelBuffer.CHANNEL_COLOR) != OK:
 		return null
 
 	var m := CWVoxelModel.new()

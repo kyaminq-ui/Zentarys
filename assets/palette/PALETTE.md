@@ -62,10 +62,13 @@ modèles dans MagicaVoxel, soit par une rotation à l'import.
 ```gdscript
 var buffer := VoxelBuffer.new()
 var palette := CWPalette.build_voxel_palette()
-var loader := VoxelVoxLoader.new()
-loader.load_from_file("res://assets/models/hache.vox", buffer,
+VoxelVoxLoader.load_from_file("res://assets/models/hache.vox", buffer,
         palette, VoxelBuffer.CHANNEL_COLOR)
 ```
 
-Le chargeur **redimensionne le buffer** aux dimensions du modèle : inutile de
-l'appeler avec la bonne taille.
+`load_from_file` est **statique** : l'appeler sur une instance fonctionne mais
+alloue un chargeur pour rien, et Godot le signale. Le chargeur **redimensionne
+le buffer** aux dimensions du modèle : inutile de l'appeler avec la bonne taille.
+
+En pratique on passe par `CWVoxelModel.load_from()`, qui fait cet appel puis
+convertit le résultat en liste creuse — voir `assets/models/MODELS.md`.

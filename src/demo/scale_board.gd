@@ -57,23 +57,27 @@ static func build(models: Array) -> CWScaleBoard:
 	buf.create(size.x, size.y, size.z)
 	buf.fill(CWPalette.AIR, VoxelBuffer.CHANNEL_COLOR)
 
+	@warning_ignore("integer_division")
 	var cz: int = size.z / 2
+	# Milieu d'un emplacement : c'est la que se pose chaque objet du gabarit.
+	@warning_ignore("integer_division")
+	var slot_mid: int = SPACING / 2
 	var slot: int = 0
 	# Mires : une colonne de pierre par hauteur de reference, avec un bloc de
 	# repere criard tous les quatre blocs pour pouvoir compter sur la photo.
 	for t in TICKS:
-		var cx: int = PAD + slot * SPACING + SPACING / 2
+		var cx: int = PAD + slot * SPACING + slot_mid
 		for y in t:
 			var value: int = CWPalette.STONE if (y % 4) != 0 else 250
 			buf.set_voxel(value, cx, PAD + y, cz, VoxelBuffer.CHANNEL_COLOR)
 		slot += 1
 
-	_draw_figure(buf, PAD + slot * SPACING + SPACING / 2, PAD, cz)
+	_draw_figure(buf, PAD + slot * SPACING + slot_mid, PAD, cz)
 	slot += 1
 
 	var first_model_slot: int = slot
 	for m in models:
-		_draw_model(buf, m, PAD + slot * SPACING + SPACING / 2, PAD, cz)
+		_draw_model(buf, m, PAD + slot * SPACING + slot_mid, PAD, cz)
 		slot += 1
 	# La silhouette reste dans le cadre du gros plan : c'est elle qui donne son
 	# sens a la taille des modeles.

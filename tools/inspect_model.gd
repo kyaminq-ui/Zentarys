@@ -40,9 +40,8 @@ func _all_models(dir: String) -> PackedStringArray:
 
 func _inspect(path: String) -> void:
 	var buffer := VoxelBuffer.new()
-	var loader := VoxelVoxLoader.new()
-	var err: int = loader.load_from_file(path, buffer, CWPalette.build_voxel_palette(),
-			VoxelBuffer.CHANNEL_COLOR)
+	var err: int = VoxelVoxLoader.load_from_file(path, buffer,
+			CWPalette.build_voxel_palette(), VoxelBuffer.CHANNEL_COLOR)
 	if err != OK:
 		print("%s : ECHEC de chargement (%d)" % [path, err])
 		return

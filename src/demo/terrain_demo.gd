@@ -369,6 +369,7 @@ func _run_biome_search() -> void:
 func _probe_zone(f: CWTerrainField, zx: int, zz: int) -> bool:
 	if zx < 0 or zz < 0 or zx >= CWWorldParams.ZONE_GRID or zz >= CWWorldParams.ZONE_GRID:
 		return false
+	@warning_ignore("integer_division")
 	var half: int = CWWorldParams.TILE_SIZE / 2
 	for tz in 8:
 		for tx in 8:
