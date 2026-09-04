@@ -10,8 +10,8 @@ il contient des décisions qui coûtent cher à redécouvrir.
 | quoi | chemin |
 |---|---|
 | Projet Godot | `C:\Users\Admin\Documents\zentarys\` |
-| Exécutable Godot | `C:\Users\Admin\Desktop\Zentarys\godot.windows.editor.double.x86_64.exe` |
-| Source d'analyse (rétro-ingénierie) | `C:\Users\Admin\Desktop\Zentarys\CubeWorld-Reversal-master\` |
+| Exécutable Godot | `C:\Users\Admin\Desktop\godot.windows.editor.double.x86_64.exe` |
+| Source d'analyse (rétro-ingénierie) | `C:\Users\Admin\Documents\zentarys\CubeWorld-Reversal-master\` (ignorée par git) |
 
 Godot 4.7.2 stable, **double précision**, module Voxel Tools 1.7 compilé dedans
 (`VoxelTerrain`, `VoxelMesherCubes`, `VoxelGeneratorScript`, `VoxelVoxLoader`…).
@@ -25,27 +25,31 @@ ne s'ouvre pas proprement (il est déclaré dans `project.godot`).
 ## 2. Commandes
 
 ```
-# Suite de validation (113 vérifications, ~70 s)
-godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd
+# Suite de validation (116 vérifications, ~70 s)
+C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd
 
 # Réimport après ajout d'un class_name (sinon l'éditeur ne le voit pas)
-godot.windows.editor.double.x86_64.exe --headless --path . --import
+C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . --import
 
 # Réexport de la palette après modification de CWPalette
-godot.windows.editor.double.x86_64.exe --headless --path . -s tools/export_palette.gd
+C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/export_palette.gd
 
 # Gros plan ombré sur un élément de tuile, avec et sans la couche
 # (x, z, unités par pixel ; sans argument : le point de départ, 6 u/px)
-godot.windows.editor.double.x86_64.exe --headless --path . \
+C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . \
     -s tools/preview_features.gd -- 8397830 8399776 6
 
 # Inventaire des modèles voxels : gabarit, index employés, plages de palette
 # (sans argument : tout assets/models/)
-godot.windows.editor.double.x86_64.exe --headless --path . -s tools/inspect_model.gd
+C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/inspect_model.gd
+
+# Remise d'un lot de modèles dans la palette de projet (rapport, puis écriture)
+C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/repaint_models.gd
+C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path .     -s tools/repaint_models.gd -- --write
 
 # Gabarit d'échelle en jeu : mettre scale_board = true sur le nœud racine de
 # scenes/terrain_demo.tscn, puis lancer. Deux captures dans user://shots.
-godot.windows.editor.double.x86_64.exe --path . scenes/terrain_demo.tscn
+C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --path . scenes/terrain_demo.tscn
 ```
 
 Aperçus PNG écrits par la suite de tests dans
@@ -59,11 +63,17 @@ ZQSD/WASD, Maj = rapide, Espace/Ctrl = monter/descendre, **F1** détails,
 
 ## 3. État
 
-Jalon 1 (le monde) : 1.1 à 1.6 faits ; **1.7 à moitié** — toute la mécanique de
-dispersion est en place et testée, l'échelle des assets est fixée, il reste la
-lecture du binaire qui dira *quoi* poser *où*. Le reste à faire. Détail et
-sources analysées dans `docs/ROADMAP.md`. Analyse du système de terrain dans
-`docs/systems/01_generation_terrain.md`.
+Jalon 1 (le monde) : 1.1 à 1.6 faits ; **1.7 à moitié** — la mécanique de
+dispersion est en place et testée, l'échelle est fixée, et depuis le 2026-09-05
+**les 28 modèles du lot de flore sont livrés, intégrés et visibles en jeu** (39
+fichiers : plusieurs rôles ont un modèle par biome). Il reste la lecture du
+binaire, qui dira *quoi* poser *où* et à quelle densité — et depuis le
+2026-09-05 on sait **où lire** : `World_generateVegetationCluster` (@005d8750,
+600 lignes), et non `generateBiomeContent`, qui a été analysée et ne disperse
+pas de flore. Le reste à faire. Détail et sources analysées dans
+`docs/ROADMAP.md`. Analyses : `docs/systems/01_generation_terrain.md` (terrain),
+`docs/systems/02_contenu_de_biome.md` (contenu de biome, éléments de tuile,
+apparitions).
 
 ```
 src/worldgen/
@@ -82,14 +92,16 @@ src/worldgen/
   cw_flora_renderer.gd     instanciation de la flore (MultiMesh par cellule)
 src/demo/terrain_demo.gd   scène de démonstration (arbre voxel construit en code)
 src/demo/scale_board.gd    gabarit d'échelle : mires, silhouette, modèles
-tests/worldgen_test.gd     suite headless, 113 vérifications
+tests/worldgen_test.gd     suite headless, 116 vérifications
 tests/tile_features_test.gd  la moitié qui concerne les éléments de tuile
 tests/flora_test.gd        modèles, dispersion, maillage et pose (jalon 1.7)
 tools/export_palette.gd    régénère assets/palette/*.png depuis CWPalette
 tools/preview_features.gd  gros plan ombré, avec et sans la couche d'éléments
 tools/inspect_model.gd     inventaire d'un .vox : gabarit, index, plages
+tools/repaint_models.gd    remet un .vox dans la palette de projet
 assets/palette/            palette de projet + PALETTE.md
-assets/models/             modèles voxels + MODELS.md (échelle et conventions)
+assets/models/flore/<biome>/  39 modèles, un dossier par biome
+assets/models/             MODELS.md (échelle, palette et conventions)
 docs/images/               gabarit d'échelle photographié en jeu
 ```
 
@@ -213,23 +225,85 @@ n'est plus du code d'infrastructure, c'est la lecture du binaire.
 - **L'échelle des assets est fixée** : voir §7.1. Deux grilles, 16 voxels par
   bloc, personnage à 2 blocs. C'était le point bloquant.
 
-### Ce qui reste — l'analyse de `WorldInfo_generateBiomeContent` (@005e4850)
+### Ce qui est fait (2026-09-05) — le lot de flore est livré et intégré
 
-4 200 lignes, non analysées. Trois choses à en tirer :
+Les **28 modèles** de §7.2 sont dessinés. Livrés en **39 fichiers**, rangés par
+biome : plusieurs rôles ont reçu un modèle par biome au lieu d'un fichier
+partagé — trois `caillou_01` (prairie, neige, roche), quatre `broussaille`, deux
+`champignon`, trois `lierre`. C'est mieux que ce que prévoyait §7.2, et
+`CWModelLibrary.FLORA` porte donc maintenant des **chemins**, dossier de biome
+compris.
 
-1. **la table qui dit quel modèle va dans quel biome.** La répartition de §7.2 et
-   les densités de `CWModelLibrary.DENSITY` sont des propositions de bon sens ;
-   les remplacer coûte quelques lignes ;
-2. **la génération procédurale des arbres.** Aucun modèle d'arbre parmi les 154
-   du binaire : c'est un algorithme, pas un asset ;
-3. **l'identité de chaque type d'élément de tuile** — ce que sont réellement les
-   types 2, 3, 5, 10, 11, 12, 14 et 15 posés au jalon 1.6.
+Trois choses ont dû être réparées pour que le lot arrive en jeu :
+
+1. **La palette.** Les 39 fichiers étaient peints sur une palette rééchantillonnée
+   par MagicaVoxel (la planche de référence glissée sur le nuancier), donc avec
+   les bonnes teintes aux **mauvais index** — et le rendu ne lit que l'index.
+   Ils seraient sortis peints en couleurs de créatures et de structures, sans le
+   moindre message d'erreur. Remis dans la palette de projet par
+   `tools/repaint_models.gd`, qui réécrit index *et* palette embarquée : rouverts
+   dans MagicaVoxel, les fichiers portent désormais la bonne palette. La cause et
+   le geste correct — **ouvrir `assets/palette/zentarys_palette.vox`**, jamais
+   glisser le PNG de référence — sont dans `assets/palette/PALETTE.md`.
+2. **Deux plages de palette étaient inutilisables.** La réserve de terrain 14-31
+   était vide : les six cailloux se rabattaient tous sur `STONE`. Et rien dans la
+   palette n'était froid et saturé : le corail se rabattait sur le vert de
+   prairie. La réserve de terrain est remplie (roche, grès, argile, basalte,
+   roche lichénée, lave) et deux entrées aquatiques (170-171) sont prises sur la
+   rampe des champignons. Le **découpage** des plages n'a pas bougé.
+3. **Les noms.** `caillou_1`/`caillou_2` → `caillou_01`/`caillou_02`, et
+   `cactus_01_grille48`/`cactus_02_grille32` → `cactus_01`/`cactus_02` : la
+   taille du gabarit ne se met pas dans le nom, elle est libre.
+
+Trois vérifications de plus (116 au total) : chaque entrée de la table existe sur
+le disque, aucun modèle ne porte d'index translucide, la réserve de terrain est
+renseignée. Le gabarit d'échelle range les modèles par rangées de dix, sinon
+trente-neuf modèles en file font cent vingt blocs de large et le gros plan n'en
+cadre plus trois. Images refaites dans `docs/images/`.
+
+### Fait (2026-09-05) — première passe sur `WorldInfo_generateBiomeContent`
+
+Analysée, note complète dans **`docs/systems/02_contenu_de_biome.md`**. Les
+4 200 lignes sont cartographiées, pas portées. Ce qu'il faut en retenir ici :
+
+- **elle ne disperse pas de flore.** Ce n'est pas « le contenu de biome » mais le
+  **constructeur d'une cellule de 256 × 256 colonnes** — terrain fin, couleur,
+  déformations, points d'apparition. Chercher la table modèle/biome dedans était
+  une impasse ;
+- **piège de lecture à ne pas redécouvrir** : Ghidra type les bornes de boucle en
+  `float *`, donc `+ 0x40` est de l'arithmétique de pointeur = **+256 unités**.
+  Une lecture littérale fait croire que la fonction ne traite qu'un seizième de
+  sa cellule ;
+- **second piège** : les comparaisons de type sont rendues en flottants
+  dénormaux. `n × 1.4013e-45` est l'entier `n`. Sans ce décodage la fonction est
+  illisible ;
+- le **champ de densité de végétation** est extrait avec ses constantes exactes
+  (quatre octaves, deux crêtes) — `docs/systems/02`, §3 ;
+- **`terrain_generateColumnColor` ne rend pas une couleur mais une hauteur de
+  colonne.** Troisième nom trompeur du dépôt d'analyse ;
+- le portage du jalon 1.6 est **corroboré indépendamment** : stride `0x68`, base
+  `+0x14018`, ordre `tz + tx·8`, type à `+0x18`.
+
+**Identité des types d'éléments de tuile** (la question ouverte du jalon 1.6) :
+6 = champ de rochers, 11 = massif isolé, 12 = plan d'eau, 3 = parcelle bâtie.
+Les types 2, 10, 14, 15 restent à isoler. Le type 9, comme le 13, est traité par
+la fonction mais jamais produit par `World_generateRegionFeatures`.
+
+### Ce qui reste — `World_generateVegetationCluster` (@005d8750)
+
+**600 lignes, pas 4 200.** C'est là qu'est la table modèle/biome, avec son
+appelant de haut niveau décrit à `game_misc.cpp:42457`. La répartition de §7.2 et
+les densités de `CWModelLibrary.DENSITY` restent des propositions de bon sens en
+attendant ; les remplacer coûte quelques lignes.
 
 | fonction | adresse | rôle |
 |---|---|---|
-| `WorldInfo_generateBiomeContent` | `@005e4850` | contenu par biome, arbres, décor |
-| `World_populateRegionDecorations` | `game_misc.cpp:36135` | dispersion du décor |
-| `World_carveTerrainFeatureA` / `B` | `game_misc.cpp:35597` / `35872` | formes creusées dans le terrain |
+| `World_generateVegetationCluster` | `@005d8750` | **la cible : dispersion de la végétation, 600 l** |
+| — son appelant de haut niveau | `game_misc.cpp:42457` | pilote la végétation et la finalisation |
+| `WorldInfo_generateBiomeContent` | `@005e4850` | constructeur de cellule 256² — analysé, `docs/systems/02` |
+| `World_populateRegionDecorations` | `game_misc.cpp:36135` | bâtisseur de village, sites de région 3 et 5 seulement (jalon 4.3) |
+| `World_carveTerrainFeatureA` / `B` | `game_misc.cpp:35597` / `35872` | formes creusées : rochers, massifs |
+| `World_generateWaterOrPathFeature` | `@005df960` | plans d'eau (type 12) |
 | `WorldInfo_placeStructure` | `@005f0ce0` | placement de structures (jalon 4) |
 
 **Deux noms trompeurs relevés à l'analyse**, à ne pas redécouvrir :
@@ -327,26 +401,48 @@ demande des modèles — et la mécanique qui les pose est en place : déposer u
 son nom figure dans la table de `CWModelLibrary`.
 
 La liste des *rôles* n'est plus une estimation : le binaire d'origine charge
-**154 modèles voxels nommés**. On n'en reprend aucun — ce sont des créations
-originales — mais ce dont un monde comme celui-là a besoin est établi.
+**2 550 modèles voxels nommés** (`.cub`) — le chiffre de 154 retenu jusqu'au
+2026-09-05 était une énumération partielle. On n'en reprend aucun — ce sont des
+créations originales — mais ce dont un monde comme celui-là a besoin est établi.
 
-**Deux choses ne sont pas des assets**, contrairement à ce qu'on croirait :
+**Les 28 rôles déjà produits sont tous confirmés** par ce relevé, nom pour nom :
+`cornflower` = bleuet, `sunflower` = tournesol, `heartflower` = fleur_coeur,
+`soulflower` = fleur_ame, `ginseng-root` = fleur_ginseng, `reed` = roseau,
+`ivy` = lierre, `tendril` = vrille, `alga` = algue, `coral` = corail. Le lot
+livré visait juste.
 
-- **Les arbres.** Aucun modèle d'arbre parmi les 154. Ils sont construits par le
-  code, dans `WorldInfo_generateBiomeContent`. Algorithme à porter, pas modèle à
-  dessiner.
-- **Les maisons.** `cube::House::ctor_0(3, 3, 4)` : une grille de 3 × 3 × 4
-  cellules remplie procéduralement (jalon 4.3). Ce sont les *meubles* qui sont
-  des modèles, pas le bâtiment.
+**Les arbres sont des assets — correction du 2026-09-05.** Le corpus charge
+`fir-tree.cub`, `thorn-tree.cub`, `christmas-tree.cub`, `tree-leaves.cub`,
+`palm-leaf.cub`, `palm-leaf-diagonal.cub`, `wood-log.cub`. Il n'y a **pas**
+d'algorithme d'arbre à porter : `World_generateTreeRecursive` est nommée d'après
+les arbres rouge-noir de la STL. Reste à trancher si le feuillu est un modèle
+entier ou une composition tronc + houppiers `tree-leaves` instanciés — un modèle
+de feuillage sans arbre feuillu correspondant plaide pour la composition.
+
+**Les maisons, elles, ne sont pas des assets.** `cube::House::ctor_0(3, 3, 4)` :
+une grille de 3 × 3 × 4 cellules remplie procéduralement (jalon 4.3). Ce sont les
+*meubles* qui sont des modèles, pas le bâtiment.
+
+**Rôles relevés que le projet n'a pas produits** (`docs/systems/02`, §7) :
+`berry-bush`, `snow-berry`, `snow-bush`, `thorn-plant`, `shimmer-mushroom`,
+`desert-flower01/02`, `flowers`, `flowers2`, `heartflower-frozen`,
+`water-lily01/02`, `underwater-plant`, `plant-fiber`, `lava-grass`,
+`lava-flower`, `runestone`, `stone2`, `sandstone` — plus une catégorie
+entièrement absente et pourtant jouable, les **filons** (`gold-`, `iron-`,
+`silver-`, `sandstone-`, `emerald-`, `diamond-`, `ruby-`, `sapphire-`,
+`ice-crystal-deposit`). Les variantes `lava-*` supposent une surface volcanique
+que `CWPalette.surface_index` ne produit pas.
 
 #### Convention de nommage
 
-Dossier `assets/models/flore/`, un fichier `.vox` par entrée. Noms en minuscules
-sans accent, souligné pour séparer, variante numérotée sur deux chiffres quand
-les modèles sont interchangeables. Les couleurs viennent de la plage
-**Végétation, indices 128 – 175** de la palette de projet (voir
-`assets/palette/PALETTE.md`) — sauf les cailloux et le grès, qui prennent la
-plage **Terrain, 1 – 31**.
+**Un dossier par biome** sous `assets/models/flore/`, un fichier `.vox` par
+entrée. Noms en minuscules sans accent, souligné pour séparer, variante numérotée
+sur deux chiffres quand les modèles sont interchangeables ; rien d'autre dans le
+nom — ni le biome, qui est le dossier, ni la taille du gabarit, qui est libre.
+Les couleurs viennent de la plage **Végétation, indices 128 – 175** de la palette
+de projet — sauf ce qui est minéral, qui prend la plage **Terrain, 1 – 31**.
+Charger la palette en **ouvrant `assets/palette/zentarys_palette.vox`** ; le
+détail et le piège sont dans `assets/palette/PALETTE.md`.
 
 #### Les neuf surfaces que le générateur produit
 
@@ -365,8 +461,14 @@ autre. Touches **1** à **9** de la démo pour s'y téléporter.
 | **roche** | `caillou_01` `caillou_02` |
 | **gravier** (fond marin) | `algue` `corail` `etoile_de_mer` |
 
-Beaucoup de fichiers reviennent dans plusieurs biomes : **c'est voulu**, on n'en
-produit qu'un seul exemplaire. Total réel : **28 modèles**.
+Beaucoup de rôles reviennent dans plusieurs biomes. La prévision était d'en
+produire un seul exemplaire partagé : **le lot livré le 2026-09-05 a fait
+autrement**, et mieux — un modèle par biome, dans les teintes du biome. Total :
+**28 rôles, 39 fichiers**, tous en place et visibles en jeu.
+
+`CWModelLibrary.FLORA` porte donc des chemins complets (`"herbe/herbe_01"`).
+Deux biomes peuvent toujours pointer le même fichier : il n'est alors chargé et
+maillé qu'une fois.
 
 #### Plus cinq cultures, pour les champs des villages
 
@@ -384,6 +486,36 @@ de bon sens (cactus au désert, corail sous l'eau).
 Ça ne change rien à ce qu'il faut produire — la *liste* des 28 est sûre, elle
 vient des noms de modèles du binaire. Seule l'affectation peut bouger, et
 réaffecter un modèle existant coûte une ligne de code.
+
+#### Ce que le lot livré mesure réellement
+
+Relevé par `tools/inspect_model.gd`, en voxels de modèle (16 = un bloc). À
+comparer aux enveloppes de §7.1 — les écarts ne sont pas des défauts, ce sont des
+choix d'auteur, notés ici pour qu'ils soient délibérés :
+
+| ce qui est conforme | |
+|---|---|
+| herbes | 10 – 13 (visé 8 – 12) |
+| cailloux | 5 – 10 (visé 4 – 8) |
+| champignons | 5 – 7 (visé 5 – 10) |
+| `cactus_01` | **48**, soit 3 blocs — au-dessus de la tête du personnage |
+| `algue`, `roseau`, `fleur_tournesol`, `fleur_ame` | 14 – 16 |
+
+| ce qui s'en écarte | mesuré | visé |
+|---|---|---|
+| `fleur_bleuet` | 2 | 8 – 14 |
+| `bouquet_01`, `bouquet_02`, `fleur_ginseng` | 4 | 8 – 14 |
+| `liane`, `vrille`, `lierre` (×2), `feuille` | **1** | 16 – 28 |
+| `buisson`, broussailles | 6 – 16 | 16 – 28 |
+| `cactus_02` | 16 | 32 – 56 |
+
+Les cinq modèles d'un voxel d'épaisseur sont des **tapis au sol** dessinés vus de
+dessus, pas des plantes couchées par erreur : la matière est un semis de motifs
+répartis dans le plan horizontal, pas un profil debout. Les fleurs de 2 et 4
+voxels sont des **bouquets de plusieurs pieds** — tige d'un voxel, tête de cinq —
+et non une fleur unique. Les deux lectures se tiennent ; ce qu'il faut savoir,
+c'est qu'à cette hauteur une fleur se lit comme une tache peinte sur le sol et
+pas comme une plante. À trancher à l'œil dans la démo, pas ici.
 
 #### Les lots suivants, pour information
 
@@ -422,10 +554,11 @@ le matériau, sortie = un objet d'inventaire et ses statistiques. Il se pose sur
 l'inventaire (3.2), qui se pose sur le contrôleur (3.1). Il réutilisera
 `CWVoxelModel` et son maillage tels quels — le travail est déjà fait.
 
-La palette de projet est en place : `assets/palette/zentarys_palette.png` à
-glisser sur la palette de MagicaVoxel, plages réservées documentées dans
-`assets/palette/PALETTE.md`, source unique dans `CWPalette`, et six
-vérifications qui empêchent une plage de bouger en silence.
+La palette de projet est en place : **ouvrir `assets/palette/zentarys_palette.vox`
+dans MagicaVoxel** — pas glisser un PNG sur le nuancier, c'est ce qui a faussé
+les index du premier lot. Plages réservées documentées dans
+`assets/palette/PALETTE.md`, source unique dans `CWPalette`, sept vérifications
+qui empêchent une plage de bouger ou de se vider en silence.
 
 Trois faits mesurés sur l'import et le maillage, à ne pas redécouvrir :
 - les index de palette se conservent exactement (le décalage d'un cran du format
@@ -459,7 +592,16 @@ terrain réellement généré), au jalon 4. Pas un éditeur généraliste.
   soleil). Réglage d'ambiance, pas un défaut de génération.
 - Les teintes des plages d'assets sont des rampes de départ, à ajuster. Le
   découpage en plages, lui, est un contrat : le changer invalide les modèles
-  déjà peints.
+  déjà peints. Depuis le 2026-09-05 il y a des modèles peints dessus, donc
+  ajuster une teinte se voit maintenant en jeu — c'est justement le bon moment
+  pour le faire, avant le lot suivant.
+- **Neuf modèles du lot sont beaucoup plus plats que l'enveloppe de §7.1** :
+  cinq tapis d'un voxel (`liane`, `vrille`, les deux `lierre`, `feuille`) et
+  quatre fleurs de 2 à 4 voxels. Ce sont des tapis vus de dessus et des bouquets
+  de plusieurs pieds, pas des modèles couchés par erreur — mais à cette hauteur
+  ils se lisent comme une tache peinte sur le sol. À regarder dans la démo et à
+  trancher : les garder tels quels, ou les redresser. Le tableau des mesures est
+  en §7.2.
 - Les arêtes du graphe de sites ne sont **pas** le tracé des routes : le type 1
   est un élément unique par zone, posé sur son site. `site_edge_radius` reste
   donc à 0, et l'hypothèse notée au jalon 1.5 est close.
