@@ -1,3 +1,7 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+
+# Analyse externe et binaire de l'editeur : references locales, hors depot
+CubeWorld-Reversal-master/
+godot.windows.editor.double.x86_64.exe

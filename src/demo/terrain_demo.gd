@@ -451,6 +451,16 @@ func _update_hud() -> void:
 			params.world_seed,
 			CWWorldParams.zone_of(wx), CWWorldParams.zone_of(wz),
 			CWWorldParams.tile_of(wx), CWWorldParams.tile_of(wz)])
+		# Element de la tuile courante : sans lui, impossible de savoir en jeu
+		# si le creux qu'on regarde est un cratere ou du relief ordinaire.
+		var feat: CWTileFeature = generator.field().feature_at(wx, wz)
+		if feat == null or feat.type == 0:
+			lines.append("element : aucun")
+		else:
+			var w: float = generator.field().falloff_weight(feat, wx, wz)
+			lines.append("element type %d%s   rayon %d   h %d   poids %.2f" % [
+				feat.type, "*" if feat.affects_height() else "",
+				roundi(feat.radius), roundi(feat.height), w])
 		lines.append("chenal %.3f   vue %d blocs%s   %d fils" % [
 			generator.field().channel_field(wx, wz),
 			lod_view_distance if use_lod else view_distance,

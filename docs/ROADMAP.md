@@ -34,28 +34,85 @@ et des structures.
 | 1.3 | Sites de région, climat | `World_{temperature,humidity}Blend` | ✅ | idem |
 | 1.4 | Champ d'altitude, chenaux | `World_baseHeightField` @004f9b70 | ✅ | idem |
 | 1.5 | Générateur voxel + rendu cubes | — (portage Godot) | ✅ | idem |
-| 1.6 | **Éléments de tuile** | `World_generateRegionFeatures` @0050e080 | ⬜ | **prochaine tranche** |
-| 1.7 | Contenu de biome, dispersion | `WorldInfo_generateBiomeContent` @005e4850 | ⬜ | |
+| 1.6 | Éléments de tuile | `World_generateRegionFeatures` @0050e080 | ✅ | `docs/systems/01`, §2.7 |
+| 1.7 | **Contenu de biome, dispersion** | `WorldInfo_generateBiomeContent` @005e4850 | ⬜ | **prochaine tranche** |
 | 1.8 | Colonnes persistantes, édition | `Chunk_getColumnAt` @00406100 + `VoxelTool` | ⬜ | |
 | 1.9 | Éclairage voxel | `VoxelChunk_propagateSunlight` | ⬜ | |
 | 1.10 | Carte du monde | `WorldMap.cpp`, `NameGen_generateRegionName` | ⬜ | |
 
-### 1.6 — Éléments de tuile (prochaine tranche)
+### 1.6 — Éléments de tuile (fait)
 
-Chaque zone porte une grille 8 × 8 d'éléments de 0x68 octets qui déforment
-localement le terrain. Le champ d'altitude actuel contient déjà les points
-d'accroche, commentés à leur emplacement exact :
+Grille 8 × 8 d'éléments par zone, un par tuile de 2048 unités. Cinq types
+déforment l'altitude — bourg (aplanissement + `World_roadField`), cratère à
+`H−50`, deux caldeiras à bord relevé, piton de +150 — plus un relèvement qui
+fait émerger un îlot sous tout élément posé sur un site océanique. Détail et
+constantes dans `docs/systems/01`, §2.7.
 
-- type 1 — aplanissement (bourgs, routes) ; débloque aussi `World_roadField` et
-  la porte de détail complète, aujourd'hui inertes ;
-- type 4 — cratère à `H − 50` ;
-- types 6 et 7 — caldeira à bord relevé ;
-- type 13 — piton de +150 ;
-- `World_objectFalloffWeight` @0052c820 — poids d'influence commun, avec
-  déformation du domaine désactivée pour les types 0xb, 0xc et 0xe.
+Trois points relevés à l'analyse, qui n'étaient pas dans le plan :
 
-Cette tranche donne aussi son sens à `World_featureTier` @004d7870, qui gradue
-la difficulté depuis le centre de la carte (zone 512, 512).
+- **Le type 1 n'est pas « les routes ».** Il y a un et un seul élément de type 1
+  par zone, sur la tuile de son site : `World_roadField` est l'aplanissement du
+  bourg, pas un réseau de voies. Les arêtes du graphe de sites ne sont donc pas
+  des routes, et `site_edge_radius` reste à 0.
+- **Le type 13 n'est jamais produit** par `World_generateRegionFeatures` : son
+  `switch(rand()%8)` ne rend que 2, 3, 4/15, 5, 6/15, 7/15, 11 et 12. L'effet
+  est porté, sa source reste à trouver.
+- **Les types sans effet sur l'altitude sont quand même placés** (2, 3, 5, 10,
+  11, 12, 14, 15). Le flux aléatoire est une seule séquence : n'en porter que la
+  moitié changerait tous les types et toutes les positions. Ce sont les ancres
+  du jalon 1.7.
+
+`World_featureTier` @004d7870 est porté et gradue la difficulté depuis le centre
+de la carte (zone 512, 512).
+
+### 1.7 — Contenu de biome (prochaine tranche)
+
+`WorldInfo_generateBiomeContent` (@005e4850) et `WorldInfo_scatterObjectsInArea`
+(@005f56c0). C'est la première tranche qui demande des assets : les ancres
+existent, il faut désormais poser quelque chose dessus. Voir « Assets à
+produire » ci-dessous.
+
+### Assets à produire
+
+Le jalon 1.6 n'a demandé aucun asset. Le jalon 1.7 est le premier qui en demande.
+
+Le binaire d'origine charge **154 modèles voxels nommés** ; leurs noms donnent la
+liste sûre des *rôles* que le monde doit remplir. Aucun n'est repris — ce sont
+des créations originales — mais la liste des besoins, elle, ne se devine plus.
+Détail et ordre de production dans `nextsteps.md`, §7.1. En résumé :
+
+- **~35 modèles pour le jalon 1.7** : herbes, fleurs, cactus, sous-bois,
+  aquatique, pierres, cultures ;
+- **~50 pour le jalon 4** : mobilier, artisanat, décor extérieur et de donjon ;
+- le reste (objets d'inventaire, créatures, interface) vient plus tard.
+
+**Ni les arbres ni les maisons ne sont des assets.** Aucun modèle d'arbre parmi
+les 154 : ils sont construits par le code, dans `WorldInfo_generateBiomeContent`.
+Et `cube::House::ctor_0(3, 3, 4)` montre qu'une maison est une grille de
+3 × 3 × 4 cellules remplie procéduralement — ce sont les meubles qui sont des
+modèles, pas le bâtiment. Deux algorithmes à porter, pas deux lots à dessiner.
+
+Gabarits mesurés en sortie du générateur d'éléments, utiles pour situer les
+échelles — le rayon est un rayon d'*influence*, la distance sur laquelle
+l'élément revendique le terrain, pas l'encombrement du modèle :
+
+| type | par zone | rayon | position | variantes |
+|---|---|---|---|---|
+| 14 | ~16 | 150 u | calée sur la grille de 256 | 4, plus 2 réservées aux climats très humides |
+| 11 | ~2 | 128 u | calée sur la grille de 256 | — |
+| 12 | ~2 | 128 u | calée sur la grille de 256 | — |
+| 10 | ≤ 5 | 512–767 u | libre dans la tuile | — |
+| 2 | ~2 | 512–767 u | libre dans la tuile | — |
+| 3 | ~2 | 512–767 u | libre dans la tuile | 3 |
+| 5 | ~2 | 256–511 u | libre dans la tuile | 3, choisies par le climat du site |
+| 15 | variable | 512–767 u | libre dans la tuile | remplace 4, 6 et 7 au-dessus d'un site océanique |
+
+L'identité de chaque type reste à établir : elle vient de
+`WorldInfo_generateBiomeContent` (@005e4850), pas encore analysée.
+
+Authoring : MagicaVoxel, palette de projet dans
+`assets/palette/zentarys_palette.png`, plages réservées documentées dans
+`assets/palette/PALETTE.md`. À l'import, `vox(x, y, z) -> godot(y, z, x)`.
 
 ---
 
@@ -129,7 +186,8 @@ sans valeur tant que les jalons 2 et 3 ne sont pas là.
 
 | Sujet | Statut | Détail |
 |---|---|---|
-| Suite de tests headless | ✅ | 44 vérifications, `tests/worldgen_test.gd` |
+| Suite de tests headless | ✅ | 80 vérifications, `tests/worldgen_test.gd` |
+| Aperçu rapproché des éléments | ✅ | `tools/preview_features.gd`, avec et sans la couche |
 | Aperçus PNG (altitude, climat, chenaux) | ✅ | `user://worldgen_preview/` |
 | Arrêt immédiat du streaming | ✅ | `CWVoxelGenerator.request_shutdown()`, 23 ms → 1 µs par bloc en file |
 | Cache de colonnes | ✅ | 17 ms → 5 µs par bloc réutilisé |
@@ -242,6 +300,7 @@ de le résoudre.
 
 | Date | Fait |
 |---|---|
+| 2026-09-04 | Jalon 1.6. Grille d'elements de tuile, cinq effets d'altitude, relevement des ilots oceaniques, champ de routes. Recursion generateur/champ cassee comme dans l'original, et rendue sure sur plusieurs fils. 30 verifications de plus. Cout : +0 us/colonne hors influence sur le chemin de streaming, +13 us dedans. |
 | 2026-09-03 | Debit de chargement : doublons entre fils, plafond de cache, distance aux aretes inutile, pool de fils. Vue 384 stabilisee en 27 s au lieu de > 3 min. Teleportation par biome et reglage de la vue au clavier. |
 | 2026-09-03 | Corrige : tranchee d'une colonne le long des aretes du graphe de sites (defaut d'unites, signale par l'utilisateur). Saut max entre colonnes voisines 2,35 -> 0,37 bloc. Test de non-regression par balayage dense ajoute. |
 | 2026-09-03 | Vue lointaine : LOD natif teste et ecarte (dalles d'eau en pleine plaine des le LOD 1). Bascule `use_lod` conservee. |

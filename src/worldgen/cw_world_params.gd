@@ -20,7 +20,9 @@ extends Resource
 # Reconstruit à partir des décalages et bornes de `World_getTileAtCoords`,
 # `Chunk_getColumnAt` et des fenêtres 3x3 des mélanges climatiques.
 const ZONE_SIZE: int = 16384
+const ZONE_SHIFT: int = 14
 const TILE_SIZE: int = 2048
+const TILE_SHIFT: int = 11
 const ZONE_GRID: int = 1024
 const WORLD_SIZE: int = ZONE_GRID * ZONE_SIZE
 ## Centre de la carte, en unites monde : centre de la zone (512, 512). C'est la
@@ -69,6 +71,14 @@ const OFFSET_COUNT: int = 32
 ## Facteur appliqué à l'altitude finale. 1.0 = fidèle. Sert uniquement à réduire
 ## la hauteur du monde pour des tests de streaming.
 @export_range(0.05, 2.0, 0.01) var height_scale: float = 1.0
+
+## Active la couche d'éléments de tuile (jalon 1.6) : bourgs, cratères,
+## caldeiras, pitons et relèvement des îlots océaniques.
+##
+## Bascule conservée pour comparer un même monde avec et sans, et pour isoler
+## une régression du champ de base. La désactiver ne change rien au reste du
+## champ : les éléments ne s'appliquent qu'en fin de chaîne.
+@export var tile_features: bool = true
 
 ## Contribution du mélange « marais » au champ de chenaux.
 ## L'accumulateur de `World_waterProximityInfluence` est perdu dans la
@@ -123,10 +133,15 @@ func offset_z(slot: int) -> float:
 
 
 ## Index de zone (grille 1024 x 1024) contenant une coordonnée monde.
+##
+## Décalage arithmétique plutôt que division flottante : les deux tailles sont
+## des puissances de deux, `>>` est donc exactement la division entière par
+## défaut que faisait `floori`, négatifs compris — et ces deux fonctions sont
+## appelées plusieurs fois par colonne.
 static func zone_of(v: int) -> int:
-	return floori(float(v) / float(ZONE_SIZE))
+	return v >> ZONE_SHIFT
 
 
 ## Index de tuile (grille 8192 x 8192) contenant une coordonnée monde.
 static func tile_of(v: int) -> int:
-	return floori(float(v) / float(TILE_SIZE))
+	return v >> TILE_SHIFT

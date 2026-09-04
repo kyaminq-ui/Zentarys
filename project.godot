@@ -11,9 +11,9 @@ config_version=5
 [application]
 
 config/name="Zentarys"
+run/main_scene="res://scenes/terrain_demo.tscn"
 config/features=PackedStringArray("4.7", "Double Precision", "Forward Plus")
 config/icon="res://icon.svg"
-run/main_scene="res://scenes/terrain_demo.tscn"
 
 [autoload]
 
@@ -38,5 +38,5 @@ rendering_device/driver.windows="d3d12"
 
 [voxel]
 
-threads/main/time_budget_ms=24
 threads/count/ratio_over_max=0.75
+threads/main/time_budget_ms=24

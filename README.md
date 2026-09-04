@@ -11,8 +11,9 @@ GDScript idiomatique.
 ## État
 
 Le système de terrain est porté et validé : bruit de valeur, LCG, sites de
-région, mélanges climatiques, champ d'altitude, réseau de chenaux, générateur
-voxel et rendu en cubes colorés.
+région, mélanges climatiques, champ d'altitude, réseau de chenaux, éléments de
+tuile (bourgs, cratères, caldeiras, pitons), générateur voxel et rendu en cubes
+colorés.
 
 - `docs/ROADMAP.md` — les cinq jalons, leur avancement, les mesures
 - `docs/systems/01_generation_terrain.md` — l'analyse du système de terrain
@@ -21,7 +22,7 @@ voxel et rendu en cubes colorés.
 ## Démarrer
 
 ```
-godot --headless --path . -s tests/worldgen_test.gd   # 50 vérifications
+godot --headless --path . -s tests/worldgen_test.gd   # 80 vérifications
 ```
 
 Scène de démonstration : `scenes/terrain_demo.tscn`. Clic pour capturer la

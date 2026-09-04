@@ -24,6 +24,7 @@ func _initialize() -> void:
 	_test_rand()
 	_test_region_sites()
 	_test_terrain_field()
+	_test_tile_features()
 	_test_generator()
 	_test_palette()
 	_bench()
@@ -281,6 +282,15 @@ func _test_terrain_field() -> void:
 		c_hi = maxf(c_hi, v)
 	_ok("champ de chenaux positif", c_lo >= 0.0, "min %f" % c_lo)
 	_ok("champ de chenaux module", c_hi > 0.25, "[%f, %f]" % [c_lo, c_hi])
+
+
+# -- 4b. Elements de tuile ----------------------------------------------------
+
+const CWTileFeaturesTest := preload("res://tests/tile_features_test.gd")
+
+
+func _test_tile_features() -> void:
+	CWTileFeaturesTest.new().run(self)
 
 
 # -- 5. Generateur voxel : cache de colonnes et arret -------------------------
