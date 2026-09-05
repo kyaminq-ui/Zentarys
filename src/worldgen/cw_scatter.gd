@@ -36,6 +36,17 @@ extends RefCounted
 const CELL_SIZE: int = 16
 const CELL_SHIFT: int = 4
 
+## Finesse de la position d'une plante *sous* son bloc : le decalage tire est
+## `mod(SUBBLOCK_STEPS) / SUBBLOCK_STEPS`. Sans ce decalage, toute la flore
+## s'alignerait sur la grille du terrain et le damier se verrait.
+##
+## C'est une grille de **position**, sans rapport avec celle du dessin
+## (`CWVoxelModel.VOXELS_PER_BLOCK`, qui vaut 40/3 depuis le 2026-09-05 et n'est
+## donc plus entier). Les deux ont ete confondues tant que le rapport tombait
+## juste ; elles sont independantes, et seule celle-ci a besoin d'etre entiere.
+## Sa valeur n'a pas d'effet visible au-dela de quelques pas : 16 suffit.
+const SUBBLOCK_STEPS: int = 16
+
 ## Plafond dur du nombre de plantes par cellule. Garde-fou : une densite mal
 ## reglee ne doit pas pouvoir faire exploser le cout d'une cellule en silence.
 ## Chaque plante coute un echantillonnage de colonne (~75 us).
@@ -190,8 +201,8 @@ func _build_cell(cx: int, cz: int) -> Array:
 	for i in count:
 		var x: int = base_x + rng.mod(CELL_SIZE)
 		var z: int = base_z + rng.mod(CELL_SIZE)
-		var sub_x: int = rng.mod(CWVoxelModel.VOXELS_PER_BLOCK)
-		var sub_z: int = rng.mod(CWVoxelModel.VOXELS_PER_BLOCK)
+		var sub_x: int = rng.mod(SUBBLOCK_STEPS)
+		var sub_z: int = rng.mod(SUBBLOCK_STEPS)
 		var turn: int = rng.mod(CWVoxelModel.ROTATIONS)
 		var pick: float = rng.unit()
 
@@ -211,8 +222,8 @@ func _build_cell(cx: int, cz: int) -> Array:
 		p.x = x
 		p.z = z
 		p.y = floori(c.x) + 1
-		p.fx = float(sub_x) / float(CWVoxelModel.VOXELS_PER_BLOCK)
-		p.fz = float(sub_z) / float(CWVoxelModel.VOXELS_PER_BLOCK)
+		p.fx = float(sub_x) / float(SUBBLOCK_STEPS)
+		p.fz = float(sub_z) / float(SUBBLOCK_STEPS)
 		p.model = choices[mini(int(pick * float(choices.size())), choices.size() - 1)]
 		p.rotation = turn
 		out.append(p)

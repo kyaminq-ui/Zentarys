@@ -146,23 +146,31 @@ docs/images/               gabarit d'échelle photographié en jeu
 9. **Le poids d'influence d'un élément est déformé.** Le fond d'un cratère n'est
    pas à son centre géométrique mais à une centaine d'unités de là. Un test qui
    échantillonne le centre exact mesure autre chose que ce qu'il croit.
-10. **Un bloc de terrain vaut 16 voxels de modèle, et rien ne doit l'assouplir.**
-    `CWVoxelModel.VOXELS_PER_BLOCK` est un contrat d'authoring : le changer
-    invalide tous les `.vox` déjà dessinés, qui sont irrécupérables autrement
-    qu'en les redessinant. Un test le verrouille. Ce qui *peut* bouger au jalon
-    3.1, c'est la taille du personnage en blocs (2 aujourd'hui) — les modèles,
-    eux, se remettent à l'échelle ensemble.
-11. **La flore n'est jamais écrite dans les données voxels du monde.** Elle est
+10. **Un bloc de terrain vaut 40/3 voxels de modèle — 3 blocs = 40 voxels.**
+    `CWVoxelModel.VOXELS_PER_BLOCK` est un contrat d'authoring, verrouillé par
+    deux tests. La valeur vient de l'original : ses échelles d'instanciation du
+    décor sont 0,075 / 0,09 / 0,1, et **0,075 = 3/40 exactement**. Écrire
+    `13.333` ferait dériver le rapport ; c'est la fraction qui est dans le code.
+    Un cube de référence d'un bloc n'est pas entier : dans MagicaVoxel on pose un
+    cube de **40 = 3 blocs**. Ce qui *peut* bouger au jalon 3.1, c'est la taille
+    du personnage en blocs (2,4 aujourd'hui) — les modèles se remettent à
+    l'échelle ensemble.
+11. **`CWScatter.SUBBLOCK_STEPS` n'est pas `VOXELS_PER_BLOCK`.** La finesse de
+    *position* d'une plante sous son bloc est une grille entière (16 pas) ; la
+    grille de *dessin* vaut 40/3 et n'est plus entière. Les deux ont été
+    confondues tant que le rapport tombait juste. Repasser la position sur
+    `VOXELS_PER_BLOCK` casse le parse — `rng.mod()` prend un entier.
+12. **La flore n'est jamais écrite dans les données voxels du monde.** Elle est
     seize fois plus fine que la grille du terrain. Le générateur ne la consulte
     plus du tout ; elle est instanciée par `CWFloraRenderer`. Le test « le
     terrain ne contient plus de flore » attrape un retour en arrière — qui, sans
     lui, ferait juste doublon avec l'instance, sans erreur.
-12. **Le mailleur consomme sa marge.** L'origine d'un maillage tombe sur le
+13. **Le mailleur consomme sa marge.** L'origine d'un maillage tombe sur le
     premier voxel utile du tampon, pas sur son coin : tout maillage construit à
     la main doit retrancher `CWVoxelModel.mesher_padding()`. L'oublier enterre
     l'objet d'un voxel — assez peu pour passer inaperçu à l'œil, d'où le test
     « la plante pose sur le sol, quelle que soit son orientation ».
-13. **L'ancre d'un modèle est au centre de son empreinte et à sa base.** Le
+14. **L'ancre d'un modèle est au centre de son empreinte et à sa base.** Le
     déplacer décale toute la flore déjà produite, et un modèle dessiné avec un
     socle vide sous lui flotte de la hauteur du socle.
 

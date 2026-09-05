@@ -79,7 +79,7 @@ var _last_cell: Vector2i = Vector2i(0x7FFFFFFF, 0x7FFFFFFF)
 ## quart de tour reste plausible a l'oeil. Verifiee dans `tests/flora_test.gd`.
 static func instance_transform(pl: CWScatter.Placement,
 		world_origin: Vector2i) -> Transform3D:
-	var scale: float = 1.0 / float(CWVoxelModel.VOXELS_PER_BLOCK)
+	var scale: float = 1.0 / CWVoxelModel.VOXELS_PER_BLOCK
 	var basis := Basis(Vector3.UP, float(pl.rotation) * PI * 0.5).scaled(
 			Vector3(scale, scale, scale))
 	var pos := Vector3(
@@ -203,7 +203,7 @@ func _build_node(c: Vector2i) -> void:
 	node.name = "Cell%d_%d" % [c.x, c.y]
 	node.set_meta("plant_count", plants.size())
 
-	var scale: float = 1.0 / float(CWVoxelModel.VOXELS_PER_BLOCK)
+	var scale: float = 1.0 / CWVoxelModel.VOXELS_PER_BLOCK
 	var instances: Array[MultiMeshInstance3D] = []
 	var bounds := AABB()
 	var first: bool = true

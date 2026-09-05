@@ -81,15 +81,24 @@ func _test_models() -> void:
 	_ok("gabarit coherent avec les offsets",
 			m.height == m.extent.y and m.radius > 0, str(m))
 
-	# Echelle. Le rapport est un contrat d'authoring : le changer invalide tous
-	# les modeles deja dessines, donc il est verrouille ici et pas seulement
+	# Echelle. Le rapport est un contrat d'authoring : le changer redimensionne
+	# tous les modeles deja dessines, donc il est verrouille ici et pas seulement
 	# ecrit dans MODELS.md.
-	_ok("un bloc de terrain vaut 16 voxels de modele",
-			CWVoxelModel.VOXELS_PER_BLOCK == 16,
-			"%d" % CWVoxelModel.VOXELS_PER_BLOCK)
+	#
+	# 40/3 est la valeur de l'original : ses echelles d'instanciation du decor
+	# sont 0.075, 0.09 et 0.1, et 0.075 = 3/40 exactement. La comparaison porte
+	# donc sur la fraction, pas sur 13.333 qui derive.
+	_ok("un bloc de terrain vaut 40/3 voxels de modele",
+			is_equal_approx(CWVoxelModel.VOXELS_PER_BLOCK, 40.0 / 3.0),
+			"%f" % CWVoxelModel.VOXELS_PER_BLOCK)
+	# Trois blocs valent quarante voxels, exactement : c'est la reference posee
+	# dans MagicaVoxel, puisqu'un cube d'un bloc n'est pas entier.
+	_ok("trois blocs valent quarante voxels",
+			is_equal_approx(3.0 * CWVoxelModel.VOXELS_PER_BLOCK, 40.0),
+			"%f" % (3.0 * CWVoxelModel.VOXELS_PER_BLOCK))
 	_ok("mesures en blocs coherentes avec les mesures en voxels",
-			m.height_blocks == ceili(float(m.height) / 16.0)
-			and m.radius_blocks == ceili(float(m.radius) / 16.0),
+			m.height_blocks == ceili(float(m.height) / (40.0 / 3.0))
+			and m.radius_blocks == ceili(float(m.radius) / (40.0 / 3.0)),
 			"%d voxels -> %d blocs" % [m.height, m.height_blocks])
 
 	# Enveloppe de la flore : le personnage de reference fait 2 blocs, une
@@ -371,7 +380,7 @@ func _test_rendering() -> void:
 	# gabarit a chaque quart de tour reste plausible a l'oeil : on la mesure.
 	var model: CWVoxelModel = sample.model
 	var mesh: ArrayMesh = model.mesh()
-	var voxel: float = 1.0 / float(CWVoxelModel.VOXELS_PER_BLOCK)
+	var voxel: float = 1.0 / CWVoxelModel.VOXELS_PER_BLOCK
 	var base_ok: bool = true
 	var tall_ok: bool = true
 	var centred_ok: bool = true

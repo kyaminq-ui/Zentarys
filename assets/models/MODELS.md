@@ -6,17 +6,23 @@ couleurs*.
 
 ---
 
-## 1. L'échelle de référence — fixée le 2026-09-04
+## 1. L'échelle de référence — fixée le 2026-09-04, alignée sur l'original le 2026-09-05
 
 **Il y a deux grilles, pas une.**
 
 | grille | pas | ce qu'elle porte |
 |---|---|---|
 | **terrain** | 1 bloc | le relief, la roche, l'eau, les arbres, les maisons |
-| **modèles** | **1/16 de bloc** | le personnage, les créatures, la flore, le mobilier, les objets |
+| **modèles** | **3/40 de bloc** | le personnage, les créatures, la flore, le mobilier, les objets |
 
-**Un bloc de terrain vaut 16 voxels de modèle. Le personnage de référence mesure
-2 blocs, soit 32 voxels.**
+**Un bloc de terrain vaut 40/3 voxels de modèle — autrement dit 3 blocs valent
+exactement 40 voxels.** Le personnage de référence mesure **32 voxels**, soit
+2,4 blocs.
+
+> **La référence à poser dans MagicaVoxel est un cube de 40, pas de 13.** Un bloc
+> ne tombe pas sur un nombre entier de voxels : c'est le prix de la fidélité au
+> rapport de l'original. Un cube de 40 à côté du modèle vaut trois blocs de
+> terrain, et une silhouette de 32 vaut le personnage.
 
 C'est de là que vient tout le reste, et c'est ce qui sépare ce rendu de celui de
 Minecraft : le terrain est fait de gros cubes, mais ce qui est posé dessus est
@@ -41,15 +47,33 @@ personnage.
 | **face verticale d'une marche de terrain** | **90** | **~13** | **1** |
 
 Le brin d'herbe et la pupille font la même largeur : la flore et le personnage
-sont sur la *même* grille fine. Le rapport mesuré est de ~13 voxels par bloc ;
-on retient **16**, la puissance de deux la plus proche — les réductions de LOD y
-sont exactes, et le budget de détail y est un peu plus large.
+sont sur la *même* grille fine. Le rapport mesuré est de **~13 voxels par bloc**.
+
+### La valeur exacte, relevée dans le binaire le 2026-09-05
+
+La mesure au pixel ci-dessus a été **confirmée par une constante de l'original**,
+par un chemin entièrement différent : les échelles d'instanciation du décor y
+valent 0,075, 0,09 et 0,1, et **0,075 = 3/40 exactement**, soit 13,333 voxels par
+bloc. La mesure à l'œil était juste.
+
+Le projet a donc quitté 16 pour **40/3** (`docs/systems/02`, §8.3). Ce qu'il faut
+en savoir en dessinant :
+
+- **écrire la fraction, jamais 13.333**, qui dérive ;
+- l'original n'a pas *un* rapport global — 0,075 est le plus courant de ses trois
+  échelles de décor. L'adopter comme contrat unique est un choix, pas une
+  transcription ;
+- ce qu'on perd en passant de 16 à 40/3 : les réductions de LOD ne tombent plus
+  sur une puissance de deux. `CWVoxelModel.reduced(n)` travaille en voxels et
+  reste exacte ; c'est seulement le rapport au bloc qui n'est plus dyadique ;
+- ce qu'on gagne : un modèle de 32 voxels fait 2,4 blocs, ce qui recoupe les
+  **2,3 blocs mesurés** sur la capture. À 16 il en faisait 2,0.
 
 > **À revoir au jalon 3.1.** Quand le contrôleur de joueur sera porté, la taille
 > exacte du personnage sortira de la physique d'origine. Si elle s'écarte de 2
 > blocs, c'est ce seul nombre qui change, et toutes les tailles ci-dessous se
-> remettent à l'échelle avec lui. Le rapport de 16, lui, est un contrat
-> d'authoring : le changer invalide tous les modèles déjà dessinés.
+> remettent à l'échelle avec lui. Le rapport de 40/3, lui, est un contrat
+> d'authoring : le changer redimensionne tous les modèles déjà dessinés.
 
 ### Repères dérivés
 
@@ -69,10 +93,10 @@ Et en **blocs**, pour situer ça dans le monde généré :
 
 | élément | hauteur |
 |---|---|
-| personnage | 2 |
-| touffe d'herbe | 0,5 – 0,75 (au genou) |
-| buisson | 1 – 1,75 |
-| cactus | 2 – 3,5 |
+| personnage | 2,4 |
+| touffe d'herbe | 0,6 – 0,9 (au genou) |
+| buisson | 1,2 – 2,1 |
+| cactus | 2,4 – 4,2 |
 | cratère porté par un élément de tuile | 50 de creux |
 | piton | 150 |
 | montagnes du monde généré | jusqu'à ~600 |

@@ -174,7 +174,7 @@ static func _build_figure(at: Vector3) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.name = "Silhouette"
 	mi.mesh = _mesh_of(buf)
-	var scale: float = 1.0 / float(CWVoxelModel.VOXELS_PER_BLOCK)
+	var scale: float = 1.0 / CWVoxelModel.VOXELS_PER_BLOCK
 	var pad: float = float(CWVoxelModel.mesher_padding())
 	mi.scale = Vector3(scale, scale, scale)
 	# Meme correction de marge que pour les mires, puis le milieu de la
@@ -192,7 +192,7 @@ static func _build_model(m: CWVoxelModel, at: Vector3) -> MeshInstance3D:
 	var mesh: ArrayMesh = m.mesh()
 	if mesh == null:
 		return null
-	var scale: float = 1.0 / float(CWVoxelModel.VOXELS_PER_BLOCK)
+	var scale: float = 1.0 / CWVoxelModel.VOXELS_PER_BLOCK
 	var mi := MeshInstance3D.new()
 	mi.name = m.name
 	mi.mesh = mesh

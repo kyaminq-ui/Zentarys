@@ -32,8 +32,23 @@ extends RefCounted
 const ROTATIONS: int = 4
 
 ## Voxels de modele dans un bloc de terrain. **Contrat d'authoring** : le
-## changer invalide tous les modeles deja dessines. Voir MODELS.md, §1.
-const VOXELS_PER_BLOCK: int = 16
+## changer redimensionne tous les modeles deja dessines. Voir MODELS.md, §1.
+##
+## Valeur de l'original, relevee le 2026-09-05 : les echelles d'instanciation du
+## decor y sont 0.075, 0.09 et 0.1, et **0.075 = 3/40 exactement**, soit 40/3
+## voxels par bloc. Ecrire 13.333 ferait deriver le rapport ; c'est la fraction
+## qui est ecrite ici.
+##
+## Consequence d'authoring : on ne peut pas dessiner un cube de reference d'un
+## bloc, il n'est pas entier. La reference posee dans MagicaVoxel est donc
+## **3 blocs = 40 voxels**, et le personnage de reference fait 32 voxels, soit
+## 2,4 blocs — ce qui recoupe les 2,3 blocs mesures au pixel sur une capture du
+## jeu d'origine (MODELS.md, §1).
+##
+## A ne pas confondre avec `CWScatter.SUBBLOCK_STEPS`, qui est la finesse de
+## *position* d'une plante sous son bloc : une grille entiere, sans rapport avec
+## celle du dessin.
+const VOXELS_PER_BLOCK: float = 40.0 / 3.0
 
 ## Marge d'air autour de la matiere dans le tampon de maillage. Le mailleur en
 ## cubes a besoin de voir du vide sur le pourtour, sinon il ferme les faces de
@@ -224,8 +239,8 @@ func reduced(factor: int) -> CWVoxelModel:
 
 ## Mesures derivees, une fois les offsets en place.
 func _derive() -> void:
-	radius_blocks = ceili(float(radius) / float(VOXELS_PER_BLOCK))
-	height_blocks = ceili(float(height) / float(VOXELS_PER_BLOCK))
+	radius_blocks = ceili(float(radius) / VOXELS_PER_BLOCK)
+	height_blocks = ceili(float(height) / VOXELS_PER_BLOCK)
 
 
 ## Maillage du modele, construit une fois et garde.
@@ -325,4 +340,4 @@ func values(rotation: int) -> PackedByteArray:
 func _to_string() -> String:
 	return "%s %dx%dx%d voxels (%.2f bloc de haut), %d pleins, rayon %d" % [
 		name, extent.x, extent.y, extent.z,
-		float(height) / float(VOXELS_PER_BLOCK), voxel_count, radius]
+		float(height) / VOXELS_PER_BLOCK, voxel_count, radius]
