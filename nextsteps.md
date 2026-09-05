@@ -25,7 +25,7 @@ ne s'ouvre pas proprement (il est déclaré dans `project.godot`).
 ## 2. Commandes
 
 ```
-# Suite de validation (256 vérifications, ~75 s)
+# Suite de validation (271 vérifications, ~75 s)
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd
 
 # Réimport après ajout d'un class_name (sinon l'éditeur ne le voit pas)
@@ -76,17 +76,28 @@ biome, **Échap** rend la souris puis quitte.
 
 ## 3. État
 
-Jalon 1 (le monde) : **1.1 à 1.6, 1.8, 1.9 et 1.10 faits ; seul 1.7 reste à
-moitié.**
+Jalon 1 (le monde) : **complet.** 1.1 à 1.10 sont portés, testés et vus en jeu.
 
-**1.7 — contenu de biome, à moitié.** La mécanique de dispersion est en place,
-conforme aux deux fréquences de l'original, testée, l'échelle est fixée, et les
-28 modèles du lot de flore sont livrés, intégrés et visibles en jeu (39 fichiers,
-plusieurs rôles ayant un modèle par biome). Le lot est **produit par script**
-(`tools/blender/generer_flore.py`), plus dessiné à la main. **La table des
-entités est lue** : elle est dans le `switch` de `creature_generateAppearance`.
-Reste la table type de décor → modèle de la seconde voie de pose, celle de la
-flore basse — §6.
+**1.7 — contenu de biome, fait** (2026-09-05, au soir). La mécanique de
+dispersion était en place depuis le 2026-09-04 ; ce qui manquait était le
+*quoi*. **La table type de décor → modèle est trouvée**, et elle n'était dans
+aucune fonction : elle est dans le **tableau des slots de chargement** de
+`GameController`, qui range 2 449 modèles `.cub` à des indices qui ne suivent
+pas l'ordre de chargement. La relation est `slot = 2418 + type`, tenue par cinq
+recoupements pris dans trois fonctions — le roseau sur sol humide, les deux
+nénuphars sur l'eau, les huit enseignes pour les huit genres de bâtiment, le
+lierre et les rosiers de mur, l'art incan. La réserve est dite en clair dans
+`docs/systems/02`, §8.5 : la même base ne tient pas sous le type 22.
+
+Portée dans `CWDecorRules`. Trois choses en sont sorties : **il y a deux crêtes
+de sélection à 0,01 et non une** (décalages `(9843, 8437)` et
+`(34234, 234234)`, famille puis variante — leurs signes ne s'accordent que
+50,8 % du temps, donc la seconde porte bien une information propre) ; **le
+second seuil est biaisé** (`n2 <= 0,5`), ce qui garde le minoritaire à une fois
+sur quatre ; **les échelles disent la taille du rôle**, 0,075 étant la référence
+— soit exactement `3/40`, le rapport de ce projet. `CWScatter._choose` et sa
+parité d'indice, qui étaient une invention de ce projet, sont retirés.
+`CWModelLibrary` passe d'une table par biome à une table **par rôle**.
 
 **1.8 — édition et persistance, fait.** Creuser, poser, interroger, et le seul
 diff sur le disque.
@@ -128,6 +139,7 @@ src/worldgen/
   cw_voxel_model.gd        modèle .vox préparé : liste creuse, maillage 3/40
   cw_model_library.gd      chargement des modèles + table modèle/biome
   cw_scatter.gd            grille de dispersion 16², cellules en cache
+  cw_decor_rules.gd        rôles du décor : deux crêtes, rareté, taille (1.7)
   cw_flora_renderer.gd     instanciation de la flore (MultiMesh par cellule)
   cw_world_edits.gd        creuser, poser, interroger un bloc (jalon 1.8)
   cw_light.gd              éclairage voxel : deux passes, cases à repeindre (1.9)
@@ -138,6 +150,7 @@ src/demo/scale_board.gd    gabarit d'échelle : mires, silhouette, modèles
 src/demo/map_overlay.gd    affichage de la carte (touche M)
 tests/worldgen_test.gd     suite headless, 256 vérifications
 tests/tile_features_test.gd  la moitié qui concerne les éléments de tuile
+tests/decor_test.gd        rôles, tables croisées, composition régionale (1.7)
 tests/flora_test.gd        modèles, dispersion, maillage et pose (jalon 1.7)
 tests/edit_test.gd         règles d'édition, requête ponctuelle, persistance (1.8)
 tests/light_test.gd        les deux passes, l'atténuation, les cases à repeindre (1.9)
@@ -155,7 +168,7 @@ tools/blender/             générateur du lot de flore (Python + bpy)
 assets/palette/            palette de projet + PALETTE.md
 assets/models/flore/<biome>/  39 modèles, un dossier par biome
 assets/models/             MODELS.md (échelle, palette et conventions)
-docs/images/               gabarit d'échelle et carte photographiés en jeu
+docs/images/               gabarit, carte et composition de flore, en jeu
 ```
 
 ## 4. Invariants à ne pas casser
@@ -267,6 +280,21 @@ docs/images/               gabarit d'échelle et carte photographiés en jeu
     part sur le disque et la sauvegarde grossit comme le monde exploré au lieu
     de grossir comme ce qu'on a touché. C'est aussi le modèle de l'original, qui
     ne sérialise que les colonnes modifiées.
+22. **`CWDecorRules.FAMILIES` et `CWModelLibrary.ROLES` doivent se répondre
+    exactement.** Un rôle qu'une surface sait *choisir* mais pas *poser* ne lève
+    rien : la plante disparaît, et la densité moyenne ne bouge pas assez pour
+    se voir — un quart des candidats d'un biome peut s'évaporer en silence.
+    L'inverse, un modèle rangé sous un rôle que les deux crêtes n'atteignent
+    jamais, est plus discret encore : le fichier est chargé, maillé, et ne sort
+    pas une seule fois. Deux vérifications de `tests/decor_test.gd` tiennent les
+    deux sens, et c'est la seule chose qui les tienne.
+23. **Les tirages d'un candidat sont pris tous ensemble, avant tout test.**
+    `CWScatter._build_cell` tire ses six valeurs — position, quart de tour,
+    choix de variante, gigue, rareté — d'un bloc, puis décide. Un tirage placé
+    *après* un `continue` désynchroniserait le flux du LCG d'un candidat à
+    l'autre, et une cellule ne se reproduirait plus à l'identique selon les
+    rejets qu'elle a rencontrés — un monde qui change entre deux visites, sans
+    rien pour le signaler.
 
 ## 5. Pièges connus
 
@@ -316,302 +344,90 @@ docs/images/               gabarit d'échelle et carte photographiés en jeu
   par colonne avant d'être déplacé sur le chemin froid. Mesurer avant de
   supposer que c'est le verrou qui coûte.
 
-## 6. Prochaine tâche — jalon 1.7, contenu de biome
+## 6. Prochaine tâche — jalon 2.6, les points d'apparition
 
-**Où on en est, au 2026-09-05 au soir.** 1.9 et 1.10 sont faits ; le jalon 1 est
-complet **à l'exception de 1.7**, qui attend une seule chose : la table type de
-décor → modèle (§ « Ce qui reste »). C'est donc la tâche suivante, et elle est
-d'analyse, pas de code — trois pistes sont déjà éliminées, la cible est le
-consommateur du champ `type` de l'enregistrement de décor.
+**Où on en est, au 2026-09-05 au soir.** Le **jalon 1 est complet**. 1.7 s'est
+fermé avec la table type de décor → modèle, qui n'était dans aucune fonction :
+elle est dans le tableau des slots de chargement de `GameController`. Détail en
+`docs/systems/02`, §8.5 et §8.6 ; portage en `src/worldgen/cw_decor_rules.gd`.
 
-Si cette table résiste encore, l'autre porte ouverte est le **jalon 2.6, les
-points d'apparition** : `WorldInfo_scatterObjectsInArea` est lue et ses
-constantes sont dans `docs/systems/02`, la couche d'éléments de tuile qui les
-porte existe depuis 1.6, et la carte du jalon 1.10 sait déjà les afficher.
+La porte suivante est le **jalon 2.6, les points d'apparition**, et c'est celle
+que la feuille de route désignait déjà comme la relève :
 
-### Ce qui est fait (2026-09-04)
+- `WorldInfo_scatterObjectsInArea` (@005f56c0) est lue — elle **ne disperse pas
+  d'objets**, elle choisit la liste d'espèces d'un point d'apparition selon le
+  climat et le niveau, et écrit son résultat dans un `cube::Spawn` ;
+- les **constantes de pose sont déjà extraites** : `docs/systems/02`, §6 — pas
+  de 0x55 = 85 unités, décalage +24, gigue `rand()%10`, une tentative sur quatre
+  abandonnée d'entrée, rejet si le poids d'influence d'un élément de tuile non
+  nul et non-10 dépasse 0,3 (les poses **évitent** les éléments, sauf le
+  donjon), une chance sur quatre d'abandonner sous 0,2 d'humidité et de même
+  pour la température, espacement minimum de 20 unités, lacet initial uniforme ;
+- la **couche d'éléments de tuile** qui les porte existe depuis 1.6, et la
+  **carte du jalon 1.10 sait déjà les afficher** ;
+- le constructeur est repéré : `cube::Spawn::ctor_0` alloue **0x10f0 octets**,
+  et la boucle de pose de `World_populateRegionDecorations` en remplit les
+  champs — `+0x28` la sorte, `+0x2c` le code de type d'entité (celui du `switch`
+  de §5, donc le même espace que la flore), `+0x34` le niveau, `+0x7a` des
+  drapeaux dont `0x200` « porte un inventaire » et `0x1000`, `+0x58` un index
+  d'apparence. `creature_generateAppearance` et `creature_initBehaviorByType`
+  sont appelées juste après, ce qui donne l'enchaînement complet
+  pose → apparence → comportement.
 
-La **mécanique** de dispersion est en place, testée et mesurée. Ce qui manque
-n'est plus du code d'infrastructure, c'est la lecture du binaire.
+Ce qu'il faudra décider avant d'écrire : un point d'apparition **persiste-t-il**
+comme la découverte de la carte, ou se recalcule-t-il à la volée comme la flore ?
+L'original le recalcule par tuile et lui donne un niveau **dynamique** — le
+niveau maximum des joueurs présents, §7 —, ce qui plaide pour la seconde voie et
+évite une seconde base sur le disque.
 
-- `CWVoxelModel` : un `.vox` chargé, converti en liste creuse, quatre quarts de
-  tour précalculés, ancre au centre de l'empreinte et à la base. Plus une
-  réduction par union (`reduced(n)`), qui ne sert qu'à montrer une échelle cible.
-- `CWModelLibrary` : chargement partagé et table modèle/biome. Un modèle absent
-  du disque est ignoré en silence — la production des assets est étalée.
-- `CWScatter` : grille de cellules de 16, une graine par cellule, densité décidée
-  sur le centre de la cellule et position tirée dedans. Cellules en cache sous
-  mutex, comme les cartes de hauteurs.
-- `CWFloraRenderer` instancie : un `MultiMeshInstance3D` par modèle et par
-  cellule, cellules construites par lots sur un fil du pool, détruites au-delà
-  de la distance de vue de la flore. `CWVoxelGenerator`, lui, ne connaît plus la
-  flore du tout.
-- 30 vérifications dans la suite (`tests/flora_test.gd`) : rotations,
-  déterminisme, huit fils concurrents, pose sur le sol aux quatre quarts de
-  tour, absence de flore dans les données du terrain, coût d'une cellule.
-- **L'échelle des assets est fixée** : voir §7.1. Deux grilles, 16 voxels par
-  bloc, personnage à 2 blocs. C'était le point bloquant.
+### Ce qui reste ouvert dans le jalon 1, sans bloquer
 
-### Ce qui est fait (2026-09-05) — le lot de flore est livré et intégré
+- **Le nénuphar n'est pas porté** : le lot des 39 modèles n'en a pas, et
+  `CWPalette.surface_index` ne rend jamais `WATER`. Le rôle est identifié, la
+  branche de la source aussi (`docs/systems/02`, §8.6).
+- **Le lacet libre** de trois rôles — roseau, sous-bois humide, nénuphar. Noté
+  dans `CWDecorRules.FREE_YAW`, pas rendu : `CWVoxelModel` ne précalcule que
+  quatre quarts de tour. Il faudrait une rotation continue du maillage.
+- **La crête de placement à 0,6.** La source emploie 0,5 sur le sol humide,
+  0,6 sur le sol végétalisé, 0,7 sur l'eau ; ce projet en garde une seule à 0,5.
+  C'est un réglage de taille de plaque, et `PLACEMENT_PASS_RATE` est mesuré sur
+  0,5 : le porter demande une part passante par crête, et un budget par surface.
+- **Le décalage de cinq** entre les deux moitiés du domaine de types de décor
+  (`docs/systems/02`, §8.5). Se lèvera si le consommateur du champ `type` est
+  un jour localisé — il ne l'a pas été.
+- **Le type 13 (piton de +150) n'a pas de source.** `World_generateRegionFeatures`
+  ne le produit jamais. L'effet est porté et testé, mais aucun élément ne le
+  porte.
+- **Le palier d'un élément est reconstruit.** `formula_inverse` n'est pas résolue
+  dans le dépôt d'analyse. Sans effet sur l'altitude, mais il décide si la
+  branche de difficulté consomme un tirage, donc il décale la suite du flux.
+  Voir `CWTileFeatureGrid._tier_of`.
+- **Les types d'éléments 2, 10, 14, 15** n'ont pas été isolés ; 6 = champ de
+  rochers, 11 = massif isolé, 12 = plan d'eau, 3 = parcelle bâtie le sont.
+- **La numérotation des blocs** est presque établie :
+  `terrain_surfaceColor_blend` (@005c56e0) est la règle de surface de l'original
+  et n'écrit que cinq types — 4 par défaut, 9, 10, 12 et 6 forcé par l'appelant
+  sur la falaise. Reste à trancher lequel de ses deux paramètres climatiques est
+  la température (`docs/systems/02`, §9).
 
-Les **28 modèles** de §7.2 sont dessinés. Livrés en **39 fichiers**, rangés par
-biome : plusieurs rôles ont reçu un modèle par biome au lieu d'un fichier
-partagé — trois `caillou_01` (prairie, neige, roche), quatre `broussaille`, deux
-`champignon`, trois `lierre`. C'est mieux que ce que prévoyait §7.2, et
-`CWModelLibrary.FLORA` porte donc maintenant des **chemins**, dossier de biome
-compris.
-
-Trois choses ont dû être réparées pour que le lot arrive en jeu :
-
-1. **La palette.** Les 39 fichiers étaient peints sur une palette rééchantillonnée
-   par MagicaVoxel (la planche de référence glissée sur le nuancier), donc avec
-   les bonnes teintes aux **mauvais index** — et le rendu ne lit que l'index.
-   Ils seraient sortis peints en couleurs de créatures et de structures, sans le
-   moindre message d'erreur. Remis dans la palette de projet par
-   `tools/repaint_models.gd`, qui réécrit index *et* palette embarquée : rouverts
-   dans MagicaVoxel, les fichiers portent désormais la bonne palette. La cause et
-   le geste correct — **ouvrir `assets/palette/zentarys_palette.vox`**, jamais
-   glisser le PNG de référence — sont dans `assets/palette/PALETTE.md`.
-2. **Deux plages de palette étaient inutilisables.** La réserve de terrain 14-31
-   était vide : les six cailloux se rabattaient tous sur `STONE`. Et rien dans la
-   palette n'était froid et saturé : le corail se rabattait sur le vert de
-   prairie. La réserve de terrain est remplie (roche, grès, argile, basalte,
-   roche lichénée, lave) et deux entrées aquatiques (170-171) sont prises sur la
-   rampe des champignons. Le **découpage** des plages n'a pas bougé.
-3. **Les noms.** `caillou_1`/`caillou_2` → `caillou_01`/`caillou_02`, et
-   `cactus_01_grille48`/`cactus_02_grille32` → `cactus_01`/`cactus_02` : la
-   taille du gabarit ne se met pas dans le nom, elle est libre.
-
-Trois vérifications de plus (116 au total) : chaque entrée de la table existe sur
-le disque, aucun modèle ne porte d'index translucide, la réserve de terrain est
-renseignée. Le gabarit d'échelle range les modèles par rangées de dix, sinon
-trente-neuf modèles en file font cent vingt blocs de large et le gros plan n'en
-cadre plus trois. Images refaites dans `docs/images/`.
-
-### Fait (2026-09-05) — première passe sur `WorldInfo_generateBiomeContent`
-
-Analysée, note complète dans **`docs/systems/02_contenu_de_biome.md`**. Les
-4 200 lignes sont cartographiées, pas portées. Ce qu'il faut en retenir ici :
-
-- **elle ne disperse pas de flore.** Ce n'est pas « le contenu de biome » mais le
-  **constructeur d'une cellule de 256 × 256 colonnes** — terrain fin, couleur,
-  déformations, points d'apparition. Chercher la table modèle/biome dedans était
-  une impasse ;
-- **piège de lecture à ne pas redécouvrir** : Ghidra type les bornes de boucle en
-  `float *`, donc `+ 0x40` est de l'arithmétique de pointeur = **+256 unités**.
-  Une lecture littérale fait croire que la fonction ne traite qu'un seizième de
-  sa cellule ;
-- **second piège** : les comparaisons de type sont rendues en flottants
-  dénormaux. `n × 1.4013e-45` est l'entier `n`. Sans ce décodage la fonction est
-  illisible ;
-- le **champ de densité de végétation** est extrait avec ses constantes exactes
-  (quatre octaves, deux crêtes) — `docs/systems/02`, §3 ;
-- **`terrain_generateColumnColor` ne rend pas une couleur mais une hauteur de
-  colonne.** Troisième nom trompeur du dépôt d'analyse ;
-- le portage du jalon 1.6 est **corroboré indépendamment** : stride `0x68`, base
-  `+0x14018`, ordre `tz + tx·8`, type à `+0x18`.
-
-**Identité des types d'éléments de tuile** (la question ouverte du jalon 1.6) :
-6 = champ de rochers, 11 = massif isolé, 12 = plan d'eau, 3 = parcelle bâtie.
-Les types 2, 10, 14, 15 restent à isoler. Le type 9, comme le 13, est traité par
-la fonction mais jamais produit par `World_generateRegionFeatures`.
-
-### Fait (2026-09-05, seconde passe) — la table modèle/biome est trouvée
-
-Elle n'était dans **aucune** des deux fonctions au nom prometteur.
-`World_generateVegetationCluster` (@005d8750) ne disperse pas de végétation :
-c'est le *résolveur de contenu d'une tuile* — il vide les poses des 8 × 8
-cellules, lit le type de l'élément, en tire une « sorte » de contenu, choisit la
-meilleure cellule par poids d'influence et fixe un compte d'objets. Troisième
-nom trompeur du lot.
-
-La table est le `switch` d'apparence de **`creature_generateAppearance`**
-(`game_misc.cpp:3197`), croisé avec les slots de chargement de `GameController`
-(`vector_at_stride4(slot)` après chaque `"nom.cub"`). Tout est en
-`docs/systems/02`, §5.
-
-> **Flore, filons et créatures sont un seul espace de types d'entités.** Codes
-> 120–130 = plantes, 131–139 = filons, 145–155 = poissons, en dessous les
-> créatures. Une touffe d'herbe et un ours sont la même sorte d'objet. **La
-> décision du 2026-09-04 de sortir la flore des données voxels est confirmée par
-> la source** — pour une raison qui n'avait pas été anticipée.
-
-Deux recoupements qui valident du travail déjà fait :
-
-- les **boîtes englobantes** du `switch` sont en blocs de terrain et collent à
-  l'échelle fixée ici : `thorn-tree` 12 blocs, `cactus1` 4, buisson 2 (= le
-  personnage). Le `cactus_01` livré, à 48 voxels = 3 blocs, est dans le bon
-  ordre de grandeur ;
-- la sélection se fait sur le **type de bloc de surface**, pondérée par
-  température et humidité, jamais sur un identifiant de biome — c'est exactement
-  la forme de `CWPalette.surface_index`.
-
-**Verrou avant de porter la table** : la numérotation des blocs de l'original
-n'est pas celle de `CWPalette` (ici `AIR = 0`, `WATER = 12`, `SWAMP = 10` ; dans
-l'original `0` = air et `2` = eau). Recopier la table telle quelle mettrait des
-cactus dans les marais. Établir la correspondance d'abord.
-
-### Fait (2026-09-05, troisième passe) — la seconde voie de pose
-
-**Il y a bien deux voies.** Les plantes à silhouette (buissons, cactus, arbres)
-sont des **entités** à code de type. La flore basse (herbe, fleurs, algues,
-corail, roseaux) est du **décor instancié** sans entité, sans comportement,
-produit dans la même passe que le terrain — en fin de boucle de colonne de
-`generateBiomeContent` — et poussé par `ChunkBuffer_loadAndNotify` (@005c03f0).
-L'enregistrement est reconstruit : type à +0, échelle à +32, lacet à +36,
-drapeaux à +56. Détail complet en `docs/systems/02`, §8.
-
-> **Le rapport de 16 est confirmé par une constante du binaire.** Les échelles
-> de décor sont 0,075 / 0,09 / 0,1, et **0,075 = 1/13,333 exactement** — la
-> même valeur que la mesure au pixel de §7.1, obtenue par un chemin
-> entièrement différent. La mesure à l'œil était juste. Nos modèles sont 20 %
-> plus fins que l'original à bloc égal ; `VOXELS_PER_BLOCK = 16` reste
-> délibéré, mais l'écart est maintenant chiffré au lieu d'être supposé.
-
-**Les deux améliorations repérées ici ont été faites le même jour** — voir la
-cinquième passe ci-dessous : gigue d'échelle par instance, et les deux
-fréquences de bruit.
-
-### Fait (2026-09-05, quatrième passe) — le lot de flore redessiné à 40/3
-
-Le passage de 16 à 40/3 voxels par bloc rendait le lot précédent faux à 20 %, et
-neuf de ses modèles étaient des tapis d'un ou deux voxels (cf. §8, point clos).
-Les 39 fichiers ont donc été **refaits par script** plutôt qu'à la main, d'après
-`docs/prompt_generation_flore.md` : `tools/blender/generer_flore.py`, une graine
-en dur par modèle, le lot se regénère à l'identique.
-
-Ce que le générateur verrouille, et qui était justement ce qui avait cassé :
-
-- **la palette** est le bloc `RGBA` de `assets/palette/zentarys_palette.vox`,
-  recopié octet pour octet dans chaque fichier, avec un témoin sur l'index 128 ;
-- **les index** hors des plages végétation (128-175) et terrain (1-11, 14-31)
-  sont refusés à l'écriture — l'air et l'eau translucide compris ;
-- **l'enveloppe** (53 voxels de haut, 26 de rayon) l'est aussi.
-
-Répartition du travail : Python direct pour ce qui est une ligne d'un voxel
-(brins, tiges, corolles, cailloux, étoile de mer), `bpy` là où il paye — courbes
-à rayon variable pour les lianes, les branches et les algues, métaballes pour la
-frondaison des buissons, `Simple Deform` pour les courbures — puis
-échantillonnage du maillage évalué sur la grille entière par
-`closest_point_on_mesh` : distance à la surface pour ce qui doit rester mince,
-distance signée par la normale pour les quatre volumes pleins du lot (les deux
-cactus, le grès, les cailloux).
-
-Résultat : 117 vérifications, 0 échec ; `inspect_model.gd` ne signale aucun index
-hors plage sur les 39. Les hauteurs vont de 6 voxels (`etoile_de_mer`) à 45
-(`cactus_01`, 3,4 blocs, au-dessus de la tête du personnage). Images de référence
-de `docs/images/` refaites sur ce lot.
-
-Les six modèles les moins sûrs, à regarder à l'œil avant de les tenir pour
-acquis : `sable_desert/gres` (3 640 voxels pleins pour peu de silhouette),
-`jungle/liane` et `jungle/vrille` (deux torsades qui risquent de se ressembler
-en jeu), les deux `lierre` (même générateur, seules les teintes changent),
-`gravier_fond_marin/algue` (le mélange turquoise/vert imposé par la table peut
-lire comme du bruit) et `toundra/broussaille` (la table ne lui laisse que
-139-145, donc ses branches sont vertes faute de rampe d'écorce).
-
-### Fait (2026-09-05, cinquième passe) — les deux fréquences sont portées
-
-`CWScatter` disperse désormais selon les deux lois lues en §8.4 de
-`docs/systems/02`, et `CWFloraRenderer` applique la gigue d'échelle. Trois
-choses ont été apprises en le faisant, et aucune n'était dans le plan.
-
-**La crête à 0,05 est le mécanisme de groupement — il n'y en a pas d'autre.**
-La dette « la flore vient par grappes, un tirage uniforme ne sait pas le faire »
-était ouverte depuis le 2026-09-04. Elle se ferme sans une ligne de code de
-groupement : `|bruit(x·0,05 + 9843, z·0,05 + 8437)| > 0,5` passe **29,2 %** de
-la surface, en plaques de **19,1 blocs** — la longueur d'onde 1/0,05, soit plus
-qu'une cellule de dispersion de 16. Des cellules entières sont donc dans une
-plaque ou dans un vide. Mesuré après portage : **variance/moyenne = 14,3** par
-cellule contre ~1 pour un tirage uniforme, et 195 cellules vides sur 576.
-
-**La rareté entière n'est pas portée, et ce n'est pas un oubli.** L'original
-visite chaque colonne et garde `rand()%8 == 0` de celles qui sont dans une
-plaque : 256 échantillonnages de colonne par cellule, ~19 ms — hors budget.
-`CWScatter` tire un budget de candidats et ne paie la colonne qu'après la crête.
-Même moyenne, et le calcul le vérifie : 256 × 0,2917 × 1/8 = **9,3 plantes par
-cellule**, contre les **9,8** que donnait la densité posée au jugé dans
-`CWModelLibrary`. Deux chemins entièrement indépendants sur le même nombre.
-Ajouter quand même un `%8` par candidat ne ferait rien : filtrer au hasard des
-positions déjà tirées au hasard rend des positions au hasard.
-
-**Le test de signe se généralise par la parité de l'indice.** Couper la liste en
-deux moitiés contiguës — le réflexe — donne une région à 40 % de cailloux et une
-sans aucun, parce que la table groupe les modèles par nature et que les deux
-cailloux de l'herbe se suivent en fin de liste. C'est une propriété de l'*ordre
-de la table*, qui est provisoire, pas du mécanisme. **Le défaut s'est vu sur une
-capture en jeu, pas dans un test** — aucune des 124 vérifications ne l'attrapait,
-et aucune ne l'attraperait aujourd'hui : c'est du ressort de l'œil.
-
-Deux corrections faites en chemin :
-
-- **`PLACEMENT_PASS_RATE` mesuré trop près.** 250 000 colonnes autour du point de
-  départ donnent 0,3012 ; un million réparties sur quatre régions éloignées
-  donnent **0,2917**, et la part varie de 0,274 à 0,304 selon la région. Trois
-  points d'erreur sur la constante qui compense le budget, c'est 10 % de flore en
-  moins partout. Une constante mesurée sur une seule région ne vaut rien.
-- **`MAX_PER_CELL` porté de 32 à 64.** Avec le budget divisé par la part
-  passante, la jungle tire jusqu'à 50 candidats : à 32, le plafond ne gardait
-  plus, il rabotait — une cellule entièrement dans une plaque perdait un tiers de
-  sa flore en silence.
-
-Coût : la cellule de flore passe de 1,07 à **1,29 ms**, toujours hors du fil
-principal. 124 vérifications, dont 7 nouvelles sur la forme de la distribution —
-ce sont des vérifications statistiques, parce que le fait à tenir n'est la
-valeur d'aucune plante mais la variance de l'ensemble.
-
-### Ce qui reste — la table type de décor → modèle
-
-Seule inconnue de la seconde voie. Trois pistes sont déjà **éliminées**, et
-`docs/systems/02` §8.5 le dit pour qu'on ne les refasse pas : les slots de
-modèles de flore n'apparaissent que dans le chargeur ; le registre entier de
-`World.cpp` ne contient que 12 pièces de charpente ; `SpriteManager` ne porte
-aucune table ; et aucune base d'index fixe ne tient. La cible est le
-**consommateur du champ `type` (+0)** de l'enregistrement de décor.
-
-En attendant, la répartition de §7.2 et les densités de `CWModelLibrary.DENSITY`
-restent des propositions de bon sens ; les remplacer coûte quelques lignes.
+Un cache disque du terrain reste prématuré : la couche d'éléments de tuile écrit
+encore dans les données du monde, et c'est elle qui bougerait la première.
 
 | fonction | adresse | rôle |
 |---|---|---|
-| `creature_generateAppearance` | `game_misc.cpp:3197` | **la table** : code d'entité → modèle + boîte |
-| `WorldInfo_generateBiomeContent` | `@005e4850` | constructeur de cellule 256², choix des plantes par type de sol |
-| `World_generateVegetationCluster` | `@005d8750` | résolveur de contenu d'une tuile |
-| — son appelant de haut niveau | `game_misc.cpp:42457` | pilote le contenu et la finalisation |
-| `World_populateRegionDecorations` | `game_misc.cpp:36135` | bâtisseur de village, sites de région 3 et 5 seulement (jalon 4.3) |
-| `World_carveTerrainFeatureA` / `B` | `game_misc.cpp:35597` / `35872` | formes creusées : rochers, massifs |
-| `World_generateWaterOrPathFeature` | `@005df960` | plans d'eau (type 12) |
-| `WorldInfo_placeStructure` | `@005f0ce0` | placement de structures (jalon 4) |
+| `WorldInfo_scatterObjectsInArea` | `@005f56c0` | **la cible de 2.6** : choix d'espèce d'un point d'apparition |
+| `cube::Spawn::ctor_0` | — | l'enregistrement, 0x10f0 octets |
+| `creature_generateAppearance` | `game_misc.cpp:3197` | code d'entité → modèle + boîte (`docs/systems/02`, §5) |
+| `creature_initBehaviorByType` | — | l'arbre de comportement, jalon 2.2 |
+| `World_generateVegetationCluster` | `@005d8750` | résolveur de contenu d'une tuile : combien d'objets, dans quelle cellule |
+| `World_populateRegionDecorations` | `@005cc510` | bâtisseur de village, sites de région 3 et 5 (jalon 4.3) |
+| `WorldInfo_placeStructure` | `@005f0ce0` | placement de structures et de leur décor (jalon 4) |
+| `terrain_surfaceColor_blend` | `@005c56e0` | la règle de surface d'origine |
 
-**Deux noms trompeurs relevés à l'analyse**, à ne pas redécouvrir :
-
-- **`WorldInfo_scatterObjectsInArea` (@005f56c0) ne disperse pas d'objets.** Elle
-  échantillonne température et humidité, puis empile des identifiants dans un
-  vecteur selon le climat et le niveau ; son résultat est écrit dans un objet
-  `cube::Spawn` fraîchement construit. C'est le **choix d'espèce d'un point
-  d'apparition** — jalon 2.6, pas 1.7. La feuille de route la listait comme la
-  seconde source de 1.7 : c'est corrigé.
-- **`World_generateTreeRecursive` (@005d9460) ne génère pas d'arbres.** Le corps
-  est de la gestion de cellules de région et de `cube::Spawn` (décalages de 3 et
-  6 bits, bornes 0x2000 et 0x400). Le générateur d'arbres est ailleurs, sans
-  doute inliné dans `generateBiomeContent`.
-
-Ce qui reste ouvert dans la couche 1.6, à reprendre si l'occasion se présente :
-
-- **Le type 13 (piton de +150) n'a pas de source.** `World_generateRegionFeatures`
-  ne le produit jamais. L'effet est porté et testé, mais aucun élément ne le
-  porte. Chercher côté client, ou dans une passe non identifiée.
-- **Le palier d'un élément est reconstruit.** `formula_inverse` n'est pas
-  résolue dans le dépôt d'analyse. Sans effet sur l'altitude, mais il décide si
-  la branche de difficulté consomme un tirage, donc il décale la suite du flux.
-  Voir `CWTileFeatureGrid._tier_of`.
-- **`World_findNearestEntityInRegion` a un nom trompeur** : c'est la recherche
-  du site de région le plus proche du point déformé, portée en
-  `CWTerrainField.nearest_site`. Rien à voir avec les entités.
-
-Un cache disque du terrain reste prématuré tant que 1.7 n'est pas figé — non
-plus à cause de la flore, qui a quitté les données du monde, mais parce que la
-couche d'éléments de tuile, elle, y écrit encore.
+**Onze noms trompeurs** ont été relevés dans le dépôt d'analyse ; ils sont
+listés dans `docs/ROADMAP.md`, §1.7, « correction de sources ». Les deux qui
+comptent pour la suite : `WorldInfo_scatterObjectsInArea` **ne disperse pas
+d'objets** et `World_generateTreeRecursive` **ne génère pas d'arbres**.
 
 ## 7. Assets voxels
 
@@ -893,3 +709,15 @@ terrain réellement généré), au jalon 4. Pas un éditeur généraliste.
 - Les arêtes du graphe de sites ne sont **pas** le tracé des routes : le type 1
   est un élément unique par zone, posé sur son site. `site_edge_radius` reste
   donc à 0, et l'hypothèse notée au jalon 1.5 est close.
+- **La gigue d'échelle de 1× à 2× est appliquée partout ici, nulle part dans la
+  source.** L'original ne la tire que sur le décor immergé ; ailleurs il écrit
+  une échelle fixe ou une petite plage par type. Elle est gardée parce que notre
+  lot a moins de variantes par rôle et que le champ se lirait comme un motif
+  répété sans elle — mais c'est une décision de ce projet, et elle se multiplie
+  désormais au rapport de taille du rôle (`CWDecorRules.SCALE_RATIO`), ce qui
+  porte une instance de caillou jusqu'à 2,9× son modèle.
+- **Les feuilles de `CWDecorRules.FAMILIES` sont réattribuées, pas lues.** Trois
+  branches viennent mot pour mot de la source — sol tempéré, sol chaud, fond
+  marin ; les six autres lignes rangent nos surfaces dans la forme de la règle.
+  Les changer coûte une ligne, et rien dans la source ne les contraint : c'est
+  le bon endroit où ajuster ce qui se voit mal en jeu.

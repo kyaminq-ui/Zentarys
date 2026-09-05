@@ -46,14 +46,15 @@ func _test_models() -> void:
 	# La table de repartition ne doit viser que des biomes que le generateur
 	# sait produire : une entree pour un index de surface inexistant ne leve
 	# rien, elle ne sert simplement jamais.
+	var flora: Dictionary = CWModelLibrary.flora()
 	var bad_surface: Array = []
-	for surface in CWModelLibrary.FLORA:
+	for surface in flora:
 		if CWPalette.name_of(surface) == "?":
 			bad_surface.append(surface)
 	_ok("la table de repartition ne vise que des surfaces reelles",
 			bad_surface.is_empty(), str(bad_surface))
 	var no_density: Array = []
-	for surface in CWModelLibrary.FLORA:
+	for surface in flora:
 		if CWModelLibrary.density_of(surface) <= 0.0:
 			no_density.append(CWPalette.name_of(surface))
 	_ok("chaque biome garni a une densite", no_density.is_empty(), str(no_density))
@@ -65,8 +66,8 @@ func _test_models() -> void:
 	# plante d'un biome sans que rien ne le dise.
 	var missing: Array = []
 	var entries: int = 0
-	for surface in CWModelLibrary.FLORA:
-		for entry in CWModelLibrary.FLORA[surface]:
+	for surface in flora:
+		for entry in flora[surface]:
 			entries += 1
 			var path: String = CWModelLibrary.FLORA_DIR + entry + ".vox"
 			if not FileAccess.file_exists(path) and not missing.has(entry):
@@ -401,6 +402,13 @@ func _test_two_frequencies(sc: CWScatter, cx0: int, cz0: int) -> void:
 			mean > 3.0 and mean < 20.0, "%.1f par cellule" % mean)
 
 	# -- La gigue d'echelle ---------------------------------------------------
+	# Depuis le portage des roles, l'echelle d'une instance est le produit de
+	# deux facteurs : la gigue de 1x a 2x, et le rapport de taille du role — un
+	# caillou est a 1,45x, du sous-bois a 0,85x, comme dans la source. Les
+	# bornes sont donc celles du produit, et c'est bien ce produit qui entre
+	# dans la marge de `placements_in` et dans les boites de visibilite.
+	var scale_lo: float = CWScatter.SCALE_MIN * _min_ratio()
+	var scale_hi: float = CWScatter.SCALE_MAX * CWDecorRules.SCALE_RATIO_MAX
 	var out_of_range: int = 0
 	var seen: int = 0
 	var lo: float = 99.0
@@ -409,8 +417,10 @@ func _test_two_frequencies(sc: CWScatter, cx0: int, cz0: int) -> void:
 		for dx in 24:
 			for pl in sc.cell(cx0 + dx, cz0 + dz):
 				seen += 1
-				var under: bool = pl.scale < CWScatter.SCALE_MIN - 0.001
-				var over: bool = pl.scale > CWScatter.SCALE_MAX + 0.001
+				var under: bool = pl.scale < scale_lo - 0.001
+				var over: bool = pl.scale > scale_hi + 0.001
+				if pl.scale > CWScatter.SCALE_MAX * CWDecorRules.scale_ratio_of(pl.role) + 0.001:
+					over = true
 				if under or over:
 					out_of_range += 1
 				lo = minf(lo, pl.scale)
@@ -419,36 +429,44 @@ func _test_two_frequencies(sc: CWScatter, cx0: int, cz0: int) -> void:
 		_skip("gigue d'echelle", "aucune plante autour du point de depart")
 		return
 	print("     gigue d'echelle sur %d instances : %.3f a %.3f" % [seen, lo, hi])
-	_ok("la gigue d'echelle reste dans [1, 2]", out_of_range == 0,
+	_ok("l'echelle reste dans [%.2f, %.2f], rapport de role compris"
+			% [scale_lo, scale_hi], out_of_range == 0,
 			"%d hors bornes" % out_of_range)
+	# Le plus grand rapport de la table doit etre la valeur annoncee : c'est
+	# elle qui dimensionne les marges, et une entree plus grande ajoutee sans
+	# la suivre ferait disparaitre les plus grosses touffes des bordures.
+	var worst: float = 0.0
+	for r in CWDecorRules.SCALE_RATIO:
+		worst = maxf(worst, CWDecorRules.SCALE_RATIO[r])
+	_ok("SCALE_RATIO_MAX couvre toute la table",
+			absf(worst - CWDecorRules.SCALE_RATIO_MAX) < 1e-6,
+			"table %.3f, annonce %.3f" % [worst, CWDecorRules.SCALE_RATIO_MAX])
 	# Deux touffes du meme modele a la meme taille, c'est le motif repete que la
 	# gigue existe pour casser : on verifie qu'elle couvre reellement sa plage.
 	_ok("la gigue couvre sa plage, elle n'est pas figee",
 			hi - lo > 0.8, "etendue %.3f" % (hi - lo))
 
-	# -- La frequence de selection --------------------------------------------
-	# 0,01 decide *laquelle* : deux regions distantes de plusieurs centaines de
-	# blocs ne doivent pas tirer la meme composition. Le test compare la moitie
-	# de liste designee par le signe du bruit — un indice sur deux — ce qui est
-	# la decision portee ; comparer des noms melangerait la selection et le biome.
-	var halves: Dictionary = {}
-	for step in 40:
+	# -- Les deux cretes de selection -----------------------------------------
+	# 0,01 decide *lequel* : la premiere crete tranche la famille, la seconde la
+	# variante. Deux regions distantes de plusieurs centaines de blocs ne doivent
+	# pas tirer le meme role ; a l'interieur d'une region, le role doit tenir.
+	var roles_seen: Dictionary = {}
+	for step in 400:
 		var wx: int = (cx0 << CWScatter.CELL_SHIFT) + step * 137
-		var region: float = CWValueNoise.sample(
-				float(wx) * CWScatter.SELECTION_FREQ + CWScatter.SELECTION_OFFSET_X,
-				float(cz0 << CWScatter.CELL_SHIFT) * CWScatter.SELECTION_FREQ
-						+ CWScatter.SELECTION_OFFSET_Z)
-		halves[region < 0.0] = true
-	_ok("la frequence de selection designe les deux moities selon la region",
-			halves.size() == 2, str(halves.keys()))
-	# Et elle doit etre stable *dans* une region : une selection qui rebondirait
-	# d'une colonne a l'autre serait un second tirage uniforme, pas une composition.
+		roles_seen[CWDecorRules.role_at(CWPalette.GRASS, wx,
+				cz0 << CWScatter.CELL_SHIFT)] = true
+	_ok("les deux cretes donnent plus d'un role sur la prairie",
+			roles_seen.size() >= 2,
+			str(roles_seen.keys().map(func(r): return CWDecorRules.name_of(r))))
+	# Et la selection doit etre stable *dans* une region : un role qui
+	# rebondirait d'une colonne a l'autre serait un second tirage uniforme, pas
+	# une composition.
 	var flips: int = 0
-	var prev: int = CWScatter._choose(4, cx0 << CWScatter.CELL_SHIFT,
-			cz0 << CWScatter.CELL_SHIFT, 0.1) % 2
+	var prev: int = CWDecorRules.role_at(CWPalette.GRASS,
+			cx0 << CWScatter.CELL_SHIFT, cz0 << CWScatter.CELL_SHIFT)
 	for step in range(1, 60):
-		var here: int = CWScatter._choose(4,
-				(cx0 << CWScatter.CELL_SHIFT) + step, cz0 << CWScatter.CELL_SHIFT, 0.1) % 2
+		var here: int = CWDecorRules.role_at(CWPalette.GRASS,
+				(cx0 << CWScatter.CELL_SHIFT) + step, cz0 << CWScatter.CELL_SHIFT)
 		if here != prev:
 			flips += 1
 		prev = here
@@ -595,12 +613,20 @@ func _bench_cells(sc: CWScatter, origin: Vector2i) -> void:
 func _distinct_models(lib: CWModelLibrary) -> Array:
 	var seen: Dictionary = {}
 	var out: Array = []
-	for surface in CWModelLibrary.FLORA:
+	for surface in CWModelLibrary.flora():
 		for m in lib.for_surface(surface):
 			if not seen.has(m.name):
 				seen[m.name] = true
 				out.append(m)
 	return out
+
+
+## Le plus petit rapport de taille de role : borne basse de l'echelle possible.
+func _min_ratio() -> float:
+	var lo: float = 1.0
+	for r in CWDecorRules.SCALE_RATIO:
+		lo = minf(lo, CWDecorRules.SCALE_RATIO[r])
+	return lo
 
 
 func _flora_voxels(buf: VoxelBuffer) -> int:

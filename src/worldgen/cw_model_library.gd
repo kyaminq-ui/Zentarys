@@ -1,16 +1,17 @@
 class_name CWModelLibrary
 extends RefCounted
 
-## Bibliotheque des modeles voxels, et table de repartition par biome.
+## Bibliotheque des modeles voxels, et table de repartition par surface et par
+## role.
 ##
 ## Un seul exemplaire partage par tous les fils de generation : les modeles sont
 ## en lecture seule une fois charges, seule la construction est protegee.
 ##
-## RESERVE. La table `FLORA` ci-dessous est une **proposition de bon sens**, pas
-## une lecture du binaire : l'affectation reelle vit dans
-## `WorldInfo_generateBiomeContent` (@005e4850), pas encore analysee. La *liste*
-## des modeles, elle, est sure — elle vient des noms de modeles charges par
-## l'original. Reaffecter un modele coute une ligne ici.
+## La *liste* des modeles vient des noms charges par l'original ; la *repartition*
+## suit desormais ses roles de decor (`CWDecorRules`, `docs/systems/02` §8.6).
+## Quel fichier tient quel role sur quelle surface reste une decision de ce
+## projet — la source range par role, pas par nom de fichier. Reaffecter un
+## modele coute une ligne ici.
 ##
 ## Un modele absent du disque est ignore en silence : la production des assets
 ## est etalee, et un monde a moitie fleuri vaut mieux qu'un monde qui ne se
@@ -31,8 +32,8 @@ extends RefCounted
 const FLORA_DIR: String = "res://assets/models/flore/"
 
 ## Densite de dispersion par biome : nombre moyen de plantes par cellule de
-## dispersion (CWScatter.CELL_SIZE au carre, soit 256 colonnes). Provisoire,
-## meme reserve — la loi de densite de l'original n'est pas encore lue.
+## dispersion (CWScatter.CELL_SIZE au carre, soit 256 colonnes). Provisoire :
+## la source ne porte pas de densite par biome, elle visite chaque colonne.
 ##
 ## Doublees le 2026-09-04, avec le passage a l'echelle fine : une touffe d'herbe
 ## est passee de trois blocs de haut a un demi, donc a nombre egal le sol
@@ -57,29 +58,88 @@ const DENSITY: Dictionary = {
 	CWPalette.GRAVEL: 2.5,
 }
 
-## Modeles candidats par biome, dans l'ordre de la table de nextsteps.md, §7.2.
-## Chemins relatifs a `FLORA_DIR`, sans l'extension.
-const FLORA: Dictionary = {
-	CWPalette.GRASS: ["herbe/herbe_01", "herbe/herbe_02", "herbe/herbe_03",
-			"herbe/buisson", "herbe/bouquet_01", "herbe/bouquet_02",
-			"herbe/fleur_bleuet", "herbe/fleur_tournesol",
-			"herbe/caillou_01", "herbe/caillou_02"],
-	CWPalette.GRASS_DRY: ["herbe_seche/herbe_seche", "herbe_seche/broussaille",
-			"herbe_seche/fleur_echinacea",
-			"herbe_seche/caillou_01", "herbe_seche/caillou_02"],
-	CWPalette.GRASS_JUNGLE: ["jungle/liane", "jungle/vrille", "jungle/lierre",
-			"jungle/feuille", "jungle/fleur_coeur", "jungle/champignon"],
-	CWPalette.SWAMP: ["marais/roseau", "marais/champignon", "marais/lierre",
-			"marais/fleur_ame"],
-	CWPalette.SAND: ["sable_desert/cactus_01", "sable_desert/cactus_02",
-			"sable_desert/broussaille", "sable_desert/gres"],
-	CWPalette.SNOW: ["neige/caillou_01", "neige/broussaille"],
-	CWPalette.TUNDRA: ["toundra/broussaille", "toundra/fleur_ginseng",
-			"toundra/caillou_01"],
-	CWPalette.STONE: ["roche/caillou_01", "roche/caillou_02"],
-	CWPalette.GRAVEL: ["gravier_fond_marin/algue", "gravier_fond_marin/corail",
-			"gravier_fond_marin/etoile_de_mer"],
+## Modeles par surface **et par role**. Les roles viennent de `CWDecorRules`,
+## qui les tire de la seconde voie de pose de l'original : le decor y porte un
+## type, et ce type dit une fonction dans le paysage — du couvert, une fleur, un
+## caillou, du sous-bois — pas un fichier. Chaque surface donne donc sa propre
+## reponse a chaque role, et c'est ce qui fait qu'un caillou de neige n'est pas
+## un caillou de prairie.
+##
+## Chemins relatifs a `FLORA_DIR`, sans l'extension. Une liste de plusieurs
+## modeles pour un meme role est departagee par le tirage d'instance : c'est la
+## seule variete qui reste locale, les deux cretes de selection etant, elles,
+## regionales.
+##
+## Ce qui a change le 2026-09-05 (seconde version) : la table etait auparavant
+## une simple liste par biome, ou la selection prenait un indice sur deux par le
+## signe d'une crete de bruit. C'etait une invention de ce projet, faute de
+## connaitre la table d'origine. Elle est connue depuis (`docs/systems/02`,
+## §8.6) : la source range son decor par role et choisit le role par deux
+## cretes. La liste par biome se deduit toujours de celle-ci — `flora()`.
+const ROLES: Dictionary = {
+	CWPalette.GRASS: {
+		CWDecorRules.Role.COUVERT: ["herbe/herbe_01", "herbe/herbe_02", "herbe/herbe_03"],
+		CWDecorRules.Role.FLEUR: ["herbe/fleur_bleuet", "herbe/fleur_tournesol",
+				"herbe/bouquet_01", "herbe/bouquet_02"],
+		CWDecorRules.Role.SOUS_BOIS: ["herbe/buisson"],
+		CWDecorRules.Role.CAILLOU: ["herbe/caillou_01", "herbe/caillou_02"],
+	},
+	CWPalette.GRASS_DRY: {
+		CWDecorRules.Role.COUVERT: ["herbe_seche/herbe_seche"],
+		CWDecorRules.Role.FLEUR: ["herbe_seche/fleur_echinacea"],
+		CWDecorRules.Role.SOUS_BOIS: ["herbe_seche/broussaille"],
+		CWDecorRules.Role.CAILLOU: ["herbe_seche/caillou_01", "herbe_seche/caillou_02"],
+	},
+	CWPalette.GRASS_JUNGLE: {
+		CWDecorRules.Role.COUVERT: ["jungle/feuille"],
+		CWDecorRules.Role.FLEUR: ["jungle/fleur_coeur"],
+		CWDecorRules.Role.SOUS_BOIS: ["jungle/liane", "jungle/vrille", "jungle/lierre"],
+		CWDecorRules.Role.RARE: ["jungle/champignon"],
+	},
+	CWPalette.SWAMP: {
+		CWDecorRules.Role.COUVERT: ["marais/lierre"],
+		CWDecorRules.Role.FLEUR: ["marais/fleur_ame"],
+		CWDecorRules.Role.ROSEAU: ["marais/roseau"],
+		CWDecorRules.Role.RARE: ["marais/champignon"],
+	},
+	CWPalette.SAND: {
+		CWDecorRules.Role.SOUS_BOIS: ["sable_desert/broussaille",
+				"sable_desert/cactus_01", "sable_desert/cactus_02"],
+		CWDecorRules.Role.CAILLOU: ["sable_desert/gres"],
+	},
+	CWPalette.SNOW: {
+		CWDecorRules.Role.CAILLOU: ["neige/caillou_01"],
+		CWDecorRules.Role.SOUS_BOIS: ["neige/broussaille"],
+	},
+	CWPalette.TUNDRA: {
+		CWDecorRules.Role.FLEUR: ["toundra/fleur_ginseng"],
+		CWDecorRules.Role.SOUS_BOIS: ["toundra/broussaille"],
+		CWDecorRules.Role.CAILLOU: ["toundra/caillou_01"],
+	},
+	CWPalette.STONE: {
+		CWDecorRules.Role.CAILLOU: ["roche/caillou_01", "roche/caillou_02"],
+	},
+	CWPalette.GRAVEL: {
+		CWDecorRules.Role.ALGUE: ["gravier_fond_marin/algue"],
+		CWDecorRules.Role.CORAIL: ["gravier_fond_marin/corail"],
+		CWDecorRules.Role.FOND: ["gravier_fond_marin/etoile_de_mer"],
+	},
 }
+
+
+## Tous les chemins d'une surface, roles confondus. Deduit de `ROLES` : la table
+## par biome n'est plus une source, elle est une vue. Sert aux outils, aux
+## captures d'inventaire et aux tests qui verifient le lot sur le disque.
+static func flora() -> Dictionary:
+	var out: Dictionary = {}
+	for surface in ROLES:
+		var paths: Array = []
+		for role in ROLES[surface]:
+			for path in ROLES[surface][role]:
+				if not paths.has(path):
+					paths.append(path)
+		out[surface] = paths
+	return out
 
 
 static var _shared: CWModelLibrary = null
@@ -88,6 +148,8 @@ static var _shared_mutex: Mutex = Mutex.new()
 var _models: Dictionary = {}
 ## Par biome : les modeles reellement disponibles sur le disque.
 var _by_surface: Dictionary = {}
+## Par surface : dictionnaire role -> modeles disponibles.
+var _by_role: Dictionary = {}
 ## Plus grand rayon horizontal, tous modeles confondus, en voxels de modele.
 var max_radius: int = 0
 var max_height: int = 0
@@ -120,14 +182,22 @@ static func reset_shared() -> void:
 
 func _load_all() -> void:
 	var palette: Resource = CWPalette.build_voxel_palette()
-	for surface in FLORA:
+	for surface in ROLES:
+		var by_role: Dictionary = {}
 		var available: Array[CWVoxelModel] = []
-		for model_name in FLORA[surface]:
-			var m: CWVoxelModel = _get_or_load(model_name, palette)
-			if m != null:
-				available.append(m)
+		for role in ROLES[surface]:
+			var models: Array[CWVoxelModel] = []
+			for model_name in ROLES[surface][role]:
+				var m: CWVoxelModel = _get_or_load(model_name, palette)
+				if m != null:
+					models.append(m)
+					if not available.has(m):
+						available.append(m)
+			if not models.is_empty():
+				by_role[role] = models
 		if not available.is_empty():
 			_by_surface[surface] = available
+			_by_role[surface] = by_role
 
 
 ## Charge un modele, ou rend celui deja en cache. La cle est le chemin : deux
@@ -148,9 +218,26 @@ func _get_or_load(model_name: String, palette: Resource) -> CWVoxelModel:
 	return m
 
 
-## Modeles disponibles pour un bloc de surface, ou un tableau vide.
+## Modeles disponibles pour un bloc de surface, roles confondus, ou un tableau
+## vide. Vue d'ensemble : la dispersion, elle, passe par `for_role`.
 func for_surface(surface: int) -> Array:
 	return _by_surface.get(surface, [])
+
+
+## Modeles disponibles pour un role sur une surface, ou un tableau vide.
+##
+## Un role sans modele sur cette surface rend un tableau vide, et la dispersion
+## laisse alors la place nue plutot que de rabattre sur un autre role : c'est le
+## comportement de la source, qui ne pose rien quand sa branche ne donne rien,
+## et c'est aussi ce qui permet de livrer un lot d'assets par etapes.
+func for_role(surface: int, role: int) -> Array:
+	var by_role: Dictionary = _by_role.get(surface, {})
+	return by_role.get(role, [])
+
+
+## Roles reellement disponibles sur une surface.
+func roles_of(surface: int) -> Array:
+	return _by_role.get(surface, {}).keys()
 
 
 func has_any() -> bool:

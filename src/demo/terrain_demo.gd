@@ -371,7 +371,7 @@ func _build_scale_board() -> void:
 	var lib := CWModelLibrary.shared()
 	var seen: Dictionary = {}
 	var flat: Array = []
-	for surface in CWModelLibrary.FLORA:
+	for surface in CWModelLibrary.flora():
 		for m in lib.for_surface(surface):
 			if not seen.has(m.name):
 				seen[m.name] = true

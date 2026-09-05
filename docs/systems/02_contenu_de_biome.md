@@ -4,12 +4,18 @@ Note d'analyse. Source : `qad3n/CubeWorld-Reversal`, reconstruction par classe d
 binaire alpha 2013. Le pseudo-code Ghidra n'est pas recopié ; seuls le
 comportement observé, les constantes et les noms de symboles le sont.
 
-**Portée.** Trois fonctions, analysées ensemble parce qu'elles ne se
+**Portée.** Cinq fonctions, analysées ensemble parce qu'elles ne se
 comprennent pas séparément : `WorldInfo_generateBiomeContent` (@005e4850,
-4 200 l), `World_generateVegetationCluster` (@005d8750, 604 l) et le `switch`
-d'apparence de `creature_generateAppearance` (game_misc.cpp:3197, 2 464 l).
-Cartographiées, pas portées. Ce qui suit est ce qui a été établi avec certitude ;
-ce qui reste ouvert est dit comme tel.
+4 200 l), `World_generateVegetationCluster` (@005d8750, 604 l), le `switch`
+d'apparence de `creature_generateAppearance` (game_misc.cpp:3197, 2 464 l),
+`WorldInfo_placeStructure` (@005f0ce0) et `terrain_surfaceColor_blend`
+(@005c56e0). Ce qui suit est ce qui a été établi avec certitude ; ce qui reste
+ouvert est dit comme tel.
+
+**La règle de sélection du décor est portée** depuis le 2026-09-05 : §8.5 donne
+la table type → modèle et §8.6 l'arbre de décision, tous deux dans
+`src/worldgen/cw_decor_rules.gd`. Le reste de la note est cartographié, pas
+porté.
 
 **Il y a deux voies de pose de la flore, pas une.** Les plantes à silhouette
 (buissons, cactus, arbres) sont des **entités** portant un code de type — §5.
@@ -412,34 +418,200 @@ Deux régularités qui valent d'être portées telles quelles :
 > en jeu avant de se voir dans un test. La parité entrelace les natures et ne
 > dépend pas de cet ordre ; pour n = 2, elle reste mot pour mot le test de signe
 > d'origine.
+>
+> **Caduc depuis le 2026-09-05 au soir.** La parité était une généralisation de
+> ce projet, faite faute de connaître la table. Elle est connue depuis — §8.5 —
+> et l'original ne généralise rien : il a **deux** crêtes de décalages
+> différents, la première pour la famille, la seconde pour la variante. La
+> parité a été retirée avec `CWScatter._choose` ; le mécanisme porté est en §8.6.
+> Ce paragraphe est gardé parce que le défaut qu'il décrit — une composition qui
+> dépend de l'*ordre* d'une table — reste le piège de tout raccourci de ce genre.
 
-### 8.5 Ce qui reste à trouver
+### 8.5 La table type de décor → modèle — trouvée (2026-09-05, sixième passe)
 
-La correspondance **type de décor → modèle** n'est pas résolue. Ce qui a été
-éliminé, pour ne pas le refaire :
+Trois pistes avaient été éliminées lors de la passe précédente, et elles le
+restent : les slots de flore n'apparaissent que dans le chargeur, le registre
+entier de `World.cpp` ne porte que douze pièces de charpente, `SpriteManager`
+ne porte aucune table. La quatrième piste — **une base d'index fixe** — avait
+été écartée trop tôt : elle tient, sur une large partie du domaine, et c'est
+elle qui donne la table.
 
-- les slots des modèles de flore (2423–2465 dans le vecteur de
-  `GameController_load_game_assets`) n'apparaissent **nulle part** ailleurs que
-  dans le chargeur : la résolution est calculée, pas littérale ;
-- le registre entier de `World.cpp` (`rbtree_findOrInsert_intKey`) ne contient
-  que **12 pièces de charpente** de bâtiment — clés 0 à 11, jalon 4.3 ;
-- `SpriteManager` ne porte aucune table ;
-- une base d'index fixe ne tient pas : aucune valeur de base ne rend cohérentes
-  à la fois la branche sous-marine (types 9/10, qui doivent donner `alga` et
-  `coral`) et les autres.
+**Le tableau des slots de modèle.** `GameController_load_game_assets` charge
+2 449 fichiers `.cub`, et l'appel qui précède chaque nom donne son **slot** :
+`vector_at_stride4(N)`. L'ordre des slots n'est **pas** l'ordre de chargement —
+les huit enseignes sont chargées dans le désordre et rangées, elles, à la
+suite —, ce qui est le premier indice que le slot porte un sens. Le décor
+occupe un bloc contigu à partir de 2423 :
 
-La cible restante est donc précise et petite : **trouver le consommateur du
-champ `type` (+0) de l'enregistrement de décor.** C'est lui qui porte la table.
+| slot | modèle | | slot | modèle |
+|---|---|---|---|---|
+| 2418 | `seahorse` | | 2443 | `sunflower` |
+| 2419-2421 | *(jamais remplis)* | | 2444 | `bean-tendril` |
+| 2422 | `key1` | | 2445-2446 | `desert-flower01/02` |
+| 2423-2424 | `flowers2`, `flowers` | | 2447-2448 | `wheat`, `corn` |
+| 2425-2427 | `grass`, `grass2`, `grass3` | | 2449-2450 | `water-lily01/02` |
+| 2428-2429 | `lava-flower`, `lava-grass` | | 2451-2458 | les **huit enseignes** |
+| 2430-2431 | `thorn-plant`, `echinacea2` | | 2459 | `ivy` |
+| 2432-2434 | `leaf`, `lantern02`, `torch` | | 2460-2461 | `wall-roses-red/white` |
+| 2435-2436 | `stone`, `stone2` | | 2462 | `christmas-tree` |
+| 2437 | `tendril` | | 2463 | `underwater-plant` |
+| 2438-2439 | `tulips-colorful`, `cornflower` | | 2464-2465 | `alga`, `coral` |
+| 2440 | `reed` | | 2466-2469 | `inca-art1..4` |
+| 2441-2442 | `pumpkin-leaves`, `pineapple-leaves` | | 2470-2477 | blasons, torches, `liana` |
+
+**La relation est `slot = 2418 + type`**, et cinq recoupements indépendants la
+tiennent — pris dans trois fonctions différentes :
+
+| type | vient de | condition de pose | modèle rendu |
+|---|---|---|---|
+| 22 | `generateBiomeContent` | bloc 3, humidité > 0,2 | `reed` — un roseau sur sol humide |
+| 31, 32 | `generateBiomeContent` | **bloc 2**, altitude > 0 | `water-lily01/02` — deux nénuphars sur l'eau |
+| 33-40 | `WorldInfo_placeStructure` | un par **genre de bâtiment** (2, 3, 4, 5, 6, 13, 14, 15) | les **huit enseignes**, dans l'ordre |
+| 41-43 | `WorldInfo_placeStructure` | `rand()%3`, au-dessus d'un vide, échelle 0,15 | `ivy`, `wall-roses-red/white` |
+| 48 | `WorldInfo_placeStructure` | décor mural de structure | `inca-art1` |
+
+Le troisième est le plus fort : huit genres de bâtiment, huit types consécutifs,
+huit enseignes consécutives, et l'ordre colle nom par nom — auberge, boutique,
+armurier, forgeron, charpentier, tisserand. Le deuxième l'est presque autant :
+deux modèles adjacents dont le nom dit l'eau, deux types adjacents, sur le bloc
+que `docs/systems/03` §4 identifie déjà comme l'eau.
+
+> **La réserve, et elle est honnête.** La même base ne tient **pas** sous 22.
+> La branche de flore basse de `generateBiomeContent` produit les types 0 à 4,
+> 11, 12 et 5 à 7 ; sous la base 2418 ils tomberaient sur `seahorse`, trois
+> slots vides et `key1` — impossible. Sous la base **2423**, en revanche, les
+> types 0 à 4 donnent exactement `flowers2`, `flowers`, `grass`, `grass2`,
+> `grass3` : les cinq couvre-sols, en tête du bloc de décor, et dans l'ordre où
+> la règle les emploie. Le type 12, plus grand (échelle 0,1-0,12), y donne
+> `stone` — un caillou.
+>
+> **Il y a donc un décalage de cinq entre les deux moitiés du domaine**, exact
+> sur tous les points mesurés (22−17, 31−26, 33−28, 41−36, 48−43). Cinq valeurs
+> de type sans modèle dans ce bloc, ou une table qui n'est pas tout à fait
+> linéaire : le consommateur n'a pas été localisé, et sans lui on ne peut pas
+> trancher. Ce qui compte pour le portage est que **les deux lectures
+> s'accordent sur la nature** de chaque décor — un roseau au bord de l'eau, des
+> nénuphars dessus, de l'herbe et des fleurs sur le sol tempéré, un caillou sur
+> le sol chaud, trois modèles immergés au fond. C'est cette nature qui est
+> portée, sous le nom de **rôle**.
+
+### 8.6 L'arbre de décision, et ce qui en est porté
+
+La branche de décor est en fin de boucle de colonne de
+`WorldInfo_generateBiomeContent` (`cube/world/WorldInfo.cpp`, ~4330-4740). Elle
+est reproduite ici avec ses constantes exactes. `bloc` est le type du bloc de
+surface, `z` l'altitude du sommet de colonne, `h` et `t` l'humidité et la
+température, `n05(dx, dz)` le bruit à 0,05 et `n01(dx, dz)` celui à 0,01.
+
+```
+bloc 3   : h > 0,2  et  |n05(9843, 8437)| > 0,5   et  rand()%8 == 0
+           -> type 22, échelle 0,09, lacet libre, drapeau 4
+
+bloc 2   : h > 0,2  et  z > 0  et  |n05(24234, 53565)| > 0,7  et  rand()%10 == 0
+           -> type 31 ou 32 (rand()%2), échelle 0,09, lacet libre
+
+blocs 4, 9, 10, 12 : |n05(9843, 8437)| > 0,6  et  rand()%8 == 0
+  z <= -5 (immergé)            lacet par quarts de tour
+      n01(9843, 8437) <= 0     -> type 7, échelle 0,1, drapeau 4
+      sinon                    -> type 5 ou 6 (rand()%2)
+                                  type 5 : échelle 0,075, drapeau 4
+      puis échelle *= 1 + rand()/32767
+  -5 < z < 1                   -> rien
+  z >= 1, bloc 4 ou 9
+      h <= 0,75                lacet par quarts de tour, échelle 0,075
+          t <= 0,5
+              n01(9843, 8437) <= 0  -> type 1 si n01(34234, 234234) <= 0, sinon 0
+              sinon                 -> type 3 si n01(34234, 234234) <= 0, sinon 2
+          t > 0,5
+              n01(9843, 8437) <= 0  -> type 1 si n01(34234, 234234) <= 0, sinon 0
+              sinon                 -> type 12 si n01(34234, 234234) > 0, sinon 4
+          types 2, 3, 4, 12 : drapeau 4 ; type 12 : échelle 0,1 + rand()*0,02/32767
+          posé si bloc == 4 ou type parmi {2, 3, 4}
+      h > 0,75
+          t <= 0,25   rand()%100 == 0 -> type 27 ou 28, échelle 0,075, quarts de tour
+          t > 0,25    lacet libre, échelle 0,075
+              n01(9843, 8437) <= 0 -> type 12 si n01(34234, 234234) <= 0,5, sinon 11
+              sinon                -> type 4 si n01(34234, 234234) > 0, sinon 3
+              type 11 : drapeau 4, échelle 0,05 + rand()*0,05/32767
+              type 12 : drapeau 4, échelle 0,1 + rand()*0,02/32767
+              posé si bloc == 4 ou type parmi {2, 3}
+```
+
+Six choses en sortent, et c'est ce qui est porté dans
+`src/worldgen/cw_decor_rules.gd` :
+
+1. **Il y a deux crêtes à 0,01, pas une.** La première, de décalage
+   `(9843, 8437)` — le même que la crête de placement à 0,05 —, tranche la
+   *famille*. La seconde, de décalage `(34234, 234234)`, tranche la *variante*.
+   Deux décalages différents, donc deux cartes différentes : mesuré ici, les
+   deux signes ne s'accordent que 50,8 % du temps, soit le hasard. Au même
+   décalage, la seconde ne dirait rien et une famille sur deux disparaîtrait.
+   **C'est le mécanisme de composition régionale**, et il était deviné jusqu'ici
+   — `CWScatter._choose` prenait un indice sur deux par le signe d'une crête
+   unique, une invention de ce projet, aujourd'hui retirée.
+2. **Le second seuil est biaisé.** `(n2 <= 0,5)` dans la branche humide, contre
+   `(n2 <= 0)` ailleurs : la variante minoritaire ne sort qu'à peu près une fois
+   sur quatre. C'est ce qui garde le caillou et le sous-bois rares au milieu de
+   l'herbe. Mesure après portage sur 4 000 points de prairie : couvert 43,5 %,
+   fleur 41,0 %, caillou 8,4 %, sous-bois 7,0 %.
+3. **Les échelles disent la taille du rôle.** 0,075 est la référence — et c'est
+   exactement `3/40`, le rapport voxel/bloc de ce projet, donc nos modèles sont
+   dessinés à la taille nominale du décor d'origine. Les écarts se lisent en
+   clair : roseau et nénuphar à 0,09 (**1,2×**), caillou à 0,1-0,12
+   (**1,33-1,6×**), sous-bois humide à 0,05-0,10 (**0,67-1,33×**). Portés dans
+   `CWDecorRules.SCALE_RATIO`.
+4. **Le lacet a deux régimes**, par quarts de tour pour ce qui pose au sol,
+   libre pour le roseau, le nénuphar et le sous-bois humide. Noté dans
+   `CWDecorRules.FREE_YAW`, **pas encore rendu** : `CWVoxelModel` ne précalcule
+   que quatre quarts de tour.
+5. **Une seule rareté est empilée sur la crête**, celle du couple 27/28 :
+   `rand()%100 == 0` *en plus* du `rand()%8` qui filtre déjà la branche. Elle
+   est portée telle quelle (`Role.RARE`). Les autres `rand()%8` et `%10` sont le
+   tirage *par colonne* que ce projet a remplacé le 2026-09-05 par un budget de
+   candidats par cellule ; les réappliquer les compterait deux fois.
+6. **Le bloc 9 ne reçoit qu'un sous-ensemble** des types que reçoit le bloc 4 —
+   c'est la condition de pose finale. Une surface secondaire porte donc moins de
+   *variété*, pas seulement moins de plantes.
+
+**Ce qui n'est pas transposable tel quel.** L'original choisit sur son type de
+bloc de surface puis affine par des seuils de climat *dans la règle* ;
+`CWPalette.surface_index` a déjà mangé le climat — la jungle et le marais y sont
+des surfaces, pas des branches. La *forme* est donc portée telle quelle et ce
+sont ses *feuilles* qui sont réattribuées à nos neuf surfaces
+(`CWDecorRules.FAMILIES`). Trois branches sont reprises mot pour mot : le sol
+tempéré (fleur contre couvert), le sol chaud (où la seconde crête fait entrer le
+minéral) et le fond marin (le test de signe entre `alga` et `coral`). Les autres
+lignes sont des affectations de ce projet, signalées comme telles dans le code.
+
+**Le nénuphar n'est pas porté** : le lot des 39 modèles n'en a pas, et la
+surface `WATER` n'est jamais rendue par `surface_index`. Les décors de mur
+(types 41-43, 48) relèvent du jalon 4.3.
+
+![La composition d'une prairie, en jeu](../images/flore_composition.png)
 
 ## 9. Ce qui reste ouvert
 
 1. **La correspondance entre les types de blocs de l'original et ceux de
-   `CWPalette`** — c'est le seul verrou avant de porter la table de §5.3.
+   `CWPalette`** — le verrou avant de porter la table de §5.3. Il s'est
+   entrouvert : `terrain_surfaceColor_blend` (@005c56e0) *est* la règle de
+   surface de l'original, l'équivalent exact de `CWPalette.surface_index`, et
+   elle n'écrit que cinq types. Par ordre d'application, le dernier gagnant :
+   **4** par défaut ; **9** si la pente est faible et le second paramètre
+   climatique > 0,75, ou si le terme de bruit à 0,01 croisé au niveau est
+   positif ; **10** si ce paramètre < 0,3 ; **12** si le poids d'influence de
+   la cellule de région dépasse 0,5 ; et **6** que l'appelant force quand le
+   facteur de falaise dépasse 0,5. Avec §5.3 (bloc 10 → `snow-bush`, bloc 12
+   → `fire-scrub`), cela donne : 4 = sol végétalisé tempéré, 6 = roche,
+   9 = second sol végétalisé, 10 = neige, 12 = sol de région spéciale,
+   2 = eau, 3 = sol humide. Reste à décider lequel de `param_5`/`param_6` est
+   la température et lequel l'humidité — Ghidra les échange plusieurs fois
+   dans la fonction, et c'est la même réserve qu'en §5.3.
 2. La composition des arbres : `fir-tree` et `thorn-tree` sont des modèles
    entiers, mais `tree-leaves` existe sans arbre feuillu correspondant. Un
    assemblage tronc + houppiers reste à confirmer.
-3. **La table type de décor → modèle**, seule inconnue restante de la seconde
-   voie : voir §8.5, qui dit où elle n'est pas.
+3. ~~La table type de décor → modèle~~ — **résolue** le 2026-09-05, §8.5 et
+   §8.6, avec une réserve documentée sur les types inférieurs à 22. Portée
+   dans `src/worldgen/cw_decor_rules.gd`.
 4. Les types d'éléments 2, 10, 14, 15 n'ont pas été isolés.
 5. `World_carveTerrainFeatureA` / `B` et `World_generateWaterOrPathFeature`
    donnent la forme des rochers, massifs et plans d'eau de §4 : non analysées.

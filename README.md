@@ -10,20 +10,23 @@ GDScript idiomatique.
 
 ## État
 
-Le système de terrain est porté et validé : bruit de valeur, LCG, sites de
-région, mélanges climatiques, champ d'altitude, réseau de chenaux, éléments de
-tuile (bourgs, cratères, caldeiras, pitons), générateur voxel et rendu en cubes
+**Le jalon 1 — le monde — est complet.** Bruit de valeur, LCG, sites de région,
+mélanges climatiques, champ d'altitude, réseau de chenaux, éléments de tuile
+(bourgs, cratères, caldeiras, pitons), générateur voxel et rendu en cubes
 colorés. S'y ajoutent une couche de flore instanciée — dispersée selon les deux
-fréquences de bruit de l'original —, l'édition du terrain avec sauvegarde du
-seul diff, l'éclairage voxel, et la carte du monde : un puzzle de régions,
-chacune la cellule de son site dans le domaine déformé, avec ses noms et sa
-découverte.
+fréquences de bruit de l'original, et **choisie par sa règle de sélection**,
+deux crêtes de bruit qui donnent à chaque région sa composition —, l'édition du
+terrain avec sauvegarde du seul diff, l'éclairage voxel, et la carte du monde :
+un puzzle de régions, chacune la cellule de son site dans le domaine déformé,
+avec ses noms et sa découverte.
 
-Du jalon 1, il ne reste que la moitié de 1.7 — quoi poser, où, à quelle densité.
+La suite est le jalon 2 : créatures, comportements, combat — en commençant par
+les points d'apparition, dont les constantes sont déjà relevées.
 
 - `docs/ROADMAP.md` — les cinq jalons, leur avancement, les mesures
 - `docs/systems/01_generation_terrain.md` — l'analyse du système de terrain
-- `docs/systems/02_contenu_de_biome.md` — contenu de biome, dispersion, entités
+- `docs/systems/02_contenu_de_biome.md` — contenu de biome, dispersion, entités,
+  table de sélection du décor
 - `docs/systems/03_colonnes_et_edition.md` — colonnes, blocs, édition, sauvegarde
 - `docs/systems/04_eclairage.md` — éclairage voxel : les deux passes
 - `docs/systems/05_carte_du_monde.md` — carte, découverte, noms de région
@@ -32,7 +35,7 @@ Du jalon 1, il ne reste que la moitié de 1.7 — quoi poser, où, à quelle den
 ## Démarrer
 
 ```
-godot --headless --path . -s tests/worldgen_test.gd   # 256 vérifications
+godot --headless --path . -s tests/worldgen_test.gd   # 271 vérifications
 ```
 
 Scène de démonstration : `scenes/terrain_demo.tscn`. Clic pour capturer la
@@ -44,6 +47,8 @@ graine ; seuls les blocs édités y sont écrits, le reste du monde se régénè
 Les cases de carte parcourues y sont gardées de même.
 
 ![La carte du monde en jeu](docs/images/carte_du_monde.png)
+
+![La composition d'une prairie](docs/images/flore_composition.png)
 
 ## Périmètre et mention légale
 

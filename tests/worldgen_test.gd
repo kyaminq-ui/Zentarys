@@ -26,6 +26,7 @@ func _initialize() -> void:
 	_test_terrain_field()
 	_test_tile_features()
 	_test_generator()
+	_test_decor()
 	_test_flora()
 	_test_edits()
 	_test_light()
@@ -295,6 +296,10 @@ const CWTileFeaturesTest := preload("res://tests/tile_features_test.gd")
 
 func _test_tile_features() -> void:
 	CWTileFeaturesTest.new().run(self)
+
+
+func _test_decor() -> void:
+	CWDecorTest.new().run(self)
 
 
 func _test_flora() -> void:
