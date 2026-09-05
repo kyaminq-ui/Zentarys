@@ -25,7 +25,7 @@ ne s'ouvre pas proprement (il est déclaré dans `project.godot`).
 ## 2. Commandes
 
 ```
-# Suite de validation (162 vérifications, ~70 s)
+# Suite de validation (256 vérifications, ~75 s)
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd
 
 # Réimport après ajout d'un class_name (sinon l'éditeur ne le voit pas)
