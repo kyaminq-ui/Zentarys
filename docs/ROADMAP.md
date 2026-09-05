@@ -301,10 +301,11 @@ Liste par biome, noms de fichiers et ordre de production dans `nextsteps.md`,
 - **28 modèles pour le jalon 1.7** ✅ **faits** (39 fichiers, un dossier par
   biome), repartis sur les neuf surfaces que `CWPalette.surface_index` sait
   produire ; plus 5 cultures pour les champs, à faire ;
-- **~14 arbres et houppiers, plus 9 filons, pour le jalon 1.11** — même chemin
-  de production que la flore : un document de commande, un script Blender, une
-  graine en dur par fichier. Les filons sont le premier lot à **1 voxel =
-  1 bloc**, parce qu'ils s'estampent dans le terrain et doivent se miner ;
+- **14 arbres et houppiers, plus 9 filons, pour le jalon 1.11** ✅ **faits**
+  (2026-09-05) — même chemin de production que la flore : un document de
+  commande, un script Blender, une graine en dur par fichier. Les filons sont le
+  premier lot à **1 voxel = 1 bloc**, parce qu'ils s'estampent dans le terrain et
+  doivent se miner ;
 - **~50 pour le jalon 4** : mobilier, artisanat, décor extérieur et de donjon ;
 - le reste (objets d'inventaire, créatures, interface) vient plus tard.
 
