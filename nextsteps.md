@@ -325,12 +325,43 @@ n'est pas celle de `CWPalette` (ici `AIR = 0`, `WATER = 12`, `SWAMP = 10` ; dans
 l'original `0` = air et `2` = eau). Recopier la table telle quelle mettrait des
 cactus dans les marais. Établir la correspondance d'abord.
 
-### Ce qui reste — la seconde voie de pose de la flore basse
+### Fait (2026-09-05, troisième passe) — la seconde voie de pose
 
-Ni `grass`, ni `flowers`, ni `alga`, ni `coral`, ni `reed` n'ont de code dans la
-plage 120–139 : ce ne sont pas des entités. Il existe donc une **seconde voie de
-pose** pour la flore basse, vraisemblablement du décor de rendu — et c'est elle
-qui dit ce que `CWFloraRenderer` devrait disperser. C'est la prochaine question.
+**Il y a bien deux voies.** Les plantes à silhouette (buissons, cactus, arbres)
+sont des **entités** à code de type. La flore basse (herbe, fleurs, algues,
+corail, roseaux) est du **décor instancié** sans entité, sans comportement,
+produit dans la même passe que le terrain — en fin de boucle de colonne de
+`generateBiomeContent` — et poussé par `ChunkBuffer_loadAndNotify` (@005c03f0).
+L'enregistrement est reconstruit : type à +0, échelle à +32, lacet à +36,
+drapeaux à +56. Détail complet en `docs/systems/02`, §8.
+
+> **Le rapport de 16 est confirmé par une constante du binaire.** Les échelles
+> de décor sont 0,075 / 0,09 / 0,1, et **0,075 = 1/13,333 exactement** — la
+> même valeur que la mesure au pixel de §7.1, obtenue par un chemin
+> entièrement différent. La mesure à l'œil était juste. Nos modèles sont 20 %
+> plus fins que l'original à bloc égal ; `VOXELS_PER_BLOCK = 16` reste
+> délibéré, mais l'écart est maintenant chiffré au lieu d'être supposé.
+
+**Deux améliorations concrètes repérées par comparaison**, à faire quand on
+reprendra `CWFloraRenderer` :
+
+1. **gigue d'échelle par instance**, `rand()/32767 + 1`, soit 1× à 2×. Nos
+   instances d'un même modèle sont toutes à la même taille ; c'est sans doute
+   ce qui sépare le plus un champ d'herbe répétitif d'un champ vivant ;
+2. **deux fréquences de bruit** dans la sélection : 0,05 décide *où* il y a de la
+   flore, 0,01 décide *laquelle*. `CWScatter` ne fait qu'un tirage par cellule.
+
+La rarete de l'original est un **tirage entier** (`rand()%8 == 0`, `%10 == 0`)
+appliqué après le seuil de bruit, pas une densité continue.
+
+### Ce qui reste — la table type de décor → modèle
+
+Seule inconnue de la seconde voie. Trois pistes sont déjà **éliminées**, et
+`docs/systems/02` §8.5 le dit pour qu'on ne les refasse pas : les slots de
+modèles de flore n'apparaissent que dans le chargeur ; le registre entier de
+`World.cpp` ne contient que 12 pièces de charpente ; `SpriteManager` ne porte
+aucune table ; et aucune base d'index fixe ne tient. La cible est le
+**consommateur du champ `type` (+0)** de l'enregistrement de décor.
 
 En attendant, la répartition de §7.2 et les densités de `CWModelLibrary.DENSITY`
 restent des propositions de bon sens ; les remplacer coûte quelques lignes.

@@ -154,11 +154,36 @@ rareté des filons comprise, en `docs/systems/02`, §5.
 n'est pas celle de `CWPalette`, et la correspondance reste à établir — recopier
 la table telle quelle mettrait des cactus dans les marais.
 
-**Question ouverte, et c'est la suivante du jalon 1.7 :** ni `grass`, ni
-`flowers`, ni `alga`, ni `coral`, ni `reed` n'ont de code dans la plage 120–139.
-Une **seconde voie de pose** existe donc pour la flore basse — vraisemblablement
-le décor de rendu, pas les entités. C'est elle qui décide de ce que
-`CWFloraRenderer` disperse aujourd'hui.
+**La seconde voie de pose est identifiée** (`docs/systems/02`, §8). Il y a bien
+deux voies : les plantes à silhouette sont des **entités** (§5), la flore basse
+est du **décor instancié** sans entité, produit dans la même passe que le
+terrain, en fin de boucle de colonne, et poussé par
+`ChunkBuffer_loadAndNotify` (@005c03f0). L'enregistrement est reconstruit :
+type à +0, échelle à +32, lacet à +36, drapeaux à +56.
+
+> **Le rapport d'échelle est confirmé par une constante du binaire.** Les
+> échelles de décor valent 0,075 / 0,09 / 0,1 — et **0,075 = 1/13,333
+> exactement**. La feuille de route avait obtenu ~13 voxels par bloc par une
+> mesure au pixel sur une capture, et retenu 16 ; le binaire porte la même
+> valeur, par un chemin entièrement différent. La mesure à l'œil était juste.
+> Le projet est donc à 16 là où l'original est à 13,33 : nos modèles sont
+> **20 % plus fins** à bloc égal. `VOXELS_PER_BLOCK = 16` reste délibéré — une
+> puissance de deux vaut mieux qu'un rapport bâtard — mais l'écart est
+> désormais chiffré.
+
+**Deux manques concrets de `CWFloraRenderer`, repérés par comparaison :**
+
+- l'original applique une **gigue d'échelle de 1× à 2× par instance**
+  (`rand()/32767 + 1`) ; toutes nos instances d'un même modèle sont à la même
+  taille. C'est probablement ce qui sépare le plus un champ d'herbe répétitif
+  d'un champ vivant ;
+- la sélection emploie **deux fréquences de bruit** : 0,05 décide *où* il y a de
+  la flore, 0,01 décide *laquelle*. `CWScatter` ne fait qu'un tirage par
+  cellule, sans cette structure à deux niveaux.
+
+**Ce qui reste :** la table type de décor → modèle. Trois pistes sont déjà
+éliminées (`docs/systems/02`, §8.5) ; la cible est le consommateur du champ
+`type` de l'enregistrement.
 
 **Correction de sources.** Sept noms du dépôt d'analyse sont trompeurs :
 
@@ -440,6 +465,7 @@ de le résoudre.
 
 | Date | Fait |
 |---|---|
+| 2026-09-05 | Seconde voie de pose identifiee, `docs/systems/02` §8. Il y a **deux** voies : les plantes a silhouette sont des entites a code de type, la flore basse (herbe, fleurs, algues, corail, roseaux) est du decor instancie sans entite, produit dans la meme passe que le terrain et pousse par `ChunkBuffer_loadAndNotify` (@005c03f0). Enregistrement reconstruit par recoupement de cinq branches : type a +0, echelle a +32, lacet a +36, drapeaux a +56. **Le rapport d'echelle est confirme par une constante du binaire** : les echelles de decor valent 0,075 / 0,09 / 0,1 et 0,075 = 1/13,333 exactement — la meme valeur que la mesure au pixel du 2026-09-04, par un chemin entierement different. Nos modeles sont 20 % plus fins que l'original a bloc egal ; VOXELS_PER_BLOCK = 16 reste delibere, mais l'ecart est chiffre. Deux manques de CWFloraRenderer releves : la gigue d'echelle de 1x a 2x par instance, et les deux frequences de bruit (0,05 pour ou, 0,01 pour laquelle). Reste la table type de decor -> modele ; trois pistes eliminees, la cible est le consommateur du champ type. |
 | 2026-09-05 | Table modele/biome trouvee, seconde passe : `docs/systems/02` §5. Elle n'etait dans aucune des deux fonctions au nom prometteur — `World_generateVegetationCluster` (@005d8750) est le resolveur de contenu d'une tuile, pas un disperseur. La table est le switch d'apparence de `creature_generateAppearance` (game_misc.cpp:3197) croise avec les slots de chargement de `GameController`. **Flore, filons et creatures sont un seul espace de types d'entites** : 120-130 plantes, 131-139 filons, 145-155 poissons — ce qui confirme par la source la decision du 2026-09-04 de sortir la flore des donnees voxels. Les boites englobantes recoupent l'echelle fixee ici (thorn-tree 12 blocs, cactus1 4, buisson 2). Selection par type de bloc de surface pondere par le climat, jamais par un identifiant de biome. Rarete des filons entierement determinee (fer 70 %, or 10 %, argent 10 %, diamant 0,1 %). Reste : la correspondance des numerotations de blocs, et la seconde voie de pose de la flore basse (grass, flowers, alga, coral, reed n'ont pas de code d'entite). |
 | 2026-09-05 | Premiere passe d'analyse de `WorldInfo_generateBiomeContent` (@005e4850, 4 200 lignes) : `docs/systems/02`. Ce n'est pas le disperseur de flore mais le constructeur d'une cellule de 256 x 256 colonnes. Sortis : le champ de densite de vegetation a quatre octaves avec ses constantes, l'identite de quatre types d'elements de tuile (6 = champ de rochers, 11 = massif isole, 12 = plan d'eau, 3 = parcelle batie), les constantes de pose des points d'apparition (jalon 2.6), et une corroboration independante du portage 1.6 (stride 0x68, base +0x14018, ordre tz + tx*8). Deux affirmations de la feuille de route corrigees : **les arbres sont des assets** (`fir-tree`, `thorn-tree`, `tree-leaves`...) et il n'y a pas de generateur d'arbre recursif a porter ; et le binaire charge 2 550 modeles nommes, pas 154. Prochaine cible reduite de 4 200 a 600 lignes : `World_generateVegetationCluster` @005d8750. |
 | 2026-09-05 | Les 28 modeles du lot de flore livres et integres, en 39 fichiers ranges par biome ; `CWModelLibrary.FLORA` porte des chemins. Repare : les fichiers etaient peints sur une palette reechantillonnee par MagicaVoxel (planche de reference glissee sur le nuancier), donc bonnes teintes et mauvais index — invisible partout sauf a l'ecran ; `tools/repaint_models.gd` les remet dans la palette de projet, index et palette embarquee. Reserve de terrain 14-31 remplie (les six cailloux se rabattaient tous sur STONE) et deux entrees aquatiques ajoutees a la vegetation (le corail se rabattait sur le vert de prairie) ; le decoupage des plages n'a pas bouge. `zentarys_palette.vox` exporte : c'est le seul chargement de palette qui aligne les index. Gabarit d'echelle range par rangees de dix. 116 verifications. |

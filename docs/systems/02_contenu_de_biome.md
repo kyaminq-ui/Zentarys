@@ -11,8 +11,11 @@ d'apparence de `creature_generateAppearance` (game_misc.cpp:3197, 2 464 l).
 Cartographiées, pas portées. Ce qui suit est ce qui a été établi avec certitude ;
 ce qui reste ouvert est dit comme tel.
 
-**La table modèle/biome du jalon 1.7 est en §5.** Les deux premières fonctions
-portent des noms trompeurs : ni l'une ni l'autre ne disperse de végétation.
+**Il y a deux voies de pose de la flore, pas une.** Les plantes à silhouette
+(buissons, cactus, arbres) sont des **entités** portant un code de type — §5.
+La flore basse (herbe, fleurs, algues, corail, roseaux) est du **décor
+instancié** sans entité — §8. Les deux premières fonctions citées portent des
+noms trompeurs : ni l'une ni l'autre ne disperse de végétation.
 
 ---
 
@@ -281,17 +284,122 @@ plante. C'est le **même champ**, ce qui confirme §5.1.
    `rand()%5 + 10` (10), `rand()%5 + 15` (11), `rand()%5 + 6` (12),
    `rand()%10 + 10` (défaut).
 
-## 8. Ce qui reste ouvert
+## 8. La seconde voie de pose — le décor instancié
+
+La flore basse (`grass`, `flowers`, `alga`, `coral`, `reed`…) n'a pas de code
+d'entité. Elle passe par une **seconde voie**, distincte de celle du §5 : un
+enregistrement de décor instancié, sans entité, sans comportement, sans
+inventaire.
+
+### 8.1 Où elle se trouve
+
+Trois producteurs poussent dans la même liste, via
+`ChunkBuffer_loadAndNotify` (@005c03f0) — c'est l'adresse qui donne son nom au
+`list_pushBack_via5c03f0` du dépôt d'analyse :
+
+| producteur | sites | rôle |
+|---|---|---|
+| `WorldInfo_generateBiomeContent` | 3 | **la flore naturelle**, dans la boucle par colonne |
+| `World_populateRegionDecorations` | 7 | décor de village (jalon 4.3) |
+| `Chunk_generateObjects` | 2 | contenu de chunk |
+
+La flore naturelle est donc produite **dans la même passe que le terrain**, en
+fin de boucle de colonne, et non par un système séparé.
+
+### 8.2 L'enregistrement
+
+Reconstruit par recoupement de **cinq branches indépendantes**, qui emploient
+toutes le même écart d'offsets :
+
+| offset | champ |
+|---|---|
+| +0 | type de décor (petit entier) |
+| +32 | échelle (flottant) |
+| +36 | lacet, en degrés |
+| +56 | drapeaux (le bit 4 est posé par plusieurs branches) |
+
+La position est écrite séparément, en virgule fixe 16.16, par
+`int_toFixed16` + `arrayElem_stride8(0..2)`.
+
+### 8.3 Les échelles — et ce qu'elles disent du contrat d'authoring
+
+Les seules constantes d'échelle du décor sont **0,075**, **0,09** et **0,1**,
+souvent multipliées par `rand()/32767 + 1`, soit une **gigue de 1× à 2×** sur la
+taille de chaque instance.
+
+> **0,075 = 1/13,333 exactement.**
+>
+> La feuille de route fixait le rapport modèle/bloc par une mesure au pixel sur
+> une capture : « rapport mesuré ~13 voxels par bloc ; on retient 16, la
+> puissance de deux la plus proche ». **Le binaire porte la même valeur dans une
+> constante**, obtenue par un chemin entièrement différent. La mesure à l'œil
+> était juste.
+>
+> Le projet est donc à 16 voxels par bloc là où l'original est à 13,33 : nos
+> modèles sont **20 % plus fins** à taille de bloc égale. Ce n'est pas une
+> erreur — `VOXELS_PER_BLOCK = 16` reste un contrat d'authoring délibéré, et
+> une puissance de deux vaut mieux qu'un rapport bâtard — mais l'écart est
+> maintenant chiffré au lieu d'être supposé.
+
+Ce qui **manque encore au projet** et que l'original fait : la **gigue
+d'échelle de 1× à 2× par instance**. `CWFloraRenderer` pose aujourd'hui toutes
+les instances d'un modèle à la même taille. C'est une ligne à ajouter, et c'est
+sans doute ce qui sépare le plus un champ d'herbe répétitif d'un champ vivant.
+
+Le **lacet** a deux régimes selon la branche : par quarts de tour
+(`(rand()%4) · 90`) pour la flore posée au sol, libre (`rand() · 360 / 32767`)
+pour le reste. `CWScatter` ne fait que les quarts de tour — ce qui est correct
+pour la flore, et à élargir pour les autres décors.
+
+### 8.4 Les règles de sélection
+
+Même forme partout : type de bloc de surface, puis seuils de climat, puis une
+crête de bruit, puis une rareté par tirage.
+
+| bloc | condition | décor |
+|---|---|---|
+| 3 | humidité > 0,2 · \|bruit(x·0,05 + 9843, z·0,05 + 8437)\| > 0,5 · `rand()%8 == 0` | type 22, échelle 0,09, lacet libre |
+| 2 | humidité > 0,2 · altitude > 0 · \|bruit(x·0,05 + 24234, z·0,05 + 53565)\| > 0,7 · `rand()%10 == 0` | type 31 ou 32, échelle 0,09, lacet libre |
+| 4, 9, 10, 12 | \|bruit(x·0,05 + 9843, z·0,05 + 8437)\| > 0,6 · `rand()%8 == 0` · altitude ≤ −5 | types 9 / 10 selon le signe de `bruit(x·0,01 + 9843, z·0,01 + 8437)`, échelle 0,075 ou 0,03–0,05 |
+| ≠ 12, ≠ 10 | humidité ≤ 0,75, puis température ≤ 0,5 et deux crêtes de bruit à 0,01 | types 2 / 3, échelle 0,075 |
+| — | branche à `local_37c` | types 5 / 6 / 7, échelle 0,075 ou 0,1 |
+
+Deux régularités qui valent d'être portées telles quelles :
+
+- **la fréquence de bruit sépare deux échelles de décision.** 0,05 décide *où
+  il y a de la flore* (des plaques de quelques dizaines de blocs), 0,01 décide
+  *laquelle* (des régions bien plus larges). `CWScatter` ne fait aujourd'hui
+  qu'un tirage par cellule, sans cette structure à deux niveaux ;
+- **la rareté est un tirage entier**, `rand()%8 == 0` ou `%10 == 0`, appliqué
+  *après* le seuil de bruit — pas une densité continue.
+
+### 8.5 Ce qui reste à trouver
+
+La correspondance **type de décor → modèle** n'est pas résolue. Ce qui a été
+éliminé, pour ne pas le refaire :
+
+- les slots des modèles de flore (2423–2465 dans le vecteur de
+  `GameController_load_game_assets`) n'apparaissent **nulle part** ailleurs que
+  dans le chargeur : la résolution est calculée, pas littérale ;
+- le registre entier de `World.cpp` (`rbtree_findOrInsert_intKey`) ne contient
+  que **12 pièces de charpente** de bâtiment — clés 0 à 11, jalon 4.3 ;
+- `SpriteManager` ne porte aucune table ;
+- une base d'index fixe ne tient pas : aucune valeur de base ne rend cohérentes
+  à la fois la branche sous-marine (types 9/10, qui doivent donner `alga` et
+  `coral`) et les autres.
+
+La cible restante est donc précise et petite : **trouver le consommateur du
+champ `type` (+0) de l'enregistrement de décor.** C'est lui qui porte la table.
+
+## 9. Ce qui reste ouvert
 
 1. **La correspondance entre les types de blocs de l'original et ceux de
    `CWPalette`** — c'est le seul verrou avant de porter la table de §5.3.
 2. La composition des arbres : `fir-tree` et `thorn-tree` sont des modèles
    entiers, mais `tree-leaves` existe sans arbre feuillu correspondant. Un
    assemblage tronc + houppiers reste à confirmer.
-3. Le lot 120–139 ne couvre pas tout ce que le monde montre : ni `grass`, ni
-   `flowers`, ni `alga`, ni `coral`, ni `reed` n'ont de code dans cette plage.
-   Une seconde voie de pose existe donc pour la flore basse — probablement le
-   décor de rendu, pas les entités. **C'est la prochaine question du jalon 1.7.**
+3. **La table type de décor → modèle**, seule inconnue restante de la seconde
+   voie : voir §8.5, qui dit où elle n'est pas.
 4. Les types d'éléments 2, 10, 14, 15 n'ont pas été isolés.
 5. `World_carveTerrainFeatureA` / `B` et `World_generateWaterOrPathFeature`
    donnent la forme des rochers, massifs et plans d'eau de §4 : non analysées.
