@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://j4s55007mtko"
+path="res://.godot/imported/fer.vox-2bbcf242219279f65a54b7fa1ca187bc.tscn"
+
+[deps]
+
+source_file="res://assets/models/filons/fer.vox"
+dest_files=["res://.godot/imported/fer.vox-2bbcf242219279f65a54b7fa1ca187bc.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

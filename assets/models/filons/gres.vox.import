@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://c31suqhk0iu4l"
+path="res://.godot/imported/gres.vox-a743ac7002e16fd4c011c9022f1a9377.tscn"
+
+[deps]
+
+source_file="res://assets/models/filons/gres.vox"
+dest_files=["res://.godot/imported/gres.vox-a743ac7002e16fd4c011c9022f1a9377.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

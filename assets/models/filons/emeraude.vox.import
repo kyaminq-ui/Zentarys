@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://dtf6m2qufbojt"
+path="res://.godot/imported/emeraude.vox-0fbf455db36f32d46ab2e6a95afc5990.tscn"
+
+[deps]
+
+source_file="res://assets/models/filons/emeraude.vox"
+dest_files=["res://.godot/imported/emeraude.vox-0fbf455db36f32d46ab2e6a95afc5990.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

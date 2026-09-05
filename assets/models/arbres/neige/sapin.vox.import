@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://c3dqvtoj203pw"
+path="res://.godot/imported/sapin.vox-77ce704130ac1bb8c7720b54c1d0f353.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/neige/sapin.vox"
+dest_files=["res://.godot/imported/sapin.vox-77ce704130ac1bb8c7720b54c1d0f353.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

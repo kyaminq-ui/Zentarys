@@ -48,6 +48,33 @@ const WATER: int = 12
 const WATER_DEEP: int = 13
 const COUNT: int = 14
 
+# -- Filons : neuf types de bloc, 32-40 (jalon 1.11) --------------------------
+#
+# Un filon n'est pas un decor pose : il **s'estampe dans le terrain**, puisqu'on
+# doit pouvoir le miner. Chacun de ses voxels est donc un *type de bloc*, pas
+# seulement une couleur, et il lui faut une entree a lui dans la plage terrain.
+#
+# L'ordre est celui de la source, et il n'est pas arbitraire : les neuf filons y
+# occupent les codes d'entite **131 a 139 consecutifs** (`docs/systems/02`,
+# §5.2), dans l'ordre exact de la table de rarete de §5.4. On garde ce bloc
+# consecutif ici, ce qui donne la correspondance `index = 32 + (code - 131)` —
+# verrouillee par un test, parce qu'elle sera le chemin le plus court le jour ou
+# la voie des entites sera portee.
+const ORE_GOLD: int = 32
+const ORE_IRON: int = 33
+const ORE_SILVER: int = 34
+const ORE_SANDSTONE: int = 35
+const ORE_EMERALD: int = 36
+const ORE_SAPPHIRE: int = 37
+const ORE_RUBY: int = 38
+const ORE_DIAMOND: int = 39
+const ORE_ICE_CRYSTAL: int = 40
+
+## Premier et dernier filon, et code d'entite du premier. Voir `ore_of_code`.
+const ORE_BEGIN: int = ORE_GOLD
+const ORE_END: int = ORE_ICE_CRYSTAL
+const ORE_CODE_BEGIN: int = 131
+
 # -- Plages reservees de la palette de projet ---------------------------------
 #
 # VoxelMesherCubes en mode COLOR_MESHER_PALETTE lit un index par voxel, et une
@@ -58,13 +85,40 @@ const COUNT: int = 14
 # L'index 0 est l'air et ne peut pas servir : le mailleur le traite comme vide.
 
 ## Terrain. 0-13 sont ecrits par le generateur ; 14-31 sont de la matiere de
-## terrain destinee aux modeles — roche nue, gres, argile, basalte, lave. C'est
-## la seule plage ou un modele trouve du gris : la vegetation n'en a aucun.
+## terrain destinee aux modeles — roche nue, gres, argile, basalte, lave —, et
+## 32-40 sont les neuf filons. C'est la seule plage ou un modele trouve du gris :
+## la vegetation n'en a aucun.
+##
+## -- Pourquoi la frontiere a bouge le 2026-09-05 ------------------------------
+##
+## La reserve 14-31 etait pleine, et les neuf filons avaient besoin de neuf types
+## de bloc — ils s'estampent, donc chacun de leurs voxels porte une semantique,
+## pas seulement une couleur. `docs/prompt_generation_arbres.md` posait trois
+## issues ; aucune n'a ete prise telle quelle, et la raison est mesurable.
+##
+##   1. **les mettre dans la plage equipement (96-127)** aurait fait porter a un
+##      bloc minable un index que la palette declare « armes et equipement ». Le
+##      decoupage existe precisement pour qu'un modele peint aujourd'hui reste
+##      juste quand les teintes evoluent : ajuster la rampe des gemmes aurait
+##      repeint les filons. C'est la panne que le decoupage evite, on ne va pas
+##      l'organiser ;
+##   2. **deplacer toutes les frontieres** aurait invalide les modeles peints —
+##      mais seulement si on les deplace *toutes*. Ce n'etait pas necessaire ;
+##   3. **reutiliser des entrees existantes** est impossible depuis 1.9, ou
+##      `CHANNEL_TYPE` porte la semantique du bloc.
+##
+## La sortie prise est la seconde, faite au plus juste : `RANGE_TERRAIN_END`
+## passe de 31 a 40 et `RANGE_CREATURES_BEGIN` de 32 a 41. **Aucune autre
+## frontiere ne bouge, et aucun modele n'est a repeindre** — verifie plutot que
+## suppose : `inspect_model.gd` sur les 53 modeles du depot ne rend que des index
+## dans 14-29 et 128-175. La plage creatures perd neuf entrees sur 64 et n'en a
+## aucune de peinte, l'apparence des creatures etant hors perimetre
+## (`docs/ROADMAP.md`, jalon 2). Elle en garde 55.
 const RANGE_TERRAIN_BEGIN: int = 1
-const RANGE_TERRAIN_END: int = 31
+const RANGE_TERRAIN_END: int = 40
 
 ## Creatures : peaux, fourrures, ecailles, chitine, yeux.
-const RANGE_CREATURES_BEGIN: int = 32
+const RANGE_CREATURES_BEGIN: int = 41
 const RANGE_CREATURES_END: int = 95
 
 ## Armes et equipement : metaux, manches, cuir, gemmes.
@@ -146,14 +200,34 @@ static func _fill_asset_ranges(c: PackedColorArray) -> void:
 	c[30] = Color8(255, 152, 48)    # lave, incandescente
 	c[31] = Color8(176, 44, 20)     # lave, refroidie
 
-	# -- Creatures 32-95 --
-	_ramp(c, 32, 8, Color8(247, 216, 185), Color8(92, 58, 40))    # peaux
-	_ramp(c, 40, 8, Color8(198, 138, 78), Color8(74, 44, 24))     # fourrure rousse
-	_ramp(c, 48, 8, Color8(238, 238, 236), Color8(58, 58, 66))    # fourrure grise
-	_ramp(c, 56, 8, Color8(150, 214, 108), Color8(30, 78, 44))    # ecailles vertes
-	_ramp(c, 64, 8, Color8(150, 186, 240), Color8(56, 42, 110))   # ecailles bleues
-	_ramp(c, 72, 8, Color8(96, 84, 92), Color8(24, 20, 26))       # chitine
-	_ramp(c, 80, 8, Color8(255, 138, 84), Color8(210, 46, 120))   # teintes vives
+	# Les neuf filons, 32-40, dans l'ordre des codes d'entite 131-139. Ce sont
+	# des *types de bloc* : un filon s'estampe et se mine, contrairement a tout
+	# ce qui precede en 14-31, qui n'est que de la matiere pour les modeles.
+	# Chacun doit se reconnaitre d'un coup d'oeil dans une paroi de roche grise,
+	# d'ou des teintes franches plutot que des nuances.
+	c[ORE_GOLD] = Color8(255, 206, 80)
+	c[ORE_IRON] = Color8(168, 122, 96)
+	c[ORE_SILVER] = Color8(222, 234, 246)
+	c[ORE_SANDSTONE] = Color8(206, 170, 106)
+	c[ORE_EMERALD] = Color8(64, 210, 130)
+	c[ORE_SAPPHIRE] = Color8(72, 132, 240)
+	c[ORE_RUBY] = Color8(230, 58, 88)
+	c[ORE_DIAMOND] = Color8(232, 250, 252)
+	c[ORE_ICE_CRYSTAL] = Color8(146, 206, 240)
+
+	# -- Creatures 41-95 --
+	# Les sept rampes ont ete recompactees de 56 entrees a 47 le 2026-09-05, pour
+	# rendre neuf entrees aux filons. **Les huit teintes ponctuelles gardent leurs
+	# index (88-95)** : ce sont elles qu'un modele nommerait en clair, et les
+	# deplacer aurait ete le seul vrai cout de l'operation. Aucune n'est peinte a
+	# ce jour, l'apparence des creatures etant hors perimetre.
+	_ramp(c, 41, 7, Color8(247, 216, 185), Color8(92, 58, 40))    # peaux
+	_ramp(c, 48, 7, Color8(198, 138, 78), Color8(74, 44, 24))     # fourrure rousse
+	_ramp(c, 55, 7, Color8(238, 238, 236), Color8(58, 58, 66))    # fourrure grise
+	_ramp(c, 62, 7, Color8(150, 214, 108), Color8(30, 78, 44))    # ecailles vertes
+	_ramp(c, 69, 7, Color8(150, 186, 240), Color8(56, 42, 110))   # ecailles bleues
+	_ramp(c, 76, 6, Color8(96, 84, 92), Color8(24, 20, 26))       # chitine
+	_ramp(c, 82, 6, Color8(255, 138, 84), Color8(210, 46, 120))   # teintes vives
 	c[88] = Color8(250, 250, 250)   # blanc de l'oeil
 	c[89] = Color8(20, 18, 22)      # pupille
 	c[90] = Color8(214, 48, 48)     # langue, sang
@@ -385,4 +459,73 @@ static func name_of(index: int) -> String:
 		GRAVEL: return "gravier"
 		WATER: return "eau"
 		WATER_DEEP: return "eau profonde"
+		ORE_GOLD: return "filon d'or"
+		ORE_IRON: return "filon de fer"
+		ORE_SILVER: return "filon d'argent"
+		ORE_SANDSTONE: return "filon de gres"
+		ORE_EMERALD: return "filon d'emeraude"
+		ORE_SAPPHIRE: return "filon de saphir"
+		ORE_RUBY: return "filon de rubis"
+		ORE_DIAMOND: return "filon de diamant"
+		ORE_ICE_CRYSTAL: return "filon de cristal de glace"
 		_: return "?"
+
+
+## Vrai si l'index est un filon. Un filon est de la matiere de terrain : il
+## s'ecrit dans les donnees du monde, il se creuse, il porte collision.
+static func is_ore(index: int) -> bool:
+	return index >= ORE_BEGIN and index <= ORE_END
+
+
+## Index de palette du filon portant le code d'entite `code` (131-139), ou
+## `AIR` si le code n'en est pas un.
+##
+## Les neuf filons occupent des codes consecutifs dans la source
+## (`docs/systems/02`, §5.2) et des index consecutifs ici : la correspondance est
+## donc une addition, et elle est verrouillee par un test. C'est le chemin le
+## plus court le jour ou la voie des entites sera portee — la table de rarete de
+## §5.4 rend un rang, ce rang est un code, et ce code est un index.
+static func ore_of_code(code: int) -> int:
+	var i: int = ORE_BEGIN + (code - ORE_CODE_BEGIN)
+	return i if is_ore(i) else AIR
+
+
+## Le code d'entite d'un filon. Reciproque de `ore_of_code`.
+static func code_of_ore(index: int) -> int:
+	return ORE_CODE_BEGIN + (index - ORE_BEGIN) if is_ore(index) else -1
+
+
+## Tirage du filon a poser, porte verbatim de `docs/systems/02`, §5.4 :
+##
+##     rand() % 10 :  0 -> or        1 -> argent
+##                    3 -> rand() % 100 :  0     -> diamant
+##                                         1-3   -> rubis
+##                                         4-8   -> saphir
+##                                         sinon -> emeraude
+##                    sinon -> fer
+##
+## Soit fer 70 %, or 10 %, argent 10 %, emeraude ~9,1 %, saphir 0,5 %, rubis
+## 0,3 %, diamant 0,1 %. Les deux tirages sont pris **dans cet ordre et toujours
+## les deux** : un tirage conditionnel desynchroniserait le flux du generateur
+## d'un appel a l'autre, et la pose ne serait plus reproductible.
+##
+## `gres` et `cristal de glace` n'apparaissent pas dans cette table — ils sont
+## dans la liste des neuf modeles mais pas dans le tirage lu. C'est la source qui
+## est ainsi ; ils sont vraisemblablement poses par une autre branche, liee au
+## biome (du gres en desert, du cristal en neige), qui n'a pas ete trouvee.
+static func roll_ore(r10: int, r100: int) -> int:
+	var a: int = r10 % 10
+	var b: int = r100 % 100
+	if a == 0:
+		return ORE_GOLD
+	if a == 1:
+		return ORE_SILVER
+	if a != 3:
+		return ORE_IRON
+	if b == 0:
+		return ORE_DIAMOND
+	if b <= 3:
+		return ORE_RUBY
+	if b <= 8:
+		return ORE_SAPPHIRE
+	return ORE_EMERALD

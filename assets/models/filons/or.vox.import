@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://ojvucl1gjmb"
+path="res://.godot/imported/or.vox-e4003687dfcfe8ed9fbde2189cde6aee.tscn"
+
+[deps]
+
+source_file="res://assets/models/filons/or.vox"
+dest_files=["res://.godot/imported/or.vox-e4003687dfcfe8ed9fbde2189cde6aee.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

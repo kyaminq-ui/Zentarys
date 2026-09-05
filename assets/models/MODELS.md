@@ -191,7 +191,9 @@ signale tout index sorti des plages autorisées.
 * **Un dossier par biome** sous `assets/models/flore/` : `herbe/`,
   `herbe_seche/`, `jungle/`, `marais/`, `sable_desert/`, `neige/`, `toundra/`,
   `roche/`, `gravier_fond_marin/`. `assets/models/culture/` pour les cinq
-  cultures.
+  cultures. **`assets/models/arbres/`** suit le même découpage pour la grande
+  végétation — c'est un lot à part, avec sa propre enveloppe (§ ci-dessous) et
+  son propre script.
 * Noms en minuscules sans accent, souligné pour séparer, variante numérotée sur
   deux chiffres quand les modèles sont interchangeables : `herbe_01`,
   `fleur_bleuet`, `caillou_02`. Rien d'autre dans le nom — ni la taille du
@@ -219,6 +221,26 @@ signale tout index sorti des plages autorisées.
   l'écriture tout index hors des plages autorisées : c'est là que se rattrape la
   faute de palette du premier lot. Le reste de ce fichier reste la référence
   pour les modèles qui, eux, se dessinent à la main.
+* **Les quatorze modèles d'arbres le sont aussi**, par le même chemin et les
+  mêmes garde-fous : `tools/blender/generer_arbres.py`, commande en
+  `docs/prompt_generation_arbres.md`.
+
+  ```
+  blender --background --factory-startup --python tools/blender/generer_arbres.py
+  ```
+
+  Deux choses seulement les séparent de la flore. **L'enveloppe** : un arbre ne
+  tient pas sous les 53 voxels de la flore basse, donc `flore_vox.ecris` reçoit
+  un plafond par classe — arbre entier 160 voxels, houppier 80, palme 60. **La
+  façon dont ils se posent** : un *arbre entier* commence sa matière en Z = 0
+  comme une plante, un *houppier* est une couronne **sans pied**, dont la base
+  vient se poser sur le sommet d'un tronc, et une *palme* est une fronde seule,
+  ancrée par son point d'attache. Ne dessiner ni socle ni tronc sous un
+  houppier : il flotterait ou doublerait le tronc.
+
+  La plage des index, elle, ne se paramètre pas et n'a pas bougé. Le lot
+  emploie en plus la rampe **148 – 155**, celle des troncs et de l'écorce, qui
+  n'avait aucun usage dans la flore.
 * Gabarit du `.vox` : **libre**, le plus juste possible autour de la matière.
   16³ suffit à presque tout ; un cactus de 3,5 blocs demande 48³. La matière est
   extraite au chargement et le vide jeté, donc un tampon large ne coûte rien —
@@ -259,8 +281,27 @@ Conséquences à connaître :
 
 Un modèle destiné à *faire partie du terrain* — un bloc de minerai, un rocher
 qu'on doit pouvoir miner — est un cas différent : celui-là se dessine à
-**1 voxel = 1 bloc** et s'estampe. Il n'y en a aucun pour l'instant ; les neuf
-filons du jalon 1.11 seront les premiers.
+**1 voxel = 1 bloc** et s'estampe. **Les neuf filons sont les premiers**, livrés
+le 2026-09-05 sous `assets/models/filons/` par
+`tools/blender/generer_filons.py` (Python pur : à un voxel par bloc, un filon
+fait quatre voxels de large, Blender n'y apporterait rien).
+
+Ce lot suit des règles à lui, et il faut les tenir séparées de celles ci-dessus :
+
+* **1 voxel = 1 bloc**, pas 40/3 ;
+* chacun de ses voxels est un **type de bloc**. C'est `CHANNEL_TYPE` qui portera
+  cette valeur à l'estampage, et c'est elle qui dira ce que le bloc rend quand on
+  le casse ;
+* d'où une contrainte d'index plus étroite que celle de la flore
+  (`flore_vox.INDEX_FILONS`) : roche (1), roche nue (14 – 19) et les neuf entrées
+  de filon (32 – 40), rien d'autre. Un filon n'a pas droit au feuillage.
+
+Les neuf entrées 32 – 40 ont demandé de déplacer `RANGE_TERRAIN_END` de 31 à 40 :
+raisonnement complet dans `assets/palette/PALETTE.md` et dans l'en-tête de
+`CWPalette`. **La couche qui les pose n'existe pas encore** — elle appartient à
+la voie des entités, avec les points d'apparition du jalon 2.6. `CWPalette.roll_ore`
+porte déjà le tirage de rareté, qui est la seule partie que la source donne
+littéralement.
 
 ---
 
@@ -279,7 +320,12 @@ filons du jalon 1.11 seront les premiers.
   * seul le **tronc** est procédural : il n'existe aucun modèle de tronc, et
     l'original a la primitive pour l'écrire en colonnes de blocs.
 
-  À dessiner, donc, sauf le tronc. Jalon 1.11 ; commande en
-  `docs/prompt_generation_arbres.md`.
+  À dessiner, donc, sauf le tronc. **Dessinés le 2026-09-05** : quatorze
+  modèles sous `assets/models/arbres/`, commande en
+  `docs/prompt_generation_arbres.md`. Le tronc, lui, a fini avec **deux formes**
+  — `tronc_feuillu` et `tronc_palmier` existent comme modèles instanciables, à
+  côté de la colonne de blocs que l'assemblage écrira dans le terrain. Les deux
+  ne s'excluent pas : la matière là où il faut la creuser, le modèle pour le
+  bosquet lointain et la réduction de niveau de détail.
 * **Les maisons.** Une grille de 3 × 3 × 4 cellules remplie procéduralement. Ce
   sont les *meubles* qui sont des modèles, pas le bâtiment.

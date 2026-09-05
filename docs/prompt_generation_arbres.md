@@ -161,6 +161,15 @@ pas seulement une couleur. Or `CWPalette` n'a pas de type pour eux : la réserve
 de terrain 14 – 31 a été remplie le 2026-09-05 (roche, grès, argile, basalte,
 roche lichénée, lave) et elle est pleine.
 
+> **Tranché le 2026-09-05.** Aucune des trois issues ci-dessous telle quelle :
+> `RANGE_TERRAIN_END` est passé de 31 à 40 et `RANGE_CREATURES_BEGIN` de 32 à 41,
+> **et rien d'autre**. Le prix annoncé de l'issue 2 — « invalide tous les modèles
+> déjà peints » — ne valait que si l'on déplaçait *toutes* les frontières ; les
+> 53 modèles du dépôt n'emploient que 14 – 29 et 128 – 175, et la plage créatures
+> n'a aucune entrée peinte. Les neuf filons sont dessinés et vivent sous
+> `assets/models/filons/`. Raisonnement complet : `assets/palette/PALETTE.md` et
+> l'en-tête de `CWPalette`.
+
 Trois issues, à trancher au jalon 1.11 :
 
 1. prendre les teintes dans la plage équipement (96 – 127, qui a déjà une rampe

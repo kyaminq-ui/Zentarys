@@ -28,6 +28,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import arbres_formes as af
 import flore_vox as fv
 import flore_formes as ff
 from flore_vox import Grille, teinte
@@ -114,21 +115,21 @@ def eclats(g, rng, n, autour, clair, sombre):
 
 def herbe_01(g, rng):
     """Petite touffe serree, celle qui couvre le sol."""
-    ff.touffe(g, rng, 6, 12.0, 128, 135, etalement=0.9, rayon_base=1.1)
+    ff.touffe(g, rng, 11, 12.0, 128, 135, etalement=0.9, rayon_base=1.3)
 
 
 def herbe_02(g, rng):
     """Haute et clairsemee : quelques brins qui montent au-dessus du couvert."""
-    ff.touffe(g, rng, 5, 13.5, 129, 136, etalement=0.7, courbure=0.06,
-              rayon_base=0.9)
-    ff.touffe(g, rng, 3, 8.0, 131, 137, etalement=1.4, rayon_base=1.6)
+    ff.touffe(g, rng, 8, 13.5, 129, 136, etalement=0.7, courbure=0.06,
+              rayon_base=1.0)
+    ff.touffe(g, rng, 6, 8.0, 131, 137, etalement=1.4, rayon_base=1.8)
 
 
 def herbe_03(g, rng):
     """Large et fournie, avec des brins couches : la touffe de bord de chemin."""
-    ff.touffe(g, rng, 12, 13.0, 128, 137, etalement=1.5, courbure=0.11,
-              rayon_base=1.8)
-    for _ in range(3):
+    ff.touffe(g, rng, 17, 13.0, 128, 137, etalement=1.5, courbure=0.11,
+              rayon_base=2.0)
+    for _ in range(5):
         a = rng.uniform(0.0, math.tau)
         ff.brin(g, (math.cos(a) * 1.5, math.sin(a) * 1.5, 0), a, 9.0, 0.22,
                 130, 138, pousse=1.1)
@@ -283,12 +284,15 @@ def broussaille_seche(g, rng):
         bouts.append(p[-1])
     fb.voxelise(g, fb.courbe(branches, rayons),
                 fb.par_hauteur(148, 152), mode=fb.VOLUME, epaisseur=0.45)
+    # Quatre feuilles par bout, et non deux : vu en jeu sur l'herbe seche, la
+    # broussaille se lisait comme un paquet de branches nues orange, sans masse
+    # de feuillage — le contraire de ce que son nom annonce.
     for b in bouts:
-        for _ in range(2):
+        for _ in range(4):
             ff.feuille(g, (b[0], b[1], b[2]),
                        ff.azimut(rng.uniform(0.0, math.tau),
                                  rng.uniform(1.2, 1.9)),
-                       rng.uniform(3.0, 5.0), 2.6, 140, 146)
+                       rng.uniform(3.0, 5.5), 2.8, 140, 146)
 
 
 def fleur_echinacea(g, rng):
@@ -588,7 +592,16 @@ def caillou_neige(g, rng):
 
 
 def broussaille_neige(g, rng):
-    """Bois mort sous la neige : des branches raides, sans une feuille."""
+    """Bois mort sous la neige : des branches raides, sans une feuille — mais
+    avec de la neige dessus.
+
+    Vu en jeu le 2026-09-05, c'etait le point faible du biome : la neige est
+    d'un cyan tres clair, et un buisson d'ecorce brune y ressortait en tache
+    orange, seul objet chaud d'un paysage froid. La neige posee sur ce qui voit
+    le ciel — le meme geste que pour `sapin_enneige`, meme fonction — le
+    raccroche a son sol. Les index 14-15 sont le clair de la roche nue, faute de
+    blanc dans la plage vegetation ; voir `arbres_formes.neige_dessus`.
+    """
     fb.scene_vide()
     branches, rayons = [], []
     for i in range(6):
@@ -603,8 +616,18 @@ def broussaille_neige(g, rng):
                                rng.uniform(3.0, 6.0), 3, 0.2, 0.1)
                 branches.append(r)
                 rayons.append(fb.rayons_effiles(r, 0.5, 0.25))
+    # Bois sombre : le haut de la rampe d'ecorce (148-150) est un brun chaud qui,
+    # sur un sol cyan clair, ressort en orange vif. Le bas de la meme rampe passe.
     fb.voxelise(g, fb.courbe(branches, rayons),
-                fb.par_hauteur(148, 153), mode=fb.VOLUME, epaisseur=0.4)
+                fb.par_hauteur(151, 155), mode=fb.VOLUME, epaisseur=0.4)
+    # Des paquets de neige dans la fourche des branches, avant la couche posee
+    # sur le dessus : sans eux le buisson n'a aucune masse blanche, seulement un
+    # lisere, et il reste une tache brune dans un paysage blanc.
+    for i in range(0, len(branches), 2):
+        p = branches[i][max(1, len(branches[i]) - 3)]
+        g.bille(p.x, p.y, p.z, rng.uniform(1.6, 2.6),
+                14 if rng.random() < 0.6 else 15)
+    af.neige_dessus(g, rng, part=0.85, seuil_z=2)
 
 
 def broussaille_toundra(g, rng):
@@ -621,11 +644,11 @@ def broussaille_toundra(g, rng):
     fb.voxelise(g, fb.courbe(branches, rayons),
                 fb.par_hauteur(143, 145), mode=fb.VOLUME, epaisseur=0.4)
     for b in bouts:
-        for _ in range(3):
+        for _ in range(5):
             ff.feuille(g, (b.x, b.y, b.z),
                        ff.azimut(rng.uniform(0.0, math.tau),
                                  rng.uniform(1.1, 1.9)),
-                       rng.uniform(2.5, 4.0), 2.2, 139, 142)
+                       rng.uniform(2.5, 4.2), 2.4, 139, 142)
 
 
 def fleur_ginseng(g, rng):

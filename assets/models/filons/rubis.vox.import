@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://bimejkf0h8ruc"
+path="res://.godot/imported/rubis.vox-38fc363dd9d54d2a1821554d504d7b69.tscn"
+
+[deps]
+
+source_file="res://assets/models/filons/rubis.vox"
+dest_files=["res://.godot/imported/rubis.vox-38fc363dd9d54d2a1821554d504d7b69.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

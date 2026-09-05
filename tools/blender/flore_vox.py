@@ -21,12 +21,25 @@ import struct
 
 DEPOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 PALETTE_VOX = os.path.join(DEPOT, "assets", "palette", "zentarys_palette.vox")
-SORTIE = os.path.join(DEPOT, "assets", "models", "flore")
+RACINE = os.path.join(DEPOT, "assets", "models")
+SORTIE = os.path.join(RACINE, "flore")
 
-# Plages autorisees pour un modele de flore. 0 est l'air, 12 et 13 sont l'eau
-# (translucide, qui sort opaque au rendu), le reste appartient a d'autres lots.
+# Plages autorisees pour un modele de flore ou d'arbre. 0 est l'air, 12 et 13
+# sont l'eau (translucide, qui sort opaque au rendu), le reste appartient a
+# d'autres lots.
+#
+# La reserve de terrain va jusqu'a 31 ici et non 40 : les neuf filons (32-40)
+# sont bien du terrain, mais aucune plante n'a de raison d'etre peinte en filon
+# d'or. Le garde-fou reste donc etroit pour ce lot-ci, et les filons ont le leur.
 INDEX_VALIDES = frozenset(list(range(1, 12)) + list(range(14, 32))
                           + list(range(128, 176)))
+
+# Plages autorisees pour un **filon**. Un filon s'estampe : chacun de ses voxels
+# est un type de bloc. Il n'a donc le droit qu'a de la roche (1, la meme que
+# celle qu'ecrit le generateur, pour qu'il se fonde dans la paroi), a la roche
+# nue des modeles (14-19) et aux neuf entrees de filon (32-40). Rien de
+# vegetal : un filon vert serait un filon d'emeraude, pas une plante.
+INDEX_FILONS = frozenset([1] + list(range(14, 20)) + list(range(32, 41)))
 
 # Enveloppe verifiee par tests/flora_test.gd : 4 blocs de haut, 2 de rayon,
 # a 40/3 voxels par bloc.
@@ -137,34 +150,53 @@ class Grille:
         return voxels, size
 
 
-def verifie(nom, voxels, size):
-    """Refuse ce que le lot precedent laissait passer en silence."""
-    mauvais = sorted({c for _, _, _, c in voxels} - INDEX_VALIDES)
+def verifie(nom, voxels, size, plafond=None, indices=None):
+    """Refuse ce que le lot precedent laissait passer en silence.
+
+    `plafond` est le couple (hauteur, rayon) en voxels ; par defaut celui de la
+    flore basse, que verrouille `tests/flora_test.gd`. Le lot d'arbres passe le
+    sien : un arbre ne tient pas sous 53 voxels, et son enveloppe est celle du
+    prompt (`docs/prompt_generation_arbres.md`, Sec. 1.1).
+
+    `indices` est l'ensemble des index autorises. Il se parametre lui aussi
+    depuis le lot de filons, mais **jamais pour elargir** : chaque lot passe le
+    sien, plus etroit que la plage de la palette, et c'est ce qui fait du
+    garde-fou autre chose qu'une formalite. Un filon n'a pas le droit au
+    feuillage, une plante n'a pas le droit a l'or.
+    """
+    h_max, r_max = plafond if plafond is not None else (HAUTEUR_MAX, RAYON_MAX)
+    permis = INDEX_VALIDES if indices is None else indices
+    mauvais = sorted({c for _, _, _, c in voxels} - permis)
     if mauvais:
         raise ValueError("%s : index hors plage %s" % (nom, mauvais))
     sx, sy, sz = size
-    if sz > HAUTEUR_MAX:
-        raise ValueError("%s : %d voxels de haut, plafond %d"
-                         % (nom, sz, HAUTEUR_MAX))
+    if sz > h_max:
+        raise ValueError("%s : %d voxels de haut, plafond %d" % (nom, sz, h_max))
     # Rayon tel que le chargeur le mesure : ancre au centre du gabarit.
     rayon = max(max(sx // 2, sx - 1 - sx // 2), max(sy // 2, sy - 1 - sy // 2))
-    if rayon > RAYON_MAX:
-        raise ValueError("%s : rayon %d, plafond %d" % (nom, rayon, RAYON_MAX))
+    if rayon > r_max:
+        raise ValueError("%s : rayon %d, plafond %d" % (nom, rayon, r_max))
     return rayon
 
 
-def ecris(dossier, nom, grille, bloc_rgba, verbeux=True):
-    """Normalise, verifie et ecrit `<SORTIE>/<dossier>/<nom>.vox`."""
+def ecris(dossier, nom, grille, bloc_rgba, verbeux=True, racine=None,
+          plafond=None, indices=None):
+    """Normalise, verifie et ecrit `<racine>/<dossier>/<nom>.vox`.
+
+    `racine` vaut le dossier de la flore par defaut ; le lot d'arbres passe
+    `RACINE/arbres`.
+    """
     if len(grille) == 0:
         raise ValueError("%s/%s : grille vide" % (dossier, nom))
+    racine = SORTIE if racine is None else racine
     voxels, size = grille.normalise()
-    rayon = verifie("%s/%s" % (dossier, nom), voxels, size)
-    cible = os.path.join(SORTIE, dossier)
+    rayon = verifie("%s/%s" % (dossier, nom), voxels, size, plafond, indices)
+    cible = os.path.join(racine, dossier)
     os.makedirs(cible, exist_ok=True)
     write_vox(os.path.join(cible, nom + ".vox"), voxels, size, bloc_rgba)
     if verbeux:
         index = sorted({c for _, _, _, c in voxels})
-        print("  %-14s %2d x %2d x %2d  r=%-2d  %5d voxels  index %s"
+        print("  %-16s %3d x %3d x %3d  r=%-2d  %6d voxels  index %s"
               % (nom, size[0], size[1], size[2], rayon, len(voxels),
                  ",".join(str(i) for i in index)))
     return size

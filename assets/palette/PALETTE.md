@@ -52,8 +52,8 @@ vide.
 
 | plage | indices | entrées | contenu |
 |---|---|---|---|
-| Terrain | 1 – 31 | 31 | 13 écrites par la génération ; 14 – 31 sont de la **matière de terrain pour les modèles** : roche nue, grès, argile, basalte, roche lichénée, lave |
-| Créatures | 32 – 95 | 64 | peaux, fourrures, écailles, chitine, yeux, cornes |
+| Terrain | 1 – 40 | 40 | 13 écrites par la génération ; 14 – 31 sont de la **matière de terrain pour les modèles** (roche nue, grès, argile, basalte, roche lichénée, lave) ; **32 – 40 sont les neuf filons** |
+| Créatures | 41 – 95 | 55 | peaux, fourrures, écailles, chitine, yeux, cornes |
 | Armes et équipement | 96 – 127 | 32 | acier, or, manches, cuir, gemmes |
 | Végétation | 128 – 175 | 48 | feuillages, automne, écorces, fleurs, champignons, algues et coraux, cactus |
 | Structures | 176 – 239 | 64 | planches, pierre, tuiles, plâtre, tissus, verre, métal |
@@ -74,6 +74,34 @@ pour la même raison : un modèle ne trouvait pas sa couleur.
   des champignons, ramenée de 8 à 6. Le fond marin est l'une des neuf surfaces
   que le générateur produit ; rien d'autre dans la palette n'est froid et saturé,
   et le corail se rabattait sur le vert de prairie.
+
+Une troisième a bougé le 2026-09-05 au soir, et c'est la seule **frontière** qui
+ait jamais bougé.
+
+* **Terrain 32 – 40 : les neuf filons.** Un filon s'estampe dans le terrain —
+  on doit pouvoir le miner —, donc chacun de ses voxels est un **type de bloc**
+  et non seulement une couleur. Il lui faut une entrée à lui, et la réserve
+  14 – 31 était pleine. `RANGE_TERRAIN_END` passe donc de 31 à 40 et
+  `RANGE_CREATURES_BEGIN` de 32 à 41.
+
+  **Une seule frontière déplacée, aucun modèle à repeindre** — vérifié plutôt que
+  supposé : `inspect_model.gd` sur les 53 modèles du dépôt ne rend que des index
+  dans 14 – 29 et 128 – 175. La plage créatures perd neuf entrées sur 64 et n'en a
+  aucune de peinte, l'apparence des créatures étant hors périmètre ; ses sept
+  rampes ont été recompactées de 56 entrées à 47, **les huit teintes ponctuelles
+  gardant leurs index 88 – 95**.
+
+  Les deux autres issues envisagées ont été écartées, et il vaut la peine de dire
+  pourquoi. Mettre les filons dans la plage équipement (96 – 127, qui a déjà une
+  rampe de gemmes) aurait fait porter à un bloc minable un index que cette table
+  déclare « armes et équipement » : le découpage existe précisément pour qu'un
+  modèle peint aujourd'hui reste juste quand les teintes évoluent, et ajuster la
+  rampe des gemmes aurait repeint les filons. Réemployer des entrées existantes
+  est impossible depuis 1.9, où `CHANNEL_TYPE` porte la sémantique du bloc.
+
+  Les neuf index sont **consécutifs et dans l'ordre des codes d'entité 131 – 139**
+  de la source, qui est l'ordre de sa table de rareté : `index = 32 + (code −
+  131)`, verrouillé par un test.
 
 ## Deux faits vérifiés sur l'import `.vox`
 

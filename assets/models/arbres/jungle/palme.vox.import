@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://shvf02nhi24k"
+path="res://.godot/imported/palme.vox-a79f73ccd413524f811703d6298b6352.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/jungle/palme.vox"
+dest_files=["res://.godot/imported/palme.vox-a79f73ccd413524f811703d6298b6352.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://co1r22vkm0qcx"
+path="res://.godot/imported/diamant.vox-b31e78278c75c2b65cdf06413c9f7e7a.tscn"
+
+[deps]
+
+source_file="res://assets/models/filons/diamant.vox"
+dest_files=["res://.godot/imported/diamant.vox-b31e78278c75c2b65cdf06413c9f7e7a.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

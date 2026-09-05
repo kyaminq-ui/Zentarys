@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://gopjve7wtmwd"
+path="res://.godot/imported/saphir.vox-decbfc13fc4e674dace64abbcf32d219.tscn"
+
+[deps]
+
+source_file="res://assets/models/filons/saphir.vox"
+dest_files=["res://.godot/imported/saphir.vox-decbfc13fc4e674dace64abbcf32d219.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true
