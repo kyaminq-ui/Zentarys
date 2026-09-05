@@ -79,23 +79,35 @@ en savoir en dessinant :
 
 En **voxels de modèle** — c'est l'unité dans laquelle on dessine :
 
-| élément | hauteur | empreinte |
-|---|---|---|
-| personnage de référence | **32** | 12 × 8 |
-| herbe, brins | 8 – 12 | ≤ 14 × 14 |
-| fleur | 8 – 14 | ≤ 12 × 12 |
-| champignon | 5 – 10 | ≤ 10 × 10 |
-| caillou | 4 – 8 | ≤ 12 × 12 |
-| buisson, broussaille, roseau, algue, corail | 16 – 28 | ≤ 32 × 32 |
-| cactus, grès | 32 – 56 | ≤ 48 × 48 |
+> ⚠️ **Les repères ci-dessous sont faux d'un facteur ~2,5 pour ce qui pousse au
+> sol, et c'est de là que vient tout le lot de flore.** Constaté le 2026-09-05
+> au soir sur des captures du jeu d'origine, le personnage servant de règle :
+> une touffe d'herbe y monte **à l'épaule**, pas au genou. La colonne « corrigé »
+> donne la cible ; les valeurs d'origine sont laissées barrées, parce qu'elles
+> expliquent la taille des 39 modèles livrés. Détail et méthode :
+> `nextsteps.md`, §6.5.
+
+| élément | hauteur | corrigé | empreinte |
+|---|---|---|---|
+| personnage de référence | **32** | — | 12 × 8 |
+| herbe, brins | ~~8 – 12~~ | **27 – 30** | ≤ 20 × 20 |
+| plante haute (fougère, pousse) | — | **45 – 52** | ≤ 20 × 20 |
+| fleur de champ dispersée | ~~8 – 14~~ | **5 – 9** | ≤ 8 × 8 |
+| grande fleur (tournesol) | 14 – 20 | **26 – 32** | ≤ 14 × 14 |
+| champignon | 5 – 10 | — | ≤ 10 × 10 |
+| caillou | ~~4 – 8~~ | **30 – 40** | ≤ 40 × 40 |
+| buisson, broussaille, roseau, algue, corail | 16 – 28 | **16 – 22** | ≤ 32 × 32 |
+| cactus, grès | 32 – 56 | — | ≤ 48 × 48 |
 
 Et en **blocs**, pour situer ça dans le monde généré :
 
 | élément | hauteur |
 |---|---|
 | personnage | 2,4 |
-| touffe d'herbe | 0,6 – 0,9 (au genou) |
-| buisson | 1,2 – 2,1 |
+| touffe d'herbe | ~~0,6 – 0,9 (au genou)~~ → **2,0 – 2,3 (à l'épaule)** |
+| plante haute | **3,4 – 3,9** |
+| caillou | ~~0,3 – 0,6~~ → **2,3 – 3,0** (un bloc erratique, pas un galet) |
+| buisson | **1,2 – 1,7** |
 | cactus | 2,4 – 4,2 |
 | cratère porté par un élément de tuile | 50 de creux |
 | piton | 150 |

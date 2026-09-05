@@ -145,6 +145,19 @@ Les rôles reviennent d'un biome à l'autre : un `caillou_01` de prairie et un d
 neige sont **deux fichiers différents**, chacun dans les teintes de son biome.
 C'est voulu.
 
+> ⚠️ **Les hauteurs de cette table sont trop petites d'un facteur ~2,5 pour ce
+> qui pousse au sol** — constaté le 2026-09-05 au soir sur des captures du jeu
+> d'origine : une touffe d'herbe y monte à l'épaule du personnage, pas au genou.
+> Le lot des 39 modèles a été dessiné sur ces chiffres et hérite du défaut. La
+> table reste ici telle qu'elle a servi ; les valeurs corrigées sont dans
+> `assets/models/MODELS.md`, §1, et le raisonnement dans `nextsteps.md`, §6.5.
+>
+> Deuxième correction, du même jour : une touffe se fait de **cinq ou six brins**
+> longs et écartés, pas de dix à vingt serrés. La densité a été montée le
+> 2026-09-05 au matin pour compenser un rendu « clairsemé » — c'était traiter le
+> symptôme à l'envers, les touffes lisaient clairsemées parce qu'elles faisaient
+> la moitié de leur taille.
+
 | dossier | fichiers | hauteur visée (voxels) | teintes |
 |---|---|---|---|
 | `herbe/` | `herbe_01` `herbe_02` `herbe_03` | 10 – 14 | feuillage 128 – 136 |

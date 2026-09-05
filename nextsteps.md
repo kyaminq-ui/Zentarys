@@ -113,13 +113,23 @@ la **frontière de palette** a bougé une fois (terrain 1–31 → 1–40) pour 
 les filons, sans repeindre un seul modèle ; et les arbres se décident sur
 **leur propre champ** de bruit, pas sur les deux crêtes de la flore.
 
-> ⚠️ **Le lot d'arbres est à refaire, et on sait pourquoi** (2026-09-05 au soir,
-> après examen de trois captures du jeu d'origine). Il est **deux à trois fois
-> trop petit**, ses houppiers sont **trois fois trop étroits et de la mauvaise
-> proportion**, et il est dessiné **sept à treize fois trop fin** : les arbres de
-> l'original sont bâtis des mêmes cubes que le terrain, pas de ceux de la flore.
-> La couche de dispersion et le montage, eux, restent valables — c'est le grain
-> et les tailles qui changent, pas l'architecture. Détail et chiffres en §6.
+> ⚠️ **Les deux lots posés au sol sont mal dimensionnés** (2026-09-05 au soir,
+> après examen de six captures du jeu d'origine).
+>
+> Le **lot d'arbres** est à refaire : **deux à trois fois trop petit**, ses
+> houppiers **trois fois trop étroits et de la mauvaise proportion**, et dessiné
+> **sept à treize fois trop fin** — les arbres de l'original sont bâtis des mêmes
+> cubes que le terrain, pas de ceux de la flore.
+>
+> Le **lot de flore** est à la bonne grille — 3/40 est mesuré pour le décor —
+> mais **deux fois et demie trop petit et deux à quatre fois trop dense** : une
+> touffe d'herbe monte à l'épaule du personnage, pas au genou, et elle a cinq
+> brins, pas vingt. La cause est un repère faux de `MODELS.md` §1, corrigé
+> depuis.
+>
+> Dans les deux cas, **la couche de dispersion et le montage restent valables** :
+> ce sont les tailles et le grain qui changent, pas l'architecture. Détail,
+> chiffres et méthode en §6.
 
 **1.7 — contenu de biome, fait** (2026-09-05, au soir). La mécanique de
 dispersion était en place depuis le 2026-09-04 ; ce qui manquait était le
@@ -424,12 +434,14 @@ docs/images/               gabarit, carte et composition de flore, en jeu
   par colonne avant d'être déplacé sur le chemin froid. Mesurer avant de
   supposer que c'est le verrou qui coûte.
 
-## 6. Prochaine tâche — l'échelle et le grain des arbres
+## 6. Prochaine tâche — l'échelle et le grain des modèles
 
-> **À FAIRE EN PREMIER, session du 2026-09-06.** *Le lot d'arbres livré le
-> 2026-09-05 est à la mauvaise échelle et au mauvais grain. Ce n'est pas une
-> question de goût : trois captures du jeu d'origine, regardées le 2026-09-05 au
-> soir, le montrent, et le raisonnement structurel va dans le même sens.*
+> **À FAIRE EN PREMIER, session du 2026-09-06.** *Les deux lots de modèles posés
+> au sol sont mal dimensionnés. Ce n'est pas une question de goût : six captures
+> du jeu d'origine, regardées le 2026-09-05 au soir, le montrent. **Les arbres**
+> sont à la mauvaise échelle ET au mauvais grain (§6.1 à §6.4) ; **la flore** est
+> à la bonne grille mais trop petite et trop dense (§6.5). Les deux se corrigent
+> ensemble, et le remède n'est pas le même.*
 >
 > ### 6.1 Ce que les captures montrent
 >
@@ -526,7 +538,64 @@ docs/images/               gabarit, carte et composition de flore, en jeu
 >   sont des plateaux plats et nets d'un bloc d'épaisseur, larges à la base, et
 >   c'est cette superposition qui fait la silhouette — pas des rameaux.
 >
-> ### 6.5 Comment trancher
+> ### 6.5 La flore : même diagnostic, remède opposé
+>
+> Trois captures de plus, regardées dans la foulée, portent sur l'herbe et les
+> fleurs. Elles disent que **la flore est trop petite et trop dense**, pas que sa
+> grille est fausse — l'inverse exact des arbres, et c'est important : le
+> rapport 3/40 est **mesuré pour le décor** (§8.3), donc il reste.
+>
+> Comparaison en hauteurs de personnage, l'unité la plus sûre parce qu'elle se
+> lit sur la capture comme dans `inspect_model.gd` :
+>
+> | | chez nous | sur les captures |
+> |---|---|---|
+> | touffe d'herbe | **0,45 ×** | **~1,0 ×** — les brins montent à l'épaule |
+> | plante haute (fougère, pousse) | absente | **~1,5 ×** |
+> | caillou | **0,30 ×** | **~1,0 – 1,3 ×** — ce sont des blocs erratiques, pas des cailloux |
+> | buisson | **1,05 ×** | **~0,65 ×** |
+> | fleur de champ dispersée | 0,60 × | **~0,2 ×**, quelques cubes |
+> | tournesol | 0,64 × | ~1,0 × |
+>
+> **La densité, ensuite.** Sur les captures, une touffe est faite de **quatre à
+> six brins**, longs, lisses, franchement arqués et bien écartés. Les nôtres en
+> ont onze à vingt-deux.
+>
+> > **Et c'est moi qui les ai densifiées le matin même, et c'était la mauvaise
+> > correction.** En jeu, les touffes lisaient « clairsemées » — j'ai monté les
+> > brins de 6 à 11, de 5+3 à 8+6, de 12+3 à 17+5. Elles lisaient clairsemées
+> > **parce qu'elles font la moitié de la taille qu'elles devraient**, donc un
+> > quart de la surface à l'écran, pas parce qu'il leur manquait des brins. J'ai
+> > traité le symptôme à l'envers. **À défaire en même temps qu'on les
+> > agrandit.**
+>
+> **La cause première est dans nos propres documents.**
+> `assets/models/MODELS.md` §1 dit « touffe d'herbe 0,6 – 0,9 bloc (au genou) »
+> et `docs/prompt_generation_flore.md` commande 10 – 14 voxels. Les captures
+> disent **à l'épaule**, soit 27 – 30 voxels. Ce repère a été posé à l'œil au
+> jalon 1.7, il est faux d'un facteur 2,5, et tout le lot en découle.
+> L'enveloppe, elle, était juste : le plafond de 53 voxels (4 blocs) laissait
+> largement la place — **on a dessiné tout le lot au bas de son enveloppe**.
+>
+> **Ce que je ferais, sans toucher au rapport 3/40 :**
+>
+> - **agrandir** : herbes 12 → 27 – 30 voxels, cailloux 8 → 30 – 40, ajouter une
+>   plante haute à ~50 voxels ; **réduire** le buisson et les fleurs de champ ;
+> - **désépaissir** : revenir à **cinq ou six brins** par touffe, longs et bien
+>   écartés, au lieu de onze à vingt-deux serrés ;
+> - **épaissir le brin lui-même** : 1 → **2 voxels de large**. À 27 voxels de
+>   long, un brin d'un voxel est un cheveu ; sur les captures un brin montre ses
+>   cubes. C'est ce qui donne le rendu « cubique » que l'original a et que nous
+>   n'avons pas ;
+> - corriger les deux repères ci-dessus **avant** de regénérer, sinon la
+>   prochaine reprise redessinera au genou.
+>
+> **La leçon commune aux deux lots :** ce qu'on prend pour « trop de détail »
+> est presque toujours « trop petit ». Un objet à la moitié de sa taille garde
+> tous ses éléments dans le quart de la surface, donc il paraît chargé — et le
+> réflexe d'en ajouter aggrave exactement ce qu'on voulait corriger.
+>
+> ### 6.6 Comment trancher
 >
 > Regarder, ne pas raisonner : générer le lot à deux échelles (1 et 1/2 bloc par
 > voxel), et comparer en jeu par `-- --biome 3 --shot 32` (§2), avec le
