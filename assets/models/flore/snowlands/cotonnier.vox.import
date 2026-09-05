@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://c8qpyosh3bi0j"
+path="res://.godot/imported/cotonnier.vox-dc2131d0c9b7d003960fb3bb207215a9.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/snowlands/cotonnier.vox"
+dest_files=["res://.godot/imported/cotonnier.vox-dc2131d0c9b7d003960fb3bb207215a9.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

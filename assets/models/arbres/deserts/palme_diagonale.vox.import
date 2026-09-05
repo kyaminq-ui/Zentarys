@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://cqbco1uhw8fm0"
+path="res://.godot/imported/palme_diagonale.vox-80f264475cc108a29abba51c39170d6f.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/deserts/palme_diagonale.vox"
+dest_files=["res://.godot/imported/palme_diagonale.vox-80f264475cc108a29abba51c39170d6f.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

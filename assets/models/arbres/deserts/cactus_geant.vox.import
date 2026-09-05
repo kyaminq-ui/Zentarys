@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://ps3y8rnpnddg"
+path="res://.godot/imported/cactus_geant.vox-06e6470e217c0ba719a6dada3cb510db.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/deserts/cactus_geant.vox"
+dest_files=["res://.godot/imported/cactus_geant.vox-06e6470e217c0ba719a6dada3cb510db.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

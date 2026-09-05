@@ -84,11 +84,21 @@ const TREE_CELL_SHIFT: int = 6
 ## entites, et une unite est une colonne de blocs (`CWWorldParams`). Cette
 ## valeur n'est pas reprise telle quelle, et il faut dire pourquoi : cette
 ## boucle-la place des `cube::Spawn`, c'est-a-dire des points d'apparition de
-## creatures, un par tuile de 2048 unites. A 20 blocs d'ecart minimum, une
-## cellule de 64 blocs ne tiendrait que six arbres et aucune foret ne serait
-## possible. Le *mecanisme* est porte — comparaison sur le carre de la distance,
-## rejet du candidat le plus recent —, la valeur est celle du projet.
-const ESPACEMENT: int = 7
+## creatures, un par tuile de 2048 unites. Le *mecanisme* est porte —
+## comparaison sur le carre de la distance, rejet du candidat le plus recent —,
+## la valeur est celle du projet.
+##
+## **Passe de 7 a 14 blocs au jalon 1.12**, et ce n'est pas un reglage de gout :
+## le lot d'arbres est redessine a un voxel par bloc, ses houppiers font 12 a 16
+## blocs de large la ou ils en faisaient 4,8. A 7 blocs d'ecart, deux houppiers
+## voisins se traversaient de part en part. A 14, deux couronnes de rayon 7 se
+## touchent sans se penetrer — c'est exactement la moitie de la largeur visee,
+## et c'est de la que sort le nombre.
+##
+## La cellule doit rester grande devant lui (voir l'en-tete) : 64 / 14 fait
+## encore 4,5 cellules de large, l'espacement mord toujours au travers des
+## frontieres.
+const ESPACEMENT: int = 14
 
 ## Nombre moyen d'arbres par cellule de 64 blocs, soit 4 096 colonnes.
 ##
@@ -97,17 +107,21 @@ const ESPACEMENT: int = 7
 ## repere qu'on ait — la jungle est le biome le plus dense de l'original, le
 ## desert le plus vide.
 ##
-## Plafond theorique a cet espacement : un empilement hexagonal de disques de
-## 7 blocs de rayon dans 4 096 colonnes en tient une soixantaine. La jungle a 22
-## est donc dense sans etre saturee, et l'espacement continue de mordre.
+## Plafond theorique au nouvel espacement : un empilement hexagonal de disques
+## de 7 blocs de rayon dans 4 096 colonnes en tient environ **24**. Toutes les
+## valeurs ci-dessous ont donc ete divisees a peu pres par deux en meme temps
+## que l'espacement doublait — sans quoi la moitie des candidats de jungle
+## seraient rejetes par l'espacement et la densite ne voudrait plus rien dire.
+##
+## La cle est le **biome** depuis le jalon 1.12. Oceans n'y figure pas : une ile
+## emergee porte le biome de son climat, et une colonne sous l'eau ne porte
+## aucun arbre.
 const DENSITE: Dictionary = {
-	CWPalette.GRASS: 12.0,
-	CWPalette.GRASS_DRY: 5.0,
-	CWPalette.GRASS_JUNGLE: 22.0,
-	CWPalette.SWAMP: 7.0,
-	CWPalette.SAND: 1.5,
-	CWPalette.SNOW: 9.0,
-	CWPalette.TUNDRA: 4.0,
+	CWBiome.GREENLANDS: 7.0,
+	CWBiome.SNOWLANDS: 5.5,
+	CWBiome.DESERTS: 0.8,
+	CWBiome.JUNGLES: 14.0,
+	CWBiome.LAVALANDS: 0.5,
 }
 
 ## Crete de placement des arbres. Meme forme que celle de la flore, meme seuil,
@@ -194,9 +208,9 @@ func _candidats(cx: int, cz: int) -> Array:
 	@warning_ignore("integer_division")
 	var mid: int = cell_size / 2
 	var centre: Vector3 = _field.sample_column(base_x + mid, base_z + mid)
-	var surface: int = CWPalette.surface_index(centre.x, centre.y, centre.z,
+	var biome: int = CWBiome.at(centre.x, centre.y, centre.z,
 			_field.params().sea_level)
-	var density: float = float(DENSITE.get(surface, 0.0))
+	var density: float = float(DENSITE.get(biome, 0.0))
 	if density <= 0.0:
 		return out
 	var budget: float = density / PLACEMENT_PASS_RATE_ARBRES
@@ -273,12 +287,19 @@ func _build_cell(cx: int, cz: int) -> Array:
 		var x: int = int(c["x"])
 		var z: int = int(c["z"])
 		var col: Vector3 = _field.sample_column(x, z)
-		var surface: int = CWPalette.surface_index(col.x, col.y, col.z, sea)
-		# Un arbre les pieds dans l'eau n'existe pas ici : le marais est une
-		# surface a part, au-dessus du niveau de la mer.
+		# Un arbre les pieds dans l'eau n'existe pas ici : le sol humide est une
+		# matiere a part, au-dessus du niveau de la mer.
 		if col.x < float(sea):
 			continue
-		var sp: Dictionary = CWTreeRules.species_at(surface, float(c["pick"]))
+		var biome_c: int = CWBiome.at(col.x, col.y, col.z, sea)
+		# La matiere exacte du point est verifiee, comme pour la flore : un
+		# bosquet de Greenlands ne monte pas sur la roche nue de sa propre
+		# montagne, ni sur sa calotte de neige.
+		var surface: int = CWPalette.surface_of(biome_c,
+				col.x - float(sea), col.y, col.z, x, z)
+		if not CWDecorRules.decor_allowed(biome_c, surface):
+			continue
+		var sp: Dictionary = CWTreeRules.species_at(biome_c, float(c["pick"]))
 		if sp.is_empty():
 			continue
 		var ground: int = floori(col.x) + 1
@@ -312,7 +333,7 @@ func _monte(out: Array, sp: Dictionary, x: int, z: int, ground: int,
 	# calcul de cette couche qui puisse etre faux sans qu'on le voie : un
 	# houppier a un demi-bloc de trop flotte, a un demi-bloc de moins il avale la
 	# cime. D'ou `fy`, qui garde la fraction au lieu de l'arrondir.
-	var haut: float = float(tronc.height) * echelle / CWVoxelModel.VOXELS_PER_BLOCK
+	var haut: float = float(tronc.height) * echelle / tronc.voxels_per_block
 	var bornes: Array = sp["pieces"]
 	var n: int = int(bornes[0]) + int(float(c["pieces"])
 			* float(int(bornes[1]) - int(bornes[0]) + 1))
@@ -329,7 +350,7 @@ func _monte(out: Array, sp: Dictionary, x: int, z: int, ground: int,
 		var m: CWVoxelModel = _lib.model(couronnes[(turn + k) % couronnes.size()])
 		if m == null:
 			continue
-		var hm: float = float(m.height) * echelle / CWVoxelModel.VOXELS_PER_BLOCK
+		var hm: float = float(m.height) * echelle / m.voxels_per_block
 		var y: float = y0 + float(k) * hm * EMPILEMENT
 		# Un quart de tour different par houppier : deux houppiers du meme modele
 		# empiles a la meme orientation rendent une image doublee.
@@ -343,6 +364,22 @@ func _monte(out: Array, sp: Dictionary, x: int, z: int, ground: int,
 ## de palme du lot — `palme` et `palme_diagonale`, la seconde dessinee a 45
 ## degres. Les deux ensemble donnent huit directions, et c'est exactement la
 ## raison pour laquelle l'original a `palm-leaf` et `palm-leaf-diagonal`.
+##
+## -- Un demi-tour ne change rien a une paire ---------------------------------
+##
+## Depuis le jalon 1.12, une palme est une **paire de frondes opposees** (voir
+## `arbres_blocs.palme_paire` : c'est ce qui met l'attache sur l'ancre). Une
+## paire est symetrique par rapport a son centre, donc la tourner d'un demi-tour
+## rend exactement la meme image. Avancer le quart de tour a chaque piece —
+## `(turn + k) % 4` — posait donc la troisieme palme par-dessus la premiere et
+## la quatrieme par-dessus la seconde : quatre pieces, deux directions, et la
+## couronne se lisait comme une planche posee en travers du stipe. Vu en capture
+## sur le dattier d'oasis, le 2026-09-06.
+##
+## Le quart de tour n'avance donc **qu'une piece sur deux**, et le modele
+## alterne a chaque piece. Quatre pieces donnent quatre paires distinctes —
+## deux axes et deux diagonales, soit huit frondes — ce qui est le maximum que
+## quatre quarts de tour permettent.
 func _couronne_de_palmes(out: Array, couronnes: Array, x: int, z: int,
 		ground: int, haut: float, turn: int, echelle: float, n: int) -> void:
 	var poses: int = 0
@@ -353,8 +390,9 @@ func _couronne_de_palmes(out: Array, couronnes: Array, x: int, z: int,
 		# Les palmes descendent legerement a mesure qu'on en pose : une couronne
 		# dont toutes les pieces sont a la meme hauteur se lit comme un disque.
 		var y: float = haut - float(k) * 0.35
-		out.append(_piece(m, x, z, ground, y,
-				(turn + k) % CWVoxelModel.ROTATIONS, echelle))
+		@warning_ignore("integer_division")
+		var quart: int = (turn + k / couronnes.size()) % CWVoxelModel.ROTATIONS
+		out.append(_piece(m, x, z, ground, y, quart, echelle))
 		poses += 1
 	if poses == 0:
 		return

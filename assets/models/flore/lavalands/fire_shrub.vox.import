@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://dujkdpd4mm5ot"
+path="res://.godot/imported/fire_shrub.vox-5c858cc1bb1bfbd6a460be9da505d0c3.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/lavalands/fire_shrub.vox"
+dest_files=["res://.godot/imported/fire_shrub.vox-5c858cc1bb1bfbd6a460be9da505d0c3.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

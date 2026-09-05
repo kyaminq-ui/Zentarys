@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://b3jefs4fknjuk"
+path="res://.godot/imported/habanero.vox-a49d5da45056638dcbee76adb28b0fe5.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/deserts/habanero.vox"
+dest_files=["res://.godot/imported/habanero.vox-a49d5da45056638dcbee76adb28b0fe5.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

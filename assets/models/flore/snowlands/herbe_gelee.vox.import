@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://0c66q5fs4u7o"
+path="res://.godot/imported/herbe_gelee.vox-97e3ae38a604b50428cff0dd3dc5c004.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/snowlands/herbe_gelee.vox"
+dest_files=["res://.godot/imported/herbe_gelee.vox-97e3ae38a604b50428cff0dd3dc5c004.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

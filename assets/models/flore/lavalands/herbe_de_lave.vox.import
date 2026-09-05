@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://dcvrv4pxle10u"
+path="res://.godot/imported/herbe_de_lave.vox-8c738e233bc25bdb5cb202c38bbd4d37.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/lavalands/herbe_de_lave.vox"
+dest_files=["res://.godot/imported/herbe_de_lave.vox-8c738e233bc25bdb5cb202c38bbd4d37.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

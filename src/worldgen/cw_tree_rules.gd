@@ -57,98 +57,145 @@ const TREE_DIR: String = "res://assets/models/arbres/"
 ## montage ENTIER, `couronnes` est vide. Une espece dont un seul fichier manque
 ## du disque est ignoree en entier — un tronc nu vaut moins qu'une clairiere.
 ##
-## `pieces` est le nombre de houppiers empiles (FEUILLU) ou de palmes en
-## couronne (PALMIER), tire dans l'intervalle donne.
+## `pieces` est le nombre de houppiers empiles (FEUILLU) ou de **paires** de
+## palmes en couronne (PALMIER), tire dans l'intervalle donne.
+##
+## Des paires, et non des palmes : depuis le jalon 1.12 un modele de palme porte
+## deux frondes opposees passant par son ancre. La raison est l'ancre elle-meme,
+## qui est le centre du gabarit et non le point d'attache — une fronde unique se
+## posait au sommet du stipe *par son milieu*, la moitie passant de l'autre cote
+## du tronc. C'etait le decalage d'attache signale a la production du lot
+## precedent ; il est resolu par le dessin, sans que l'assembleur change.
+## Deux a quatre paires font donc quatre a huit frondes, le compte voulu.
 const SPECIES: Dictionary = {
-	CWPalette.GRASS: [
+	CWBiome.GREENLANDS: [
 		{
-			"nom": "feuillu",
+			"nom": "chene",
 			"montage": Montage.FEUILLU,
-			"tronc": "herbe/tronc_feuillu",
-			"couronnes": ["herbe/houppier_01", "herbe/houppier_02"],
+			"tronc": "greenlands/chene_tronc",
+			"couronnes": ["greenlands/chene_houppier_01",
+					"greenlands/chene_houppier_02"],
 			"pieces": [2, 3],
-			"poids": 1.0,
+			"poids": 0.42,
 		},
-	],
-	CWPalette.GRASS_DRY: [
 		{
-			"nom": "arbre sec",
+			"nom": "bouleau",
+			"montage": Montage.FEUILLU,
+			"tronc": "greenlands/bouleau_tronc",
+			"couronnes": ["greenlands/bouleau_houppier"],
+			"pieces": [1, 2],
+			"poids": 0.26,
+		},
+		{
+			"nom": "pin",
 			"montage": Montage.ENTIER,
-			"tronc": "herbe_seche/arbre_sec",
+			"tronc": "greenlands/pin",
 			"couronnes": [],
 			"pieces": [0, 0],
-			"poids": 0.65,
+			"poids": 0.25,
 		},
+		# Le rocher geant : « ressemble a l'Arbre de Mana » dans l'alpha. Ce
+		# n'est pas un arbre, mais il se pose par la meme couche — meme taille,
+		# meme espacement, meme grille de dessin. Le ranger ailleurs aurait
+		# demande une troisieme couche de dispersion pour un seul modele.
 		{
-			"nom": "feuillu d'automne",
+			"nom": "rocher geant",
+			"montage": Montage.ENTIER,
+			"tronc": "greenlands/rocher_geant",
+			"couronnes": [],
+			"pieces": [0, 0],
+			"poids": 0.05,
+		},
+		# L'arbre geant porte une mission dans l'alpha. Son poids le rend
+		# presque unique a l'echelle d'une region : a 0,02 et 7 arbres par
+		# cellule, il en sort un tous les sept cellules environ, soit tous les
+		# 170 blocs. C'est encore trop frequent pour un objectif de quete, et ce
+		# sera au jalon 4 de le poser par les elements de tuile plutot que par
+		# la dispersion — la couche n'existe pas encore, le modele si.
+		{
+			"nom": "arbre geant",
 			"montage": Montage.FEUILLU,
-			"tronc": "herbe/tronc_feuillu",
-			"couronnes": ["herbe_seche/houppier_sec"],
-			"pieces": [1, 2],
-			"poids": 0.35,
+			"tronc": "greenlands/arbre_geant_tronc",
+			"couronnes": ["greenlands/arbre_geant_houppier"],
+			"pieces": [3, 4],
+			"poids": 0.02,
 		},
 	],
-	CWPalette.GRASS_JUNGLE: [
+	CWBiome.SNOWLANDS: [
 		{
-			"nom": "canopee",
+			"nom": "pin enneige",
+			"montage": Montage.ENTIER,
+			"tronc": "snowlands/pin_enneige",
+			"couronnes": [],
+			"pieces": [0, 0],
+			"poids": 0.45,
+		},
+		{
+			"nom": "sapin enneige",
+			"montage": Montage.ENTIER,
+			"tronc": "snowlands/sapin_enneige",
+			"couronnes": [],
+			"pieces": [0, 0],
+			"poids": 0.35,
+		},
+		{
+			"nom": "bouleau givre",
 			"montage": Montage.FEUILLU,
-			"tronc": "jungle/tronc_palmier",
-			"couronnes": ["jungle/houppier_jungle"],
+			"tronc": "snowlands/bouleau_givre_tronc",
+			"couronnes": ["snowlands/bouleau_givre_houppier"],
 			"pieces": [1, 2],
+			"poids": 0.20,
+		},
+	],
+	CWBiome.DESERTS: [
+		{
+			"nom": "cactus geant",
+			"montage": Montage.ENTIER,
+			"tronc": "deserts/cactus_geant",
+			"couronnes": [],
+			"pieces": [0, 0],
+			"poids": 0.6,
+		},
+		# Le dattier d'oasis. Meme montage que le palmier de jungle, teintes du
+		# desert : c'est un lot par biome, pas un lot partage.
+		{
+			"nom": "dattier",
+			"montage": Montage.PALMIER,
+			"tronc": "deserts/palmier_tronc",
+			"couronnes": ["deserts/palme", "deserts/palme_diagonale"],
+			"pieces": [3, 4],
+			"poids": 0.4,
+		},
+	],
+	CWBiome.JUNGLES: [
+		# « Grands arbres tropicaux (base large) » : le fut est le plus epais du
+		# lot et porte deux a trois houppiers, ce qui fait la canopee fermee.
+		{
+			"nom": "arbre tropical",
+			"montage": Montage.FEUILLU,
+			"tronc": "jungles/tropical_tronc",
+			"couronnes": ["jungles/tropical_houppier_01",
+					"jungles/tropical_houppier_02"],
+			"pieces": [2, 3],
 			"poids": 0.6,
 		},
 		{
 			"nom": "palmier",
 			"montage": Montage.PALMIER,
-			"tronc": "jungle/tronc_palmier",
-			"couronnes": ["jungle/palme", "jungle/palme_diagonale"],
-			"pieces": [5, 8],
+			"tronc": "jungles/palmier_tronc",
+			"couronnes": ["jungles/palme", "jungles/palme_diagonale"],
+			"pieces": [3, 4],
 			"poids": 0.4,
 		},
 	],
-	CWPalette.SWAMP: [
+	CWBiome.LAVALANDS: [
+		# « Thorn Tree : rare, pas de drop ». C'est le seul arbre du biome, et sa
+		# rarete vient de la densite de Lava Lands (0,5 par cellule), pas d'un
+		# poids : il n'a pas de concurrent.
 		{
-			"nom": "arbre mort",
+			"nom": "arbre a epines",
 			"montage": Montage.ENTIER,
-			"tronc": "marais/arbre_mort",
-			"couronnes": [],
-			"pieces": [0, 0],
-			"poids": 1.0,
-		},
-	],
-	CWPalette.SAND: [
-		{
-			"nom": "dattier",
-			"montage": Montage.ENTIER,
-			"tronc": "sable_desert/palmier_dattier",
-			"couronnes": [],
-			"pieces": [0, 0],
-			"poids": 1.0,
-		},
-	],
-	CWPalette.SNOW: [
-		{
-			"nom": "sapin enneige",
-			"montage": Montage.ENTIER,
-			"tronc": "neige/sapin_enneige",
-			"couronnes": [],
-			"pieces": [0, 0],
-			"poids": 0.6,
-		},
-		{
-			"nom": "sapin",
-			"montage": Montage.ENTIER,
-			"tronc": "neige/sapin",
-			"couronnes": [],
-			"pieces": [0, 0],
-			"poids": 0.4,
-		},
-	],
-	CWPalette.TUNDRA: [
-		{
-			"nom": "sapin rabougri",
-			"montage": Montage.ENTIER,
-			"tronc": "toundra/sapin_rabougri",
+			"tronc": "lavalands/arbre_epineux",
 			"couronnes": [],
 			"pieces": [0, 0],
 			"poids": 1.0,
@@ -157,37 +204,37 @@ const SPECIES: Dictionary = {
 }
 
 
-## Tous les chemins employes par les especes d'une surface, tronc et couronnes
+## Tous les chemins employes par les especes d'un biome, tronc et couronnes
 ## confondus. Sert a construire la bibliotheque et a verifier le lot.
-static func paths_of(surface: int) -> Array:
+static func paths_of(biome: int) -> Array:
 	var out: Array = []
-	for sp in SPECIES.get(surface, []):
+	for sp in SPECIES.get(biome, []):
 		for path in ([sp["tronc"]] as Array) + (sp["couronnes"] as Array):
 			if not out.has(path):
 				out.append(path)
 	return out
 
 
-## Tous les chemins du lot, toutes surfaces confondues.
+## Tous les chemins du lot, tous biomes confondus.
 static func all_paths() -> Array:
 	var out: Array = []
-	for surface in SPECIES:
-		for path in paths_of(surface):
+	for biome in SPECIES:
+		for path in paths_of(biome):
 			if not out.has(path):
 				out.append(path)
 	return out
 
 
-## L'espece a poser, tiree dans `[0, 1)` selon les poids de la surface, ou un
-## dictionnaire vide si la surface n'a pas d'arbre.
+## L'espece a poser, tiree dans `[0, 1)` selon les poids du biome, ou un
+## dictionnaire vide si le biome n'a pas d'arbre.
 ##
 ## Le tirage est un simple choix pondere et non une crete de bruit : a la
 ## difference du decor, deux especes d'arbres voisines ne se disputent pas la
 ## composition d'une region — un bosquet de sapins et un de sapins enneiges se
 ## melangent sans que cela choque. Si un jour il faut des peuplements purs, c'est
 ## ici que se brancherait une crete a 0,01, exactement comme dans `CWDecorRules`.
-static func species_at(surface: int, pick: float) -> Dictionary:
-	var list: Array = SPECIES.get(surface, [])
+static func species_at(biome: int, pick: float) -> Dictionary:
+	var list: Array = SPECIES.get(biome, [])
 	if list.is_empty():
 		return {}
 	var total: float = 0.0
@@ -201,6 +248,8 @@ static func species_at(surface: int, pick: float) -> Dictionary:
 	return list[-1]
 
 
-## Surfaces qui portent des arbres.
-static func surfaces() -> Array:
+## Biomes qui portent des arbres. Oceans n'en a pas : une ile emergee n'est
+## pas Oceans, c'est son climat qui la nomme, et elle porte les arbres qui vont
+## avec.
+static func biomes() -> Array:
 	return SPECIES.keys()

@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://b8iiesowqdyqq"
+path="res://.godot/imported/fleur_tournesol.vox-78a88860bf98d52dcfc166ac6e3cc782.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/greenlands/fleur_tournesol.vox"
+dest_files=["res://.godot/imported/fleur_tournesol.vox-78a88860bf98d52dcfc166ac6e3cc782.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

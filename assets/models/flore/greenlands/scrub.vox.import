@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://drqbhvkjxoo8y"
+path="res://.godot/imported/scrub.vox-82d0f5885512f4494197e06a9cb7f3c9.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/greenlands/scrub.vox"
+dest_files=["res://.godot/imported/scrub.vox-82d0f5885512f4494197e06a9cb7f3c9.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

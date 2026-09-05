@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://cww58m5qqdics"
+path="res://.godot/imported/chene_houppier_01.vox-901d3b2aac738f7ae5b9bc31b61cb50f.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/greenlands/chene_houppier_01.vox"
+dest_files=["res://.godot/imported/chene_houppier_01.vox-901d3b2aac738f7ae5b9bc31b61cb50f.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

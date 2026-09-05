@@ -353,7 +353,8 @@ func tint_of_zone(zx: int, zz: int) -> Color:
 	if site != null:
 		var sample: Vector3 = _field.sample_column(site.x, site.z)
 		var sea: int = _field.params().sea_level
-		var index: int = CWPalette.surface_index(sample.x, sample.y, sample.z, sea)
+		var index: int = CWPalette.surface_index(sample.x, sample.y, sample.z, sea,
+				site.x, site.z)
 		if sample.x < float(sea):
 			# La mer est peinte en eau : `surface_index` rend du sable sous le
 			# niveau de la mer, ce qui est juste pour le terrain et illisible

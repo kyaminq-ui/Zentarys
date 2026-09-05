@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://bly6p5bvj0smu"
+path="res://.godot/imported/pin_enneige.vox-37e17d01a74a17148ac56b9e1d460e43.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/snowlands/pin_enneige.vox"
+dest_files=["res://.godot/imported/pin_enneige.vox-37e17d01a74a17148ac56b9e1d460e43.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

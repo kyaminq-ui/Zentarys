@@ -358,8 +358,13 @@ func _build_cell(cx: int, cz: int) -> Array:
 	@warning_ignore("integer_division")
 	var mid: int = cell_size / 2
 	var centre: Vector3 = _field.sample_column(base_x + mid, base_z + mid)
+	# La densite se lit sur le **biome**, pas sur la matiere du centre : une
+	# cellule de prairie dont le centre tombe sur un rocher garde la densite de
+	# sa prairie, et ce sont ses candidats, un a un, que le filtre de matiere
+	# ecarte plus bas. L'ancienne table, indexee par matiere, rendait sterile
+	# toute une cellule pour un centre malheureux.
 	var density: float = CWModelLibrary.density_of(
-			CWPalette.surface_index(centre.x, centre.y, centre.z, sea))
+			CWBiome.at(centre.x, centre.y, centre.z, sea))
 	if density <= 0.0:
 		return out
 	# Le budget est un nombre de *candidats*, pas de plantes : la crete de
@@ -397,25 +402,33 @@ func _build_cell(cx: int, cz: int) -> Array:
 		var jitter: float = rng.unit()
 		var rare: int = rng.next()
 
-		# La surface exacte du point, elle, est verifiee : une cellule a cheval
-		# sur une plage ou une ligne de neige ne doit pas y semer sa prairie.
+		# Le biome et la matiere exacte du point, tous deux verifies : une
+		# cellule a cheval sur une plage, une ligne de neige ou une frontiere de
+		# climat ne doit pas y semer sa prairie.
 		var c: Vector3 = _field.sample_column(x, z)
-		var surface: int = CWPalette.surface_index(c.x, c.y, c.z, sea)
+		var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
+		var surface: int = CWPalette.surface_of(biome, c.x - float(sea),
+				c.y, c.z, x, z)
 		# Sous l'eau, seul le fond marin se garnit : le reste de la flore
 		# n'aurait pas de sens et se verrait de loin a travers l'eau.
 		if c.x < float(sea) and surface != CWPalette.GRAVEL:
+			continue
+		# Roche nue, coulee de lave, calotte de sommet : rien n'y pousse. C'est
+		# le filtre qui remplace l'ancienne table par matiere — voir
+		# `CWDecorRules.decor_allowed`.
+		if not CWDecorRules.decor_allowed(biome, surface):
 			continue
 
 		# Le role d'abord, le modele ensuite. Les deux cretes de selection sont
 		# regionales : sur une centaine de blocs c'est le meme role qui domine,
 		# et c'est de la que vient la composition d'une prairie.
-		var role: int = CWDecorRules.role_at(surface, x, z)
+		var role: int = CWDecorRules.role_at(biome, surface, x, z)
 		if role == CWDecorRules.Role.AUCUN:
 			continue
 		var rarity: int = CWDecorRules.rarity_of(role)
 		if rarity > 1 and rare % rarity != 0:
 			continue
-		var choices: Array = _lib.for_role(surface, role)
+		var choices: Array = _lib.for_role(biome, role)
 		if choices.is_empty():
 			continue
 

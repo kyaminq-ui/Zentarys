@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://devp8uaqkw5ck"
+path="res://.godot/imported/caillou_basalte.vox-a5dad71ca439124cfd9fb2b4a7d9f478.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/lavalands/caillou_basalte.vox"
+dest_files=["res://.godot/imported/caillou_basalte.vox-a5dad71ca439124cfd9fb2b4a7d9f478.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

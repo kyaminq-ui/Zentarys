@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://1q3w52c3sae2"
+path="res://.godot/imported/fougere.vox-818b02325eb7e41fb7e90691238dd002.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/greenlands/fougere.vox"
+dest_files=["res://.godot/imported/fougere.vox-818b02325eb7e41fb7e90691238dd002.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

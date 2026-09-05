@@ -187,8 +187,10 @@ static func voxel_of(y: int, top: int, surface: int, subsurface: int,
 func generated_voxel(x: int, y: int, z: int) -> int:
 	var f: CWTerrainField = field()
 	var p: CWWorldParams = f.params()
-	var c: Vector3 = f.sample_column(p.world_origin.x + x, p.world_origin.y + z)
-	var surface: int = CWPalette.surface_index(c.x, c.y, c.z, p.sea_level)
+	var wx: int = p.world_origin.x + x
+	var wz: int = p.world_origin.y + z
+	var c: Vector3 = f.sample_column(wx, wz)
+	var surface: int = CWPalette.surface_index(c.x, c.y, c.z, p.sea_level, wx, wz)
 	return voxel_of(y, floori(c.x), surface, subsurface_depth, p.sea_level)
 
 
@@ -310,7 +312,14 @@ func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,
 	for i in n:
 		var h: float = raw[j]
 		patch.heights[i] = h
-		patch.surfaces[i] = CWPalette.surface_index(h, raw[j + 1], raw[j + 2], sea)
+		# Meme parcours que `sample_patch` : iz a l'exterieur, ix a l'interieur.
+		# La regle de surface a besoin des coordonnees monde depuis le jalon
+		# 1.12 — voir `CWPalette.lava_flow`.
+		@warning_ignore("integer_division")
+		var iz: int = i / size.x
+		var ix: int = i - iz * size.x
+		patch.surfaces[i] = CWPalette.surface_index(h, raw[j + 1], raw[j + 2],
+				sea, ox + ix * stride, oz + iz * stride)
 		patch.lowest = minf(patch.lowest, h)
 		patch.highest = maxf(patch.highest, h)
 		j += 3

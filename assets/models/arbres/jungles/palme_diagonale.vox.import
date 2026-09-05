@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://cklr0p2v5sdic"
+path="res://.godot/imported/palme_diagonale.vox-0bd45ea88f81e80095b870463ccd3363.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/jungles/palme_diagonale.vox"
+dest_files=["res://.godot/imported/palme_diagonale.vox-0bd45ea88f81e80095b870463ccd3363.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

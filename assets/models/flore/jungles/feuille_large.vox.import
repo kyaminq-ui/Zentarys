@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://b4gpud80mowpq"
+path="res://.godot/imported/feuille_large.vox-f175479c32264751030c708c15b52527.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/jungles/feuille_large.vox"
+dest_files=["res://.godot/imported/feuille_large.vox-f175479c32264751030c708c15b52527.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

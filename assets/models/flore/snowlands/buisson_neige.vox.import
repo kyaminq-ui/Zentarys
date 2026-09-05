@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://ch01ly0bu3xkf"
+path="res://.godot/imported/buisson_neige.vox-b4e94c43adfe8f1f66d680405de08b5d.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/snowlands/buisson_neige.vox"
+dest_files=["res://.godot/imported/buisson_neige.vox-b4e94c43adfe8f1f66d680405de08b5d.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

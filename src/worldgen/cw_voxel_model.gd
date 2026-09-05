@@ -50,6 +50,34 @@ const ROTATIONS: int = 4
 ## celle du dessin.
 const VOXELS_PER_BLOCK: float = 40.0 / 3.0
 
+## La **seconde** grille de dessin : un voxel vaut un bloc.
+##
+## Elle sert a tout ce qui touche la matiere du terrain — les arbres depuis le
+## jalon 1.12, les filons depuis 1.11. La raison est structurelle et non
+## esthetique : la source ecrit le tronc d'un feuillu **en colonnes de blocs**
+## (`World_fillVoxelColumnTyped`) et instancie le houppier separement ; ces deux
+## moities ne se rejoignent proprement que si le houppier est sur la grille du
+## bloc. A 3/40, un houppier instancie ne tomberait jamais sur la colonne qui le
+## porte.
+##
+## Les captures du jeu d'origine disent la meme chose par un autre chemin : les
+## cubes de feuillage y lisent a la taille des blocs de terrain, alors que les
+## brins d'herbe sont treize fois plus fins (`nextsteps.md`, §6.1 a §6.3).
+##
+## **L'echelle 3/40, elle, reste mesuree** — 0,075 est relevee dans la voie du
+## decor du binaire (`docs/systems/02`, §8.3) — et la flore ne bouge pas.
+const VOXELS_PER_BLOCK_TERRAIN: float = 1.0
+
+## La grille de *ce* modele. C'est un champ et non plus une constante depuis le
+## jalon 1.12 : le lot de flore et le lot d'arbres ne sont pas dessines a la
+## meme finesse, et chaque bibliotheque impose la sienne au chargement.
+##
+## Tout ce qui convertit des voxels en blocs doit lire **celle-ci**, jamais la
+## constante. Les deux ont la meme valeur pour la flore, ce qui rend l'erreur
+## invisible sur les trois quarts du lot — d'ou les verifications de
+## `tests/tree_test.gd` sur les hauteurs en blocs.
+var voxels_per_block: float = VOXELS_PER_BLOCK
+
 ## Marge d'air autour de la matiere dans le tampon de maillage. Le mailleur en
 ## cubes a besoin de voir du vide sur le pourtour, sinon il ferme les faces de
 ## bord et le modele sort creux.
@@ -88,7 +116,8 @@ static var _mesher: VoxelMesherCubes = null
 ## biome : trois dossiers portent un `caillou_01`, et ce sont trois modeles
 ## differents. `CWModelLibrary` passe donc le chemin relatif, biome compris.
 static func load_from(model_path: String, palette: Resource,
-		model_name: String = "") -> CWVoxelModel:
+		model_name: String = "",
+		per_block: float = VOXELS_PER_BLOCK) -> CWVoxelModel:
 	if not ResourceLoader.exists(model_path) and not FileAccess.file_exists(model_path):
 		return null
 	var buffer := VoxelBuffer.new()
@@ -99,6 +128,7 @@ static func load_from(model_path: String, palette: Resource,
 		return null
 
 	var m := CWVoxelModel.new()
+	m.voxels_per_block = per_block
 	m.path = model_path
 	m.name = model_name if model_name != "" else model_path.get_file().get_basename()
 
@@ -239,8 +269,8 @@ func reduced(factor: int) -> CWVoxelModel:
 
 ## Mesures derivees, une fois les offsets en place.
 func _derive() -> void:
-	radius_blocks = ceili(float(radius) / VOXELS_PER_BLOCK)
-	height_blocks = ceili(float(height) / VOXELS_PER_BLOCK)
+	radius_blocks = ceili(float(radius) / voxels_per_block)
+	height_blocks = ceili(float(height) / voxels_per_block)
 
 
 ## Maillage du modele, construit une fois et garde.
@@ -342,4 +372,4 @@ func values(rotation: int) -> PackedByteArray:
 func _to_string() -> String:
 	return "%s %dx%dx%d voxels (%.2f bloc de haut), %d pleins, rayon %d" % [
 		name, extent.x, extent.y, extent.z,
-		float(height) / VOXELS_PER_BLOCK, voxel_count, radius]
+		float(height) / voxels_per_block, voxel_count, radius]

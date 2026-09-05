@@ -43,21 +43,35 @@ func _test_models() -> void:
 	var names: PackedStringArray = lib.loaded_names()
 	print("     %d modele(s) : %s" % [names.size(), ", ".join(names)])
 
-	# La table de repartition ne doit viser que des biomes que le generateur
-	# sait produire : une entree pour un index de surface inexistant ne leve
-	# rien, elle ne sert simplement jamais.
+	# La table de repartition ne doit viser que des biomes existants : une
+	# entree pour un index inexistant ne leve rien, elle ne sert simplement
+	# jamais.
 	var flora: Dictionary = CWModelLibrary.flora()
-	var bad_surface: Array = []
-	for surface in flora:
-		if CWPalette.name_of(surface) == "?":
-			bad_surface.append(surface)
-	_ok("la table de repartition ne vise que des surfaces reelles",
-			bad_surface.is_empty(), str(bad_surface))
+	var bad_biome: Array = []
+	for biome in flora:
+		if CWBiome.dir_of(biome) == "":
+			bad_biome.append(biome)
+	_ok("la table de repartition ne vise que des biomes reels",
+			bad_biome.is_empty(), str(bad_biome))
 	var no_density: Array = []
-	for surface in flora:
-		if CWModelLibrary.density_of(surface) <= 0.0:
-			no_density.append(CWPalette.name_of(surface))
+	for biome in flora:
+		if CWModelLibrary.density_of(biome) <= 0.0:
+			no_density.append(CWBiome.name_of(biome))
 	_ok("chaque biome garni a une densite", no_density.is_empty(), str(no_density))
+
+	# Chaque entree est rangee dans le dossier de son biome. Un chemin qui
+	# traverse — `greenlands/...` liste sous Jungles — chargerait bien, et le
+	# modele sortirait dans le mauvais biome avec les mauvaises teintes, sans
+	# qu'aucune autre verification ne tombe. Le lot du jalon 1.12 n'a aucune
+	# exception : ce qui revient dans deux biomes y est dessine deux fois.
+	var egares: Array = []
+	for biome in flora:
+		var prefix: String = CWBiome.dir_of(biome) + "/"
+		for entry in flora[biome]:
+			if not entry.begins_with(prefix):
+				egares.append("%s: %s" % [CWBiome.name_of(biome), entry])
+	_ok("chaque modele est dans le dossier de son biome", egares.is_empty(),
+			str(egares))
 
 	# Le lot des 28 modeles de flore est clos depuis le 2026-09-05. Un modele
 	# absent du disque reste ignore en silence a l'execution — c'est voulu, un
@@ -66,8 +80,8 @@ func _test_models() -> void:
 	# plante d'un biome sans que rien ne le dise.
 	var missing: Array = []
 	var entries: int = 0
-	for surface in flora:
-		for entry in flora[surface]:
+	for biome in flora:
+		for entry in flora[biome]:
 			entries += 1
 			var path: String = CWModelLibrary.FLORA_DIR + entry + ".vox"
 			if not FileAccess.file_exists(path) and not missing.has(entry):
@@ -75,9 +89,9 @@ func _test_models() -> void:
 	_ok("tous les modeles de la table sont sur le disque (%d entrees)" % entries,
 			missing.is_empty(), str(missing))
 
-	var grass: Array = lib.for_surface(CWPalette.GRASS)
+	var grass: Array = lib.for_biome(CWBiome.GREENLANDS)
 	if grass.is_empty():
-		_skip("chargement d'un modele", "aucun modele pour l'herbe")
+		_skip("chargement d'un modele", "aucun modele pour Greenlands")
 		return
 	var m: CWVoxelModel = grass[0]
 
@@ -233,8 +247,8 @@ func _test_scatter() -> void:
 				var c: Vector3 = f.sample_column(pl.x, pl.z)
 				if pl.y != floori(c.x) + 1:
 					off_ground += 1
-				var surface: int = CWPalette.surface_index(c.x, c.y, c.z, p.sea_level)
-				if not sc.library().for_surface(surface).has(pl.model):
+				var biome: int = CWBiome.at(c.x, c.y, c.z, p.sea_level)
+				if not sc.library().for_biome(biome).has(pl.model):
 					wrong_surface += 1
 	print("     %d plantes sur 576 cellules (%.1f par cellule)"
 			% [total, float(total) / 576.0])
@@ -453,19 +467,19 @@ func _test_two_frequencies(sc: CWScatter, cx0: int, cz0: int) -> void:
 	var roles_seen: Dictionary = {}
 	for step in 400:
 		var wx: int = (cx0 << CWScatter.CELL_SHIFT) + step * 137
-		roles_seen[CWDecorRules.role_at(CWPalette.GRASS, wx,
+		roles_seen[CWDecorRules.role_at(CWBiome.GREENLANDS, CWPalette.GRASS, wx,
 				cz0 << CWScatter.CELL_SHIFT)] = true
-	_ok("les deux cretes donnent plus d'un role sur la prairie",
+	_ok("les deux cretes donnent plus d'un role sur Greenlands",
 			roles_seen.size() >= 2,
 			str(roles_seen.keys().map(func(r): return CWDecorRules.name_of(r))))
 	# Et la selection doit etre stable *dans* une region : un role qui
 	# rebondirait d'une colonne a l'autre serait un second tirage uniforme, pas
 	# une composition.
 	var flips: int = 0
-	var prev: int = CWDecorRules.role_at(CWPalette.GRASS,
+	var prev: int = CWDecorRules.role_at(CWBiome.GREENLANDS, CWPalette.GRASS,
 			cx0 << CWScatter.CELL_SHIFT, cz0 << CWScatter.CELL_SHIFT)
 	for step in range(1, 60):
-		var here: int = CWDecorRules.role_at(CWPalette.GRASS,
+		var here: int = CWDecorRules.role_at(CWBiome.GREENLANDS, CWPalette.GRASS,
 				(cx0 << CWScatter.CELL_SHIFT) + step, cz0 << CWScatter.CELL_SHIFT)
 		if here != prev:
 			flips += 1
@@ -613,8 +627,8 @@ func _bench_cells(sc: CWScatter, origin: Vector2i) -> void:
 func _distinct_models(lib: CWModelLibrary) -> Array:
 	var seen: Dictionary = {}
 	var out: Array = []
-	for surface in CWModelLibrary.flora():
-		for m in lib.for_surface(surface):
+	for biome in CWModelLibrary.flora():
+		for m in lib.for_biome(biome):
 			if not seen.has(m.name):
 				seen[m.name] = true
 				out.append(m)

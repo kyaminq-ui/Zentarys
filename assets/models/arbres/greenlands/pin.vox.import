@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://vw1mmhn23clw"
+path="res://.godot/imported/pin.vox-0a4591de706d42ce57c6fd6d3498bd3d.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/greenlands/pin.vox"
+dest_files=["res://.godot/imported/pin.vox-0a4591de706d42ce57c6fd6d3498bd3d.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

@@ -56,26 +56,46 @@ def trace(g, depart, direction, longueur, couleur,
     return (x, y, z)
 
 
-def brin(g, base, a, longueur, courbure, clair, sombre, pousse=0.0):
-    """Un brin : une lame d'un voxel, droite a la base et qui s'incurve.
+def brin(g, base, a, longueur, courbure, clair, sombre, pousse=0.0,
+         epaisseur=0.0):
+    """Un brin d'herbe, droit a la base et qui s'incurve.
 
     `courbure` est le flechissement par unite de longueur ; au-dela de ~0,09 la
     pointe redescend, ce qui est ce qu'on veut d'une herbe haute.
+
+    `epaisseur` est le rayon de la lame a sa base, en voxels ; elle s'affine
+    jusqu'a la pointe. Zero rend la lame d'un seul voxel du lot du jalon 1.7.
+
+    **Pourquoi ce parametre existe** (jalon 1.12) : les touffes du lot
+    precedent faisaient 12 voxels de haut et un voxel d'epaisseur. Sur les
+    captures du jeu d'origine, un brin monte a l'epaule du personnage — 27 a 30
+    voxels — et **montre ses cubes**. A 28 de long, une lame d'un voxel est un
+    cheveu : elle disparait a trois blocs de distance, et c'est exactement le
+    rendu « fin et gris » qu'on cherchait a corriger en ajoutant des brins, ce
+    qui aggravait le probleme (`nextsteps.md`, Sec. 6.5).
     """
     dirh = (math.cos(a), math.sin(a), 0.0)
+    rayon = None
+    if epaisseur > 0.0:
+        rayon = lambda t: epaisseur * (1.0 - 0.75 * t)
     return trace(
         g, (base[0], base[1], base[2]),
         (dirh[0] * pousse, dirh[1] * pousse, 1.0), longueur,
         lambda t: teinte(clair, sombre, 0.25 + 0.75 * t),
-        flechir=lambda t: (dirh[0] * courbure * t, dirh[1] * courbure * t, 0.0))
+        flechir=lambda t: (dirh[0] * courbure * t, dirh[1] * courbure * t, 0.0),
+        rayon=rayon)
 
 
 def touffe(g, rng, brins, longueur, clair, sombre, etalement=1.0,
-           courbure=0.075, rayon_base=1.2):
+           courbure=0.075, rayon_base=1.2, epaisseur=0.0):
     """Une touffe de brins autour de l'origine.
 
     Les azimuts sont tires dans des secteurs inegaux : une repartition
     reguliere rendrait la meme image aux quatre quarts de tour.
+
+    Le nombre de brins est **petit** depuis le jalon 1.12 : cinq ou six, longs
+    et bien ecartes, au lieu de onze a vingt-deux serres. C'est ce que montrent
+    les captures, et c'est ce qui laisse voir le sol entre les lames.
     """
     depart = rng.uniform(0.0, math.tau)
     for i in range(brins):
@@ -85,7 +105,8 @@ def touffe(g, rng, brins, longueur, clair, sombre, etalement=1.0,
         long_i = longueur * rng.uniform(0.62, 1.0)
         brin(g, base, a + rng.uniform(-0.6, 0.6), long_i,
              courbure * rng.uniform(0.7, 1.4) * etalement,
-             clair, sombre, pousse=rng.uniform(0.0, 0.35))
+             clair, sombre, pousse=rng.uniform(0.0, 0.35),
+             epaisseur=epaisseur)
 
 
 def ellipsoide(g, centre, rayons, couleur, deforme=None, creux=None):

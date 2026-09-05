@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://beylaayl7bjg1"
+path="res://.godot/imported/etoile_de_mer.vox-7c1acaa49967589c36ee1cb11c12b9a5.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/oceans/etoile_de_mer.vox"
+dest_files=["res://.godot/imported/etoile_de_mer.vox-7c1acaa49967589c36ee1cb11c12b9a5.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

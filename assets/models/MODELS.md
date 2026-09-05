@@ -8,12 +8,27 @@ couleurs*.
 
 ## 1. L'échelle de référence — fixée le 2026-09-04, alignée sur l'original le 2026-09-05
 
-**Il y a deux grilles, pas une.**
+**Il y a deux grilles, pas une, et depuis le jalon 1.12 les deux servent à
+dessiner.**
 
 | grille | pas | ce qu'elle porte |
 |---|---|---|
-| **terrain** | 1 bloc | le relief, la roche, l'eau, les arbres, les maisons |
-| **modèles** | **3/40 de bloc** | le personnage, les créatures, la flore, le mobilier, les objets |
+| **terrain** | **1 bloc** | le relief, l'eau, les maisons — et **les arbres et les filons**, qui sont des modèles dessinés à cette maille |
+| **modèles** | **3/40 de bloc** | le personnage, les créatures, la flore basse, le mobilier, les objets |
+
+> **Les arbres ont changé de grille le 2026-09-06.** Ils étaient dessinés à
+> 3/40 comme la flore ; six captures du jeu d'origine ont montré qu'ils sont
+> bâtis **des mêmes cubes que le terrain**. Deux raisons de le croire au-delà de
+> l'œil : le 3/40 est relevé dans la voie du *décor* du binaire et jamais dans
+> celle des *entités*, par où passent les arbres ; et la source écrit le tronc
+> d'un feuillu en colonnes de blocs tout en instanciant le houppier séparément,
+> ce qui n'est cohérent que si le houppier est sur la grille du bloc.
+> `CWVoxelModel.VOXELS_PER_BLOCK_TERRAIN` porte cette seconde grille, et
+> `CWModelLibrary` l'impose au chargement de son lot.
+>
+> Conséquence d'authoring : **une constante d'un lot d'arbres est une mesure**.
+> « Houppier de 15 » veut dire quinze blocs de large, soit six fois le
+> personnage. Il n'y a plus de conversion à faire de tête.
 
 **Un bloc de terrain vaut 40/3 voxels de modèle — autrement dit 3 blocs valent
 exactement 40 voxels.** Le personnage de référence mesure **32 voxels**, soit
@@ -79,36 +94,49 @@ en savoir en dessinant :
 
 En **voxels de modèle** — c'est l'unité dans laquelle on dessine :
 
-> ⚠️ **Les repères ci-dessous sont faux d'un facteur ~2,5 pour ce qui pousse au
-> sol, et c'est de là que vient tout le lot de flore.** Constaté le 2026-09-05
-> au soir sur des captures du jeu d'origine, le personnage servant de règle :
-> une touffe d'herbe y monte **à l'épaule**, pas au genou. La colonne « corrigé »
-> donne la cible ; les valeurs d'origine sont laissées barrées, parce qu'elles
-> expliquent la taille des 39 modèles livrés. Détail et méthode :
-> `nextsteps.md`, §6.5.
+Les valeurs ci-dessous sont celles du lot **regénéré le 2026-09-06**. Elles
+corrigent d'un facteur ~2,5 celles du jalon 1.7, qui disaient « touffe d'herbe
+au genou » là où les captures du jeu d'origine la montrent **à l'épaule** — le
+personnage servant de règle. C'est cette seule ligne fausse qui avait
+dimensionné les trente-neuf premiers modèles ; méthode et mesures dans
+`nextsteps.md`, §6.5.
 
-| élément | hauteur | corrigé | empreinte |
-|---|---|---|---|
-| personnage de référence | **32** | — | 12 × 8 |
-| herbe, brins | ~~8 – 12~~ | **27 – 30** | ≤ 20 × 20 |
-| plante haute (fougère, pousse) | — | **45 – 52** | ≤ 20 × 20 |
-| fleur de champ dispersée | ~~8 – 14~~ | **5 – 9** | ≤ 8 × 8 |
-| grande fleur (tournesol) | 14 – 20 | **26 – 32** | ≤ 14 × 14 |
-| champignon | 5 – 10 | — | ≤ 10 × 10 |
-| caillou | ~~4 – 8~~ | **30 – 40** | ≤ 40 × 40 |
-| buisson, broussaille, roseau, algue, corail | 16 – 28 | **16 – 22** | ≤ 32 × 32 |
-| cactus, grès | 32 – 56 | — | ≤ 48 × 48 |
+| élément | hauteur | empreinte |
+|---|---|---|
+| personnage de référence | **32** | 12 × 8 |
+| herbe, brins | **25 – 30** | ≤ 20 × 20 |
+| plante haute (fougère) | **40 – 46** | ≤ 30 × 30 |
+| fleur de champ dispersée | **6 – 10** | ≤ 8 × 8 |
+| grande fleur (tournesol) | **26 – 32** | ≤ 20 × 20 |
+| champignon | 12 – 16 | ≤ 14 × 14 |
+| caillou (bloc erratique) | **28 – 34** | ≤ 34 × 34 |
+| buisson, broussaille, roseau, algue, corail | **16 – 24** | ≤ 32 × 32 |
+| cactus, grès | 26 – 44 | ≤ 24 × 24 |
+
+**Deux règles de dessin comptent autant que ces hauteurs**, et elles ne se
+lisent pas dans un tableau :
+
+- **un brin d'herbe fait deux voxels de large**, pas un. À 28 voxels de long,
+  une lame d'un voxel est un cheveu : elle disparaît à trois blocs et c'est
+  exactement ce qui faisait paraître les touffes « clairsemées » ;
+- **cinq ou six brins par touffe**, pas quinze. Une touffe à la moitié de sa
+  taille occupe le quart de la surface à l'écran ; on avait répondu en
+  densifiant, ce qui était le remède inverse.
 
 Et en **blocs**, pour situer ça dans le monde généré :
 
 | élément | hauteur |
 |---|---|
 | personnage | 2,4 |
-| touffe d'herbe | ~~0,6 – 0,9 (au genou)~~ → **2,0 – 2,3 (à l'épaule)** |
-| plante haute | **3,4 – 3,9** |
-| caillou | ~~0,3 – 0,6~~ → **2,3 – 3,0** (un bloc erratique, pas un galet) |
-| buisson | **1,2 – 1,7** |
-| cactus | 2,4 – 4,2 |
+| touffe d'herbe | **1,9 – 2,3** (à l'épaule) |
+| plante haute | **3,0 – 3,5** |
+| caillou | **2,1 – 2,6** (un bloc erratique, pas un galet) |
+| buisson | **1,2 – 1,6** |
+| cactus | 2,0 – 3,2 |
+| **houppier (largeur)** | **11 – 22**, et toujours plus large que haut |
+| **tronc de feuillu** | **12 – 15** |
+| **conifère entier** | **17 – 22** |
+| **arbre géant** | **22 de fût, couronne de 21 de large** |
 | cratère porté par un élément de tuile | 50 de creux |
 | piton | 150 |
 | montagnes du monde généré | jusqu'à ~600 |
@@ -201,28 +229,32 @@ signale tout index sorti des plages autorisées.
 
 ## 3. Fichiers
 
-* **Un dossier par biome** sous `assets/models/flore/` : `herbe/`,
-  `herbe_seche/`, `jungle/`, `marais/`, `sable_desert/`, `neige/`, `toundra/`,
-  `roche/`, `gravier_fond_marin/`. `assets/models/culture/` pour les cinq
-  cultures. **`assets/models/arbres/`** suit le même découpage pour la grande
-  végétation — c'est un lot à part, avec sa propre enveloppe (§ ci-dessous) et
-  son propre script.
+* **Un dossier par biome** sous `assets/models/flore/`, et il y en a **six**
+  depuis le jalon 1.12 : `greenlands/`, `snowlands/`, `deserts/`, `jungles/`,
+  `lavalands/`, `oceans/`. Ce sont les biomes de l'alpha 2013, décidés par
+  `CWBiome` ; les neuf anciens dossiers étaient des *matières de surface*, ce
+  qui n'est pas la même chose — la roche d'altitude et le fond marin y étaient
+  rangés comme des biomes. `assets/models/culture/` pour les cinq cultures.
+  **`assets/models/arbres/`** suit le même découpage pour la grande végétation —
+  c'est un lot à part, avec sa propre grille (1 voxel = 1 bloc), sa propre
+  enveloppe et son propre script.
 * Noms en minuscules sans accent, souligné pour séparer, variante numérotée sur
   deux chiffres quand les modèles sont interchangeables : `herbe_01`,
   `fleur_bleuet`, `caillou_02`. Rien d'autre dans le nom — ni la taille du
   gabarit, ni le biome, qui est déjà le dossier.
-* **Un même rôle peut avoir un modèle par biome.** `caillou_01` existe trois
-  fois — prairie, neige, roche — et ce sont trois modèles, chacun dans les
-  teintes de son biome. C'est le lot livré le 2026-09-05 qui en a décidé ainsi,
-  et c'est mieux qu'un fichier partagé. Deux biomes peuvent quand même pointer le
-  même chemin dans `CWModelLibrary.FLORA` : le modèle n'est alors chargé et
-  maillé qu'une fois.
-* Le fichier doit figurer dans la table de `CWModelLibrary.FLORA`, chemin
-  complet, biome compris : `"herbe/herbe_01"`. Un test vérifie que chaque entrée
-  de la table existe sur le disque.
-* **Les trente-neuf modèles de flore sont produits par script**, pas dessinés à
-  la main : `tools/blender/generer_flore.py`, une graine en dur par fichier. Une
-  retouche faite dans MagicaVoxel serait écrasée à la prochaine génération —
+* **Un même rôle a un modèle par biome.** `caillou_01` existe dans Greenlands
+  et dans Snowlands, et ce sont deux modèles, chacun dans les teintes de son
+  biome. Le lot du jalon 1.12 ne partage **aucun** fichier entre biomes, et un
+  test refuse qu'un chemin traverse : un modèle listé sous Jungles doit être
+  dans `jungles/`. Rien n'interdit techniquement le partage — le cache est
+  indexé par chemin — mais un modèle partagé porte les teintes d'un seul biome.
+* Le fichier doit figurer dans `CWModelLibrary.ROLES`, chemin complet, biome
+  compris : `"greenlands/herbe_01"`. Un test vérifie que chaque entrée de la
+  table existe sur le disque, et un autre qu'aucun modèle ne dort sous un rôle
+  que les deux crêtes de sélection n'atteignent jamais.
+* **Les quarante-trois modèles de flore sont produits par script**, pas dessinés
+  à la main : `tools/blender/generer_flore.py`, une graine en dur par fichier.
+  Une retouche faite dans MagicaVoxel serait écrasée à la prochaine génération —
   corriger le générateur, puis regénérer :
 
   ```
@@ -234,9 +266,17 @@ signale tout index sorti des plages autorisées.
   l'écriture tout index hors des plages autorisées : c'est là que se rattrape la
   faute de palette du premier lot. Le reste de ce fichier reste la référence
   pour les modèles qui, eux, se dessinent à la main.
-* **Les quatorze modèles d'arbres le sont aussi**, par le même chemin et les
-  mêmes garde-fous : `tools/blender/generer_arbres.py`, commande en
-  `docs/prompt_generation_arbres.md`.
+* **Les vingt-quatre modèles d'arbres le sont aussi**, par le même chemin et
+  les mêmes garde-fous : `tools/blender/generer_arbres.py`, commande en
+  `docs/prompt_generation_arbres.md`. Celui-là est en **Python pur** : à un
+  voxel par bloc, Blender n'apporte rien — une métaballe échantillonnée à cette
+  résolution rend un tas de cubes. Ses formes vivent dans
+  `tools/blender/arbres_blocs.py`, séparé de `arbres_formes.py` qui dessine à la
+  grille fine.
+
+  ```
+  python tools/blender/generer_arbres.py
+  ```
 
   ```
   blender --background --factory-startup --python tools/blender/generer_arbres.py
@@ -292,22 +332,38 @@ Conséquences à connaître :
 * il disparaît au-delà d'une distance réglée (`CWFloraRenderer.view_distance`),
   comme dans l'original.
 
-Un modèle destiné à *faire partie du terrain* — un bloc de minerai, un rocher
-qu'on doit pouvoir miner — est un cas différent : celui-là se dessine à
-**1 voxel = 1 bloc** et s'estampe. **Les neuf filons sont les premiers**, livrés
-le 2026-09-05 sous `assets/models/filons/` par
-`tools/blender/generer_filons.py` (Python pur : à un voxel par bloc, un filon
-fait quatre voxels de large, Blender n'y apporterait rien).
+Un modèle **à la maille du terrain** est un cas différent : celui-là se dessine
+à **1 voxel = 1 bloc**. Deux lots en relèvent, et pour deux raisons distinctes :
 
-Ce lot suit des règles à lui, et il faut les tenir séparées de celles ci-dessus :
+* **les neuf filons** (2026-09-05, `assets/models/filons/`, par
+  `tools/blender/generer_filons.py`) parce qu'ils **s'estampent** : on doit
+  pouvoir les miner, donc chacun de leurs voxels est un type de bloc ;
+* **les vingt-quatre arbres** (2026-09-06, `assets/models/arbres/`, par
+  `tools/blender/generer_arbres.py`) parce que **c'est leur grille dans la
+  source**. Eux restent instanciés — ils ne s'estampent pas encore, le tronc en
+  matière étant le dernier temps du jalon 1.11 — mais ils sont *dessinés* à la
+  maille du bloc, ce qui est la condition pour que le tronc écrit et le houppier
+  instancié tombent un jour au même endroit.
+
+Les deux suivent des règles à eux, et il faut les tenir séparées de celles
+ci-dessus :
 
 * **1 voxel = 1 bloc**, pas 40/3 ;
 * chacun de ses voxels est un **type de bloc**. C'est `CHANNEL_TYPE` qui portera
   cette valeur à l'estampage, et c'est elle qui dira ce que le bloc rend quand on
   le casse ;
-* d'où une contrainte d'index plus étroite que celle de la flore
-  (`flore_vox.INDEX_FILONS`) : roche (1), roche nue (14 – 19) et les neuf entrées
-  de filon (32 – 40), rien d'autre. Un filon n'a pas droit au feuillage.
+* d'où une contrainte d'index plus étroite que celle de la flore : pour un
+  filon (`flore_vox.INDEX_FILONS`), roche (1), roche nue (14 – 19) et les neuf
+  entrées de filon (32 – 40), rien d'autre — un filon n'a pas droit au
+  feuillage ; pour un arbre (`generer_arbres.INDEX_ARBRES`), la matière de
+  terrain (14 – 31) et la végétation (128 – 175), mais aucun filon — un
+  houppier n'a pas droit à l'or.
+
+Et **deux entrées de la réserve terrain ont changé de statut** au jalon 1.12 :
+30 et 31, les deux teintes de lave, sont devenues des **types de bloc**
+(`CWPalette.MAGMA` et `SCORIA`) parce que Lava Lands en a besoin. C'étaient les
+deux seules de 14 – 31 qu'aucun modèle n'employait, ce qui a rendu l'opération
+gratuite : ni frontière déplacée, ni modèle à repeindre.
 
 Les neuf entrées 32 – 40 ont demandé de déplacer `RANGE_TERRAIN_END` de 31 à 40 :
 raisonnement complet dans `assets/palette/PALETTE.md` et dans l'en-tête de
@@ -333,12 +389,14 @@ littéralement.
   * seul le **tronc** est procédural : il n'existe aucun modèle de tronc, et
     l'original a la primitive pour l'écrire en colonnes de blocs.
 
-  À dessiner, donc, sauf le tronc. **Dessinés le 2026-09-05** : quatorze
-  modèles sous `assets/models/arbres/`, commande en
-  `docs/prompt_generation_arbres.md`. Le tronc, lui, a fini avec **deux formes**
-  — `tronc_feuillu` et `tronc_palmier` existent comme modèles instanciables, à
-  côté de la colonne de blocs que l'assemblage écrira dans le terrain. Les deux
-  ne s'excluent pas : la matière là où il faut la creuser, le modèle pour le
-  bosquet lointain et la réduction de niveau de détail.
+  À dessiner, donc, sauf le tronc. **Redessinés le 2026-09-06** : vingt-quatre
+  modèles sous `assets/models/arbres/`, à **1 voxel = 1 bloc** cette fois-ci,
+  commande en `docs/prompt_generation_arbres.md`. Le lot du 2026-09-05, dessiné
+  à 3/40, est remplacé en entier — il était deux à trois fois trop petit, ses
+  houppiers trois fois trop étroits, et son grain sept à treize fois trop fin.
+  Le tronc, lui, a fini avec **deux formes** — les futs existent comme modèles
+  instanciables, à côté de la colonne de blocs que l'assemblage écrira dans le
+  terrain. Les deux ne s'excluent pas : la matière là où il faut la creuser, le
+  modèle pour le bosquet lointain et la réduction de niveau de détail.
 * **Les maisons.** Une grille de 3 × 3 × 4 cellules remplie procéduralement. Ce
   sont les *meubles* qui sont des modèles, pas le bâtiment.

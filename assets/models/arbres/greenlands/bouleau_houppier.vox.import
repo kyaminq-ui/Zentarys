@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://dgh6ti3uft7bh"
+path="res://.godot/imported/bouleau_houppier.vox-c6ba82614c4c35983e49c0f140a5a7f7.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/greenlands/bouleau_houppier.vox"
+dest_files=["res://.godot/imported/bouleau_houppier.vox-c6ba82614c4c35983e49c0f140a5a7f7.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

@@ -120,7 +120,10 @@ static func instance_transform(pl: CWScatter.Placement,
 	# vivant d'un motif repete. Elle entre dans la base, donc elle grandit la
 	# plante depuis son ancre — au sol, au centre — et non depuis le coin du
 	# gabarit ; sinon une touffe a 2x s'enterrerait de sa demi-hauteur.
-	var scale: float = pl.scale / CWVoxelModel.VOXELS_PER_BLOCK
+	# La grille est celle du **modele** et non la constante : depuis le jalon
+	# 1.12 un houppier est dessine a un voxel par bloc et une touffe d'herbe a
+	# 40/3. Lire la constante ici rendrait les arbres treize fois trop petits.
+	var scale: float = pl.scale / pl.model.voxels_per_block
 	var basis := Basis(Vector3.UP, float(pl.rotation) * PI * 0.5).scaled(
 			Vector3(scale, scale, scale))
 	var pos := Vector3(
@@ -329,7 +332,6 @@ func _build_node(c: Vector2i) -> void:
 	node.name = "Cell%d_%d" % [c.x, c.y]
 	node.set_meta("plant_count", plants.size())
 
-	var scale: float = 1.0 / CWVoxelModel.VOXELS_PER_BLOCK
 	var instances: Array[MultiMeshInstance3D] = []
 	var bounds := AABB()
 	var first: bool = true
@@ -339,6 +341,9 @@ func _build_node(c: Vector2i) -> void:
 		if mesh == null:
 			continue
 		var list: Array = by_model[model]
+		# Grille du modele, pas celle de la bibliotheque : un houppier et une
+		# touffe d'herbe peuvent se retrouver dans la meme cellule.
+		var scale: float = 1.0 / model.voxels_per_block
 
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D

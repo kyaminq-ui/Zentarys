@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://tv1nh2hsrwid"
+path="res://.godot/imported/fleur_coeur.vox-9aee862544e529842c4f3cbbcab17a95.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/greenlands/fleur_coeur.vox"
+dest_files=["res://.godot/imported/fleur_coeur.vox-9aee862544e529842c4f3cbbcab17a95.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

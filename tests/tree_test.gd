@@ -13,21 +13,34 @@ extends RefCounted
 ## lot sont desormais verifiees ici, sur les modeles charges, comme celles de la
 ## flore le sont dans `flora_test.gd`.
 
-## Enveloppes par classe de modele, en voxels : (hauteur max, rayon max).
-## Proposition de `docs/prompt_generation_arbres.md`, §1.1, verrouillee ici.
-const ENV_ARBRE := Vector2i(160, 45)
-const ENV_HOUPPIER := Vector2i(80, 45)
-const ENV_PALME := Vector2i(60, 45)
+## Enveloppes par classe de modele, en **blocs** : (hauteur max, rayon max).
+##
+## En blocs et non en voxels depuis le jalon 1.12, et les deux unites se
+## confondent : le lot d'arbres est dessine a un voxel par bloc. C'est ce qui
+## rend ces nombres lisibles — un arbre de l'alpha fait six a dix fois la taille
+## du personnage, soit 15 a 25 blocs, et c'est ce qu'on lit ici.
+##
+## Le plafond de l'arbre geant (34) est plus haut que celui des autres arbres :
+## il porte une mission, il doit se voir de loin.
+const ENV_ARBRE := Vector2i(34, 12)
+const ENV_HOUPPIER := Vector2i(12, 11)
+const ENV_PALME := Vector2i(8, 10)
 
 ## Les modeles qui ne sont pas des arbres entiers, et leur classe. Tout ce qui
-## n'est pas cite est un arbre entier.
+## n'est pas cite est un arbre entier — troncs compris : un fut nu tient
+## largement sous l'enveloppe d'un arbre.
 const CLASSES: Dictionary = {
-	"herbe/houppier_01": ENV_HOUPPIER,
-	"herbe/houppier_02": ENV_HOUPPIER,
-	"herbe_seche/houppier_sec": ENV_HOUPPIER,
-	"jungle/houppier_jungle": ENV_HOUPPIER,
-	"jungle/palme": ENV_PALME,
-	"jungle/palme_diagonale": ENV_PALME,
+	"greenlands/chene_houppier_01": ENV_HOUPPIER,
+	"greenlands/chene_houppier_02": ENV_HOUPPIER,
+	"greenlands/bouleau_houppier": ENV_HOUPPIER,
+	"greenlands/arbre_geant_houppier": ENV_HOUPPIER,
+	"snowlands/bouleau_givre_houppier": ENV_HOUPPIER,
+	"jungles/tropical_houppier_01": ENV_HOUPPIER,
+	"jungles/tropical_houppier_02": ENV_HOUPPIER,
+	"jungles/palme": ENV_PALME,
+	"jungles/palme_diagonale": ENV_PALME,
+	"deserts/palme": ENV_PALME,
+	"deserts/palme_diagonale": ENV_PALME,
 }
 
 var _runner: Object
@@ -68,16 +81,58 @@ func _test_models() -> void:
 	# Enveloppe par classe. Un houppier de 160 voxels ou une palme de 100 ne
 	# casserait rien a l'execution — elle serait simplement rognee aux bordures
 	# de cellule, ce qui se voit sans qu'on sache pourquoi.
+	# La grille du lot : **un voxel par bloc**. C'est le contrat d'authoring du
+	# jalon 1.12, et le confondre avec celui de la flore rendrait tout le lot
+	# treize fois trop petit sans qu'aucune autre verification ne tombe — les
+	# proportions entre pieces resteraient justes.
+	var mauvaise_grille: Array = []
+	for path in paths:
+		var mm: CWVoxelModel = lib.model(path)
+		if mm != null and not is_equal_approx(mm.voxels_per_block,
+				CWVoxelModel.VOXELS_PER_BLOCK_TERRAIN):
+			mauvaise_grille.append(path)
+	_ok("le lot d'arbres est a un voxel par bloc", mauvaise_grille.is_empty(),
+			str(mauvaise_grille))
+
 	var oversize: Array = []
 	for path in paths:
 		var m: CWVoxelModel = lib.model(path)
 		if m == null:
 			continue
 		var env: Vector2i = CLASSES.get(path, ENV_ARBRE)
-		if m.height > env.x or m.radius > env.y:
-			oversize.append("%s %dx%d > %dx%d" % [path, m.height, m.radius, env.x, env.y])
+		if m.height_blocks > env.x or m.radius_blocks > env.y:
+			oversize.append("%s %dx%d blocs > %dx%d" % [path, m.height_blocks,
+					m.radius_blocks, env.x, env.y])
 	_ok("aucun modele d'arbre hors de son enveloppe de classe",
 			oversize.is_empty(), str(oversize))
+
+	# Le defaut inverse, et c'est celui qui a coute le lot du 2026-09-05 : des
+	# arbres **trop petits**. Sur les captures du jeu d'origine un arbre fait six
+	# a dix fois le personnage, soit 15 blocs au moins tout compris. On mesure
+	# ici la piece portante — un tronc ou un arbre entier —, houppiers exclus,
+	# et on demande qu'aucune espece ne descende sous 8 blocs de fut.
+	var nains: Array = []
+	for biome in CWTreeRules.SPECIES:
+		for sp in CWTreeRules.SPECIES[biome]:
+			var t: CWVoxelModel = lib.model(sp["tronc"])
+			if t != null and t.height_blocks < 8:
+				nains.append("%s : %d blocs" % [sp["nom"], t.height_blocks])
+	_ok("aucune espece n'a un fut de moins de 8 blocs", nains.is_empty(),
+			str(nains))
+
+	# Et la proportion des houppiers : ce sont des domes en parasol, **plus
+	# larges que hauts**. Le lot precedent les faisait aussi hauts que larges, ce
+	# qui donnait des boules et non une canopee.
+	var pas_assez_larges: Array = []
+	for path in CLASSES:
+		if CLASSES[path] != ENV_HOUPPIER:
+			continue
+		var m2: CWVoxelModel = lib.model(path)
+		if m2 != null and float(m2.radius) * 2.0 < float(m2.height) * 1.4:
+			pas_assez_larges.append("%s : %d de large, %d de haut"
+					% [path, m2.radius * 2, m2.height])
+	_ok("les houppiers sont plus larges que hauts", pas_assez_larges.is_empty(),
+			str(pas_assez_larges))
 
 	# Un houppier n'a pas de pied : sa base est une couronne, et elle sera posee
 	# au sommet d'un tronc. Un houppier plus haut que large serait un arbre.
@@ -86,7 +141,7 @@ func _test_models() -> void:
 		if CLASSES[path] != ENV_HOUPPIER:
 			continue
 		var m: CWVoxelModel = lib.model(path)
-		if m != null and m.height > 3 * m.radius:
+		if m != null and m.height > 2 * m.radius:
 			trop_haut.append(path)
 	_ok("les houppiers sont des couronnes, pas des futs", trop_haut.is_empty(),
 			str(trop_haut))
@@ -99,11 +154,13 @@ func _test_models() -> void:
 	print("     rayon max : flore %d blocs, arbres %d blocs"
 			% [flore.max_radius_blocks, lib.max_radius_blocks])
 	_ok("la bibliotheque de la flore ignore les arbres",
-			flore.max_radius_blocks <= 2,
+			flore.max_radius_blocks <= 3,
 			"rayon max de la flore : %d blocs" % flore.max_radius_blocks)
+	# La borne haute suit le lot redessine : des houppiers de 12 a 16 blocs de
+	# large font un rayon de 6 a 8, et l'arbre geant un peu plus.
 	_ok("la bibliotheque des arbres a son propre maximum",
 			lib.max_radius_blocks > flore.max_radius_blocks
-			and lib.max_radius_blocks <= 4,
+			and lib.max_radius_blocks <= 12,
 			"rayon max des arbres : %d blocs" % lib.max_radius_blocks)
 
 
@@ -111,20 +168,28 @@ func _test_models() -> void:
 
 func _test_rules() -> void:
 	print("[especes d'arbres]")
-	var bad_surface: Array = []
-	for surface in CWTreeRules.surfaces():
-		if CWModelLibrary.density_of(surface) <= 0.0 \
-				and not CWTreeScatter.DENSITE.has(surface):
-			bad_surface.append(CWPalette.name_of(surface))
-	_ok("chaque surface arboree a une densite", bad_surface.is_empty(),
-			str(bad_surface))
+	var bad_biome: Array = []
+	for biome in CWTreeRules.biomes():
+		if not CWTreeScatter.DENSITE.has(biome):
+			bad_biome.append(CWBiome.name_of(biome))
+	_ok("chaque biome arbore a une densite d'arbres", bad_biome.is_empty(),
+			str(bad_biome))
+
+	# Et l'inverse : une densite sans espece est du budget de candidats depense
+	# pour rien, cellule apres cellule, sans qu'un seul arbre en sorte.
+	var densite_seule: Array = []
+	for biome in CWTreeScatter.DENSITE:
+		if not CWTreeRules.SPECIES.has(biome):
+			densite_seule.append(CWBiome.name_of(biome))
+	_ok("chaque densite d'arbres a des especes", densite_seule.is_empty(),
+			str(densite_seule))
 
 	# Un montage FEUILLU ou PALMIER sans couronne poserait un tronc nu ; un
 	# montage ENTIER avec des couronnes poserait un houppier flottant, puisque
 	# rien ne le monte.
 	var incoherent: Array = []
-	for surface in CWTreeRules.SPECIES:
-		for sp in CWTreeRules.SPECIES[surface]:
+	for biome in CWTreeRules.SPECIES:
+		for sp in CWTreeRules.SPECIES[biome]:
 			var entier: bool = int(sp["montage"]) == CWTreeRules.Montage.ENTIER
 			var vide: bool = (sp["couronnes"] as Array).is_empty()
 			if entier != vide:
@@ -135,19 +200,18 @@ func _test_rules() -> void:
 	# Le tirage pondere doit couvrir tout [0, 1) et ne jamais rendre vide sur une
 	# surface arboree : un trou rendrait des clairieres sans raison.
 	var trous: Array = []
-	for surface in CWTreeRules.surfaces():
+	for biome in CWTreeRules.biomes():
 		for i in 64:
-			if CWTreeRules.species_at(surface, float(i) / 64.0).is_empty():
-				trous.append("%s @ %.2f" % [CWPalette.name_of(surface), float(i) / 64.0])
+			if CWTreeRules.species_at(biome, float(i) / 64.0).is_empty():
+				trous.append("%s @ %.2f" % [CWBiome.name_of(biome), float(i) / 64.0])
 				break
 	_ok("le tirage d'espece couvre tout l'intervalle", trous.is_empty(),
 			str(trous))
 
-	# Une surface sans arbre doit rendre un dictionnaire vide, et non le premier
-	# venu : c'est ce qui garde la roche et le fond marin nus.
-	_ok("une surface sans arbre ne rend rien",
-			CWTreeRules.species_at(CWPalette.STONE, 0.5).is_empty()
-			and CWTreeRules.species_at(CWPalette.GRAVEL, 0.5).is_empty())
+	# Un biome sans arbre doit rendre un dictionnaire vide, et non le premier
+	# venu : c'est ce qui garde le fond marin nu.
+	_ok("un biome sans arbre ne rend rien",
+			CWTreeRules.species_at(CWBiome.OCEANS, 0.5).is_empty())
 
 
 # -- 3. La dispersion ---------------------------------------------------------
@@ -283,7 +347,7 @@ func _test_scatter() -> void:
 				continue
 			var tronc: CWScatter.Placement = pieces[0]
 			var haut: float = float(tronc.model.height) * tronc.scale \
-					/ CWVoxelModel.VOXELS_PER_BLOCK
+					/ tronc.model.voxels_per_block
 			for i in range(1, pieces.size()):
 				var fy: float = pieces[i].fy
 				if fy < haut * 0.4 or fy > haut * 1.35:

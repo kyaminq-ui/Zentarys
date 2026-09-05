@@ -192,7 +192,9 @@ static func _build_model(m: CWVoxelModel, at: Vector3) -> MeshInstance3D:
 	var mesh: ArrayMesh = m.mesh()
 	if mesh == null:
 		return null
-	var scale: float = 1.0 / CWVoxelModel.VOXELS_PER_BLOCK
+	# La grille du modele : le gabarit pose la flore et les arbres cote a cote,
+	# et depuis le jalon 1.12 ils ne sont plus dessines a la meme finesse.
+	var scale: float = 1.0 / m.voxels_per_block
 	var mi := MeshInstance3D.new()
 	mi.name = m.name
 	mi.mesh = mesh

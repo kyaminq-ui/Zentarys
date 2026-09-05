@@ -29,12 +29,17 @@ et des structures.
 
 **Les dix systèmes du terrain sont portés et vérifiés** (1.1 à 1.10) : le monde
 se génère, se creuse, se sauvegarde, s'éclaire, se garnit et se cartographie.
-**1.11 est ouvert par-dessus** — la grande végétation, qui prolonge 1.7 sans le
-remettre en cause : c'est un lot d'assets et une seconde couche de dispersion,
-pas une reprise du terrain. **Le lot d'assets est livré** (14 modèles, le
-2026-09-05) ; il reste du code. Le reste des points ouverts est de la finition,
-listée en dette technique, plus les questions d'analyse encore pendantes de
-`docs/systems/02`, §9.
+**Deux systèmes sont ouverts par-dessus**, et ni l'un ni l'autre ne remet le
+terrain en cause :
+
+- **1.11**, la grande végétation — un lot d'assets et une seconde couche de
+  dispersion. Assets et dispersion faits ; reste le tronc écrit dans le terrain ;
+- **1.12**, les six biomes — une couche de classification climatique au-dessus
+  des matières de surface, et la refonte des deux lots d'assets qui en découle.
+  **Fait le 2026-09-06.**
+
+Le reste des points ouverts est de la finition, listée en dette technique, plus
+les questions d'analyse encore pendantes de `docs/systems/02`, §9.
 
 | # | Système | Source analysée | Statut | Note |
 |---|---|---|---|---|
@@ -48,7 +53,8 @@ listée en dette technique, plus les questions d'analyse encore pendantes de
 | 1.8 | Colonnes persistantes, édition | `Chunk_getColumnAt` @00406100 + `VoxelTool` | ✅ | `docs/systems/03` |
 | 1.9 | Éclairage voxel | `VoxelChunk_propagateSunlight` @0059a0e0 | ✅ | porté, rendu passé en `COLOR_RAW` ; `docs/systems/04` |
 | 1.10 | Carte du monde | `WorldMap.cpp`, `loadLandscapeTile` @006024d0, `NameGen_generateRegionName` | ✅ | pièces de Voronoï, découverte, noms ; `docs/systems/05` |
-| 1.11 | **Arbres et grande végétation** | voie des entités, `docs/systems/02` §5.2 | 🔶 | **assets (14 + 9 filons) et dispersion faits, arbres en jeu** ; reste le tronc écrit dans le terrain (collision) et la pose des filons |
+| 1.11 | **Arbres et grande végétation** | voie des entités, `docs/systems/02` §5.2 | 🔶 | **assets (24 + 9 filons) et dispersion faits, arbres en jeu** ; reste le tronc écrit dans le terrain (collision) et la pose des filons |
+| 1.12 | **Les six biomes** | climat de 1.3 + biomes de l'alpha 2013 | ✅ | couche `CWBiome` au-dessus des matières, Lava Lands et ses coulées, **43 modèles de flore et 24 d'arbres regénérés** |
 
 ### 1.6 — Éléments de tuile (fait)
 
@@ -763,6 +769,132 @@ le premier usage réel de la réduction de niveau de détail.
 
 ---
 
+### 1.12 — Les six biomes (fait, 2026-09-06)
+
+Jusqu'ici, « biome » voulait dire `CWPalette.surface_index` : **neuf matières de
+bloc** qui servaient aussi de clé aux tables de flore, d'arbres et de densité.
+Les deux notions y étaient confondues, et ça se voyait dès qu'on essayait de
+dire une phrase simple — une crête rocheuse au-dessus d'une prairie n'est pas un
+« biome roche », une île au milieu de l'océan porte la végétation de la terre
+ferme, une plage n'est pas un désert.
+
+**Un biome est désormais une zone climatique**, il y en a six, et il décide *ce
+qui pousse*. La **matière de surface** est une conséquence du biome et de
+l'altitude, et elle décide *ce qu'on voit et ce qu'on creuse*. `CWBiome` fait la
+première moitié, `CWPalette.surface_of` la seconde.
+
+Les six sont ceux de l'alpha 2013 — Greenlands, Snowlands, Deserts, Jungles,
+Lava Lands, Oceans. Ce sont des noms du jeu d'origine, gardés parce qu'ils
+nomment une *classification* et non un asset ; le contenu de chacun est une
+création de ce projet.
+
+#### Ce que le champ de climat a imposé, et qu'aucun raisonnement n'aurait donné
+
+`tools/biome_stats.gd` balaie le champ réel sur 144 zones éloignées et rend la
+répartition. Il a servi trois fois, et à chaque fois il a contredit une règle
+qui se lisait juste. Le tableau croisé des terres, en pourcents :
+
+| t \ h | 0-20 % | 20-40 | 40-60 | 60-80 | 80-100 |
+|---|---|---|---|---|---|
+| 0,0 – 0,2 | 10,68 | 0,05 | 0,04 | 0,03 | 14,00 |
+| 0,2 – 0,4 | 0,01 | 0,06 | 8,03 | 6,52 | 1,35 |
+| 0,4 – 0,6 | 0,00 | 0,02 | 8,74 | 11,87 | 1,05 |
+| 0,6 – 0,8 | 0,01 | 0,05 | 5,55 | 8,39 | 0,08 |
+| 0,8 – 1,0 | 11,52 | 0,04 | 0,04 | 0,04 | 11,81 |
+
+**Le champ est bimodal.** Les quatre coins portent 48 % des terres ; un point
+chaud est soit très sec, soit très humide, jamais entre les deux. La première
+règle de Lava Lands prenait justement la bande d'humidité laissée libre entre le
+désert et la jungle aux hautes températures : elle rendait **60 colonnes sur
+147 456**. Baisser son seuil de température de 0,88 à 0,80 n'a rien changé — 64.
+*Une règle peut être juste et vide.*
+
+Ce qui marche est de découper dans le coin chaud-sec, tout en haut : au-dessus
+de 0,97 de température, le mélange climatique ne produit que le **cœur d'une
+région dont le site est à l'extrême**. Lava Lands est donc un cœur de région,
+entouré de son propre désert — exactement la forme voulue, et ce qu'un tirage
+par colonne n'aurait pas donné. « Loin du spawn » suit sans qu'on ait à le
+demander : le point de départ est au centre de la carte, où le climat est médian.
+
+Répartition obtenue, sur 147 456 colonnes :
+
+| biome | du monde | des terres |
+|---|---|---|
+| Greenlands | 30,3 % | 42,5 % |
+| Snowlands | 17,4 % | 24,5 % |
+| Jungles | 15,2 % | 21,4 % |
+| Deserts | 6,9 % | 9,7 % |
+| Lava Lands | 1,3 % | **1,9 %** |
+| Oceans | 28,8 % | — |
+
+#### Lava Lands : deux types de bloc, sans déplacer une frontière
+
+Le biome volcanique a besoin de matière que le générateur **écrit** — on doit
+pouvoir creuser une croûte de scorie et reconnaître une coulée dans
+`CHANNEL_TYPE`. Les deux entrées prises sont **30 et 31**, déjà peintes en lave
+dans la réserve terrain 14 – 31, et les deux seules de cette réserve qu'aucun
+modèle n'employait. Elles changent de statut sans qu'une frontière bouge : la
+limite terrain/créatures reste à 40/41, et l'opération de l'invariant n° 26 n'est
+pas repayée.
+
+**Les coulées sont une crête de bruit**, comme la crête de placement du décor :
+ce qui est près de zéro est du magma, le reste est de la scorie. C'est la seule
+règle de surface qui ait besoin de la position, et c'est pour elle que
+`surface_of` prend (x, z) depuis ce jalon — un échantillon de bruit sur 1,9 % des
+terres. Sa fréquence est passée de 0,004 à 0,012 après capture : à 250 blocs de
+longueur d'onde, une vue de 224 blocs pouvait tomber entièrement entre deux
+coulées, et le biome rendait une plaine de scorie nue.
+
+#### La refonte des deux lots d'assets
+
+Elle était déjà due (`nextsteps.md`, §6) et elle tombait au bon moment : on ne
+regénère qu'une fois.
+
+**Les 24 arbres passent à 1 voxel = 1 bloc.** C'est la correction la plus lourde
+du jalon, et elle repose sur deux arguments plus solides que l'œil. La
+*provenance* : `0,075 = 3/40` est relevée dans la voie du **décor** du binaire, et
+aucune échelle n'a jamais été relevée dans celle des **entités**, par où passent
+les arbres. Le *structurel* : la source écrit le tronc en colonnes de blocs et
+instancie le houppier séparément, ce qui n'est cohérent que si le houppier est
+sur la grille du bloc. Conséquences portées : `VOXELS_PER_BLOCK` devient un champ
+par bibliothèque, l'espacement des arbres passe de 7 à 14 blocs, leurs densités
+sont divisées d'autant, et leurs formes sont **repensées et non réduites** — un
+conifère est une pile de disques plats, un houppier quelques dizaines de cubes
+bien placés. Le générateur en sort en Python pur : à cette maille, Blender
+n'apporte rien.
+
+**Les 43 modèles de flore gardent 3/40 et grandissent.** Une touffe d'herbe monte
+à l'épaule du personnage et non au genou, elle a cinq ou six brins et non vingt,
+et chaque brin fait deux voxels de large. La cause première était une ligne
+fausse de `assets/models/MODELS.md`, §1, corrigée avant la regénération — sans
+quoi la reprise suivante aurait redessiné au genou.
+
+#### Ce que les captures ont attrapé, et qu'aucun test ne voyait
+
+Cinq défauts, tous trouvés en jeu, aucun détectable en headless :
+
+1. le fût des conifères ressortait **au-dessus** du feuillage, sur tous les
+   conifères du monde à la fois ;
+2. la scorie, à sa teinte « lave refroidie » d'origine, rendait un rose saumon
+   uniforme dont la coulée incandescente ne se détachait pas ;
+3. le magma, à 255,152,48, se confondait avec le sable du désert (253,185,82) ;
+4. **cinq modèles de Snowlands sur six** puisaient dans la rampe « automne », un
+   orange chaud, et ressortaient en taches orange sur un sol de neige cyan. Le
+   défaut avait déjà été relevé et corrigé pour un seul modèle le 2026-09-05 ; il
+   est revenu au complet avec le nouveau lot. D'où une règle écrite en toutes
+   lettres dans le générateur : **aucune plante de Snowlands ne prend 140 – 147** ;
+5. la couronne d'un palmier n'avait que **deux directions** au lieu de quatre.
+   Une palme est désormais une paire de frondes opposées — c'est ce qui met
+   l'attache sur l'ancre, et c'est la correction du décalage d'attache signalé à
+   la production du lot précédent — mais une paire tournée d'un demi-tour est
+   identique à elle-même. Le quart de tour n'avance donc qu'une pièce sur deux.
+
+**Dépend de :** 1.3 (le climat), 1.7 (les rôles et la bibliothèque), 1.11 (la
+couche des arbres). **Débloque :** six biomes qu'on peut nommer, et un contenu
+par biome qui n'est plus une liste de matières de sol.
+
+---
+
 ## Jalon 2 — Créatures et combat
 
 | # | Système | Source | Taille | Statut |
@@ -1052,6 +1184,7 @@ de le résoudre.
 
 | Date | Fait |
 |---|---|
+| 2026-09-06 | **Jalon 1.12 : les six biomes, et la refonte des deux lots d'assets.** (1) **Une couche de classification, pas un renommage.** « Biome » voulait dire `CWPalette.surface_index`, neuf *matieres de bloc* qui servaient aussi de cle aux tables de contenu ; les deux notions y etaient confondues, et une crete rocheuse au-dessus d'une prairie s'y rangeait comme un « biome roche ». `CWBiome.at` decide desormais **six zones climatiques** — Greenlands, Snowlands, Deserts, Jungles, Lava Lands, Oceans — et `CWPalette.surface_of` en deduit la matiere selon l'altitude ; `CWDecorRules.decor_allowed` fait le filtre que l'ancienne table par matiere faisait implicitement, avec un cas a deux sens : la neige est **le sol** d'une Snowlands et une calotte de sommet partout ailleurs. (2) **Le champ de climat a contredit trois seuils, et c'est `tools/biome_stats.gd` qui l'a dit.** Il est **bimodal** : ses quatre coins portent 48 % des terres, un point chaud est soit tres sec soit tres humide, jamais entre les deux. La premiere regle de Lava Lands prenait justement cette bande vide et rendait **60 colonnes sur 147 456** ; baisser son seuil de 0,88 a 0,80 l'a portee a 64. *Une regle peut etre juste et vide.* La regle qui marche decoupe le coin chaud-sec au-dessus de 0,97, ou le melange climatique ne produit que le **coeur d'une region a l'extreme** — Lava Lands est donc un coeur de region entoure de son propre desert, ce qu'un tirage par colonne n'aurait pas donne, et « loin du spawn » suit sans qu'on le demande. Repartition mesuree : Greenlands 42,5 % des terres, Snowlands 24,5 %, Jungles 21,4 %, Deserts 9,7 %, Lava Lands 1,9 %, Oceans 28,8 % du monde. (3) **Deux types de bloc de plus, sans deplacer une frontiere** : `MAGMA` et `SCORIA` prennent les entrees 30 et 31, deja peintes en lave et **les deux seules de la reserve terrain qu'aucun modele n'employait** — l'operation de l'invariant n° 26 n'est pas repayee. Les coulees sont une crete de bruit, seule regle de surface qui ait besoin de la position : c'est pour elle que `surface_of` prend desormais (x, z). (4) **Les 24 arbres passent a 1 voxel = 1 bloc**, ce que `nextsteps.md` §6 demandait depuis la veille. `VOXELS_PER_BLOCK` devient un champ par bibliotheque, l'espacement passe de 7 a 14 blocs et les densites suivent, et les formes sont **repensees et non reduites** — un conifere est une pile de disques plats, un houppier quelques dizaines de cubes. Le generateur en sort en Python pur : a cette maille, Blender n'apporte rien. (5) **Les 43 modeles de flore gardent 3/40 et grandissent** : a l'epaule et non au genou, cinq brins et non vingt, deux voxels d'epaisseur par brin. La cause premiere etait une ligne fausse de `MODELS.md` §1, corrigee **avant** la regeneration. (6) **Cinq defauts trouves en capture, aucun visible en headless** : le fut des coniferes ressortait au-dessus du feuillage ; la scorie rendait un rose saumon dont la coulee ne se detachait pas ; le magma se confondait avec le sable du desert ; **cinq modeles de Snowlands sur six** puisaient dans la rampe « automne » et ressortaient en taches orange sur un sol cyan — le meme defaut qu'on avait corrige la veille pour un seul modele, revenu au complet, d'ou une regle ecrite en toutes lettres dans le generateur ; et la couronne d'un palmier n'avait que deux directions, une paire de frondes opposees etant identique a elle-meme apres un demi-tour. **312 verifications, 0 echec.** |
 | 2026-09-05 | Jalon 1.11, deuxieme temps : **les arbres sont en jeu**, et la question des filons est tranchee. (1) **La decision de palette.** Les neuf filons demandaient neuf types de bloc et la reserve terrain etait pleine ; des trois issues du prompt, aucune telle quelle. `RANGE_TERRAIN_END` passe de 31 a 40 et `RANGE_CREATURES_BEGIN` de 32 a 41, **et rien d'autre** — le prix annonce de cette issue (« invalide tous les modeles peints ») ne valait que si on deplacait *toutes* les frontieres. Aucun repeint : les 53 modeles du depot n'emploient que 14-29 et 128-175, et la plage creatures n'a aucune entree peinte, l'apparence des creatures etant hors perimetre. C'est ce qui rend l'operation gratuite **aujourd'hui**, et elle ne le sera plus au jalon 2. Les neuf index sont alignes sur les codes d'entite (`index = 32 + (code - 131)`) et la table de rarete de §5.4 est portee verbatim dans `CWPalette.roll_ore` — les deux verrouillees par des tests, la seconde deroulee sur ses 1 000 combinaisons plutot que tiree. Neuf modeles a **1 voxel = 1 bloc** sous `assets/models/filons/`, premier lot de ce genre du projet ; leur *pose* reste a faire et appartient au jalon 2.6. (2) **La seconde couche de dispersion.** `CWTreeScatter` herite de `CWScatter` — cache, verrou, reprise apres edition sont identiques — et redefinit la cellule (64 blocs), la bibliotheque (a part : rayon max 2 blocs pour la flore, 3 pour les arbres), la densite, et un **espacement minimum reel** de 7 blocs entre troncs. Cet espacement est le seul endroit interessant : il doit tenir **au travers des frontieres de cellule** sans etat partage ni recursion, d'ou la regle du rang absolu `(cz, cx, i)` sur le voisinage 3 x 3 — comme l'espacement est inferieur a la cellule, tout candidat genant est dans la fenetre, et la decision est la meme quelle que soit la cellule qui la pose. Verifie par un test sur 169 cellules : plus courte distance mesuree 7,0 blocs exactement. (3) **La question de la selection est tranchee** : les arbres ont leur propre champ, crete a 0,02 (bosquets de 50 blocs) et non les deux cretes de la flore a 0,01 — les partager aurait mis chaque arbre dans une plaque d'herbe, et deux couches correlees a cent pour cent se lisent comme une seule. (4) **Le montage** se fait au niveau de l'instance : `Placement.fy` est ajoute pour poser un houppier a une hauteur fractionnaire, la hauteur d'un tronc etant un nombre de voxels divise par 40/3. Le tronc ecrit dans le terrain — donc la collision — reste a faire. (5) **Validation en jeu** : `terrain_demo` accepte `-- --biome N --shot S`, ce qui donne une capture d'un biome donne sans piloter la fenetre ; sept biomes regardes. Trois defauts corriges dans la foulee, tous invisibles hors du jeu : les houppiers sortaient grumeleux (resolution de metaballe 0,32 -> 0,22), les trois touffes d'herbe — l'objet le plus instancie du jeu — etaient trop clairsemees, et la broussaille de neige ressortait en tache orange sur un sol cyan, seul objet chaud d'un paysage froid (bois assombri et neige posee dessus, meme fonction que pour `sapin_enneige`). 297 verifications, 0 echec. |
 | 2026-09-05 | Jalon 1.11, premier temps : **les quatorze modeles d'arbres sont livres**, par le meme chemin que la flore — `docs/prompt_generation_arbres.md` pour la commande, `tools/blender/generer_arbres.py` et `arbres_formes.py` pour la production, une graine en dur par fichier, le lot se regenere a l'identique (verifie : quatorze empreintes md5 inchangees d'une execution a l'autre). Les garde-fous de `flore_vox` sont reemployes tels quels ; seul le **plafond d'enveloppe** est devenu un parametre, par classe — arbre entier 160 voxels, houppier 80, palme 60 —, la plage des index restant ce qu'elle etait. La suite de tests ne connaissant pas encore ce lot, la **fourchette de hauteur commandee est portee dans la table `LOT` du generateur** et verifiee a l'ecriture : c'est le garde-fou provisoire, en attendant celui de la couche de dispersion. Trois choses ont ete apprises en dessinant, toutes dans les notes de `arbres_formes` : une couronne dont les lobes ne se chevauchent pas sort en **guirlande** — un anneau de billes separees, troue au milieu — et il lui faut un lobe central plus une enveloppe en oeuf, la coquille se faisant a l'echantillonnage et non en ecartant les lobes ; une palme dont les folioles sont posees a chaque point de rachis sort en **lame pleine**, il faut un pas de trois ; un lacet par pas de 0,05 sur un rachis de 74 voxels **enroule** la palme d'a peu pres 120 degres, la rotation totale valant `balance x longueur / 2`. Le rayon maximum du lot est de **32 voxels, soit 3 blocs**, et non les 24 que laissait craindre la boite de `thorn-tree`. Restent le code : la seconde couche de dispersion, puis l'assemblage. |
 | 2026-09-05 | Jalon 1.11 ouvert : **les arbres**, qui n'avaient aucune etape prevue. La meme lecture des slots de chargement qui a donne la table du decor donne celle des entites — `slot = 1969 + code`, tenue par treize valeurs consecutives : les neuf filons sortent dans l'ordre exact de la table de rarete de `docs/systems/02` §5.4, et les trois cibles confirment la ligne « 140-142 » que rien n'etayait. Le mecanisme « le slot de chargement est le code, a une base pres » est donc general, et non une particularite du decor. **La question ouverte n° 2 est reglee** : `tree-leaves` porte son propre code (143), loin des deux arbres (129 fir-tree, 130 thorn-tree), et le corpus n'a ni `tree-trunk` ni equivalent — le conifere et l'arbre a epines sont des modeles entiers, le feuillu et le palmier sont des assemblages, et leur tronc est ecrit dans le terrain. Corrige au passage une affirmation fausse de `assets/models/MODELS.md` §4 (« aucun arbre n'est un modele ») et son decompte de 154 modeles, qui est de 2 449. Travaux prevus en trois temps : le lot d'assets par le meme chemin que la flore (`docs/prompt_generation_arbres.md`, 14 modeles), une **seconde couche de dispersion** — ranger un arbre de 12 blocs dans la bibliotheque de la flore ferait passer la marge de `placements_in` de 2 a 24 blocs pour toute la flore —, puis l'assemblage tronc + houppiers, premier objet du projet a traverser la matiere et l'instance. Les neuf filons sont **bloques sur une decision de palette** : ils s'estampent, donc chacun de leurs voxels est un type de bloc, et la reserve terrain 14-31 est pleine. |

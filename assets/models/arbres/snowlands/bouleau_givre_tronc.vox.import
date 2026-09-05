@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://d3ry5b7t6vnn5"
+path="res://.godot/imported/bouleau_givre_tronc.vox-10ce666137b64c82933082b5d28e8992.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/snowlands/bouleau_givre_tronc.vox"
+dest_files=["res://.godot/imported/bouleau_givre_tronc.vox-10ce666137b64c82933082b5d28e8992.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

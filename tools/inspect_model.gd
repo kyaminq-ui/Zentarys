@@ -72,11 +72,18 @@ func _inspect(path: String) -> void:
 	print("  tampon %d x %d x %d (godot x,y,z)   matiere %d x %d x %d, coin bas %s"
 			% [size.x, size.y, size.z, extent.x, extent.y, extent.z, lo])
 	# La taille en blocs est la seule qui dise quelque chose : un modele se juge
-	# contre le personnage de reference, qui fait 2 blocs. Voir MODELS.md, §1.
-	var per: float = float(CWVoxelModel.VOXELS_PER_BLOCK)
+	# contre le personnage de reference, qui fait 2,4 blocs. Voir MODELS.md, §1.
+	#
+	# **La grille depend du lot**, depuis le jalon 1.12 : la flore est a 40/3
+	# voxels par bloc, les arbres et les filons a 1. Se tromper de grille ici
+	# n'est pas anodin — l'outil annoncait le pin a 1,65 bloc de haut la ou il
+	# en fait 22, et c'est justement l'outil qu'on consulte pour verifier une
+	# echelle. Le chemin suffit a trancher, et `CWModelLibrary` fait le meme
+	# choix par dossier de lot.
+	var per: float = _grille_de(path)
 	print("  soit %.2f x %.2f x %.2f blocs   (%.2f fois la hauteur du personnage)"
 			% [float(extent.x) / per, float(extent.y) / per, float(extent.z) / per,
-			float(extent.y) / (per * 2.0)])
+			float(extent.y) / (per * 2.4)])
 	print("  %d voxels pleins, %.1f %% du tampon"
 			% [filled, 100.0 * float(filled) / float(size.x * size.y * size.z)])
 
@@ -99,6 +106,13 @@ func _inspect(path: String) -> void:
 				CWPalette.RANGE_TERRAIN_BEGIN, CWPalette.RANGE_TERRAIN_END])
 	else:
 		print("  ATTENTION index hors plage flore/terrain : ", ", ".join(strays))
+
+
+## Voxels par bloc du lot auquel appartient ce fichier.
+func _grille_de(path: String) -> float:
+	if path.contains("/arbres/") or path.contains("/filons/"):
+		return CWVoxelModel.VOXELS_PER_BLOCK_TERRAIN
+	return CWVoxelModel.VOXELS_PER_BLOCK
 
 
 func _in_flora_range(i: int) -> bool:

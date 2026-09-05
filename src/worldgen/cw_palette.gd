@@ -48,6 +48,25 @@ const WATER: int = 12
 const WATER_DEEP: int = 13
 const COUNT: int = 14
 
+# -- Lava Lands : deux types de bloc de plus, sans deplacer une frontiere -----
+#
+# Le biome volcanique (jalon 1.12) a besoin de matiere que le generateur
+# **ecrit** — donc de types de bloc, pas de simples couleurs de modele : on doit
+# pouvoir creuser une croute de scorie et reconnaitre une coulee de magma dans
+# `CHANNEL_TYPE`.
+#
+# Les deux entrees prises sont 30 et 31, deja peintes en lave dans la reserve
+# terrain 14-31, et **les deux seules de cette reserve qu'aucun modele du depot
+# n'employait** (`inspect_model.gd` ne rendait que 14-29). Elles changent donc
+# de statut — matiere de modele -> type de bloc — sans qu'une seule couleur
+# bouge et sans toucher a `RANGE_TERRAIN_END`.
+#
+# C'est ce qui evite de repayer l'operation de l'invariant n° 26 : la frontiere
+# terrain/creatures reste a 40/41, et le jour ou un modele de creature existera,
+# rien ne sera a repeindre.
+const MAGMA: int = 30
+const SCORIA: int = 31
+
 # -- Filons : neuf types de bloc, 32-40 (jalon 1.11) --------------------------
 #
 # Un filon n'est pas un decor pose : il **s'estampe dans le terrain**, puisqu'on
@@ -143,6 +162,13 @@ const SNOW_LINE_BASE: float = 40.0
 const SNOW_LINE_SPAN: float = 360.0
 ## Epaisseur de roche nue juste sous la ligne de neige.
 const ROCK_BAND: float = 55.0
+## Altitude sous laquelle il n'y a jamais de roche nue, quelle que soit la
+## ligne de neige. Sans ce plancher, un biome froid — ou la ligne de neige
+## tombe a 80 blocs — se couvrait de roche des la vingtieme marche : une
+## Snowlands y etait un anneau de caillou gris entre la plage et la neige.
+## Mesure a l'appui : la roche occupait 14,7 % du monde avant ce plancher, et
+## la toundra 3 colonnes sur 49 152.
+const ROCK_MIN: float = 90.0
 ## Hauteur de la plage au-dessus du niveau de la mer.
 const BEACH_BAND: float = 3.0
 
@@ -197,8 +223,20 @@ static func _fill_asset_ranges(c: PackedColorArray) -> void:
 	_ramp(c, 25, 3, Color8(58, 56, 62), Color8(22, 20, 26))       # basalte, obsidienne
 	c[28] = Color8(96, 104, 70)     # roche lichenee, claire
 	c[29] = Color8(58, 64, 44)      # roche lichenee, sombre
-	c[30] = Color8(255, 152, 48)    # lave, incandescente
-	c[31] = Color8(176, 44, 20)     # lave, refroidie
+	# 30 et 31 sont les deux seules entrees de cette reserve que le generateur
+	# **ecrit** : ce sont les types de bloc de Lava Lands, pas de la matiere de
+	# modele. Voir MAGMA / SCORIA en tete de fichier.
+	# Franchement rouge, et pas seulement chaud : a 255,152,48 la coulee lisait
+	# comme du sable — le sable du desert est a 253,185,82, et les deux se
+	# confondaient sur une capture prise dans la brume (2026-09-06).
+	c[MAGMA] = Color8(255, 92, 16)    # coulee incandescente
+	# La scorie est **sombre**, et c'est une correction de capture, pas de gout
+	# (2026-09-06). A 176,44,20 — la teinte « lave refroidie » d'origine, choisie
+	# quand ces deux entrees n'etaient que de la matiere de modele — le sol d'une
+	# Lava Lands entiere rendait un rose saumon uniforme : la coulee incandescente
+	# ne s'en detachait pas, et le buisson rouge du biome s'y fondait. Une croute
+	# refroidie est de la roche, pas de la lave.
+	c[SCORIA] = Color8(104, 50, 44)   # croute refroidie
 
 	# Les neuf filons, 32-40, dans l'ordre des codes d'entite 131-139. Ce sont
 	# des *types de bloc* : un filon s'estampe et se mine, contrairement a tout
@@ -395,33 +433,116 @@ static func build_opaque_material() -> StandardMaterial3D:
 	return mat
 
 
-## Bloc de surface d'une colonne.
-## height : altitude de la colonne, en blocs. sea_level : niveau de la mer.
-static func surface_index(height: float, temperature: float, humidity: float,
-		sea_level: int) -> int:
-	var above: float = height - float(sea_level)
+## Humidite sous laquelle une prairie se lit en herbe seche. C'est la frange
+## de Greenlands vers le desert, pas un biome : `CWBiome` n'en a que six, et la
+## steppe est une *matiere*, comme la roche d'altitude.
+const DRY_GRASS_H: float = 0.46
 
-	if above < -1.0:
+## Humidite au-dessus de laquelle un sol de jungle se lit en sol humide. Meme
+## statut que ci-dessus : le marais est une matiere de Jungles, pas un biome.
+const SWAMP_H: float = 0.92
+
+## Humidite au-dessus de laquelle une Snowlands se lit en neige plutot qu'en
+## toundra. La toundra est la frange seche du froid.
+const TUNDRA_H: float = 0.50
+
+## Altitude sous laquelle une cuvette de Lava Lands est remplie de magma : un
+## lac de lave au fond d'un bassin.
+##
+## Ce seuil seul ne suffit pas, et la mesure le dit : les coeurs de regions
+## chaudes sont des terres hautes, et a 30 blocs il ne restait **15 colonnes de
+## magma sur 147 456**. C'est le champ de coulees ci-dessous qui porte le
+## « magma omnipresent » de l'alpha ; celui-ci ne fait que les bassins.
+const MAGMA_LEVEL: float = 12.0
+
+# -- Les coulees de lave ------------------------------------------------------
+#
+# Une crete de bruit, exactement comme la crete de placement du decor : ce qui
+# est *pres de zero* est une coulee, le reste est de la scorie. Une crete rend
+# des veines continues la ou un seuil simple rendrait des taches — et c'est bien
+# des veines qu'on veut, le magma d'une Lava Lands coulant en rivieres entre les
+# reliefs.
+#
+# La frequence donne la maille du reseau. Elle est passee de 0,004 a 0,012 apres
+# capture (2026-09-06) : a 250 blocs de longueur d'onde, une vue de 224 blocs
+# pouvait tomber entierement entre deux coulees, et le biome rendait une plaine
+# de scorie nue — « magma omnipresent » disait le releve, on n'en voyait aucun.
+# A 83 blocs, deux ou trois veines traversent le champ de vision. Les decalages
+# n'ont d'autre role que d'eloigner ce champ des autres ; ils sont pris grands
+# et premiers entre eux comme partout ici.
+#
+# Cout : **un echantillon de bruit par colonne de Lava Lands**, soit sur 1,9 %
+# des terres. Sur les 62 us que coute une colonne, l'echantillon en vaut 1 —
+# c'est la raison pour laquelle la regle de surface prend (x, z) depuis le
+# jalon 1.12, et la seule chose qu'elle en fait.
+const LAVA_FLOW_FREQ: float = 0.012
+const LAVA_FLOW_OFFSET_X: float = 61247.0
+const LAVA_FLOW_OFFSET_Z: float = 18923.0
+## Demi-largeur de la crete, en valeur de bruit. Plus elle est grande, plus les
+## coulees sont larges. Mesuree par `tools/biome_stats.gd`, pas choisie a l'oeil.
+const LAVA_FLOW_RIDGE: float = 0.09
+
+
+## Vrai si la colonne est sur une coulee. Coordonnees **monde**, comme partout
+## dans la dispersion — un decalage d'origine applique deux fois donnerait des
+## coulees ailleurs que la ou elles sont generees.
+static func lava_flow(x: int, z: int) -> bool:
+	return absf(CWValueNoise.sample(
+			float(x) * LAVA_FLOW_FREQ + LAVA_FLOW_OFFSET_X,
+			float(z) * LAVA_FLOW_FREQ + LAVA_FLOW_OFFSET_Z)) < LAVA_FLOW_RIDGE
+
+
+## Matiere de surface d'une colonne, connaissant son biome.
+##
+## `above` est l'altitude au-dessus du niveau de la mer, en blocs. C'est la
+## seconde moitie de la regle : `CWBiome.at` dit *ou on est*, celle-ci dit *de
+## quoi c'est fait*. Les deux etaient confondues avant le jalon 1.12, et c'est
+## cette confusion qui faisait de la roche d'altitude et du fond marin des
+## « biomes » a part entiere.
+##
+## Trois bandes d'altitude traversent presque tous les biomes, et elles passent
+## avant la matiere de plaine : la plage, la roche nue, la neige de sommet.
+## Lava Lands est le seul a les refuser toutes — il n'y neige pas.
+static func surface_of(biome: int, above: float, temperature: float,
+		humidity: float, x: int, z: int) -> int:
+	if biome == CWBiome.OCEANS:
 		# Fond marin : sable pres du rivage, gravier en profondeur.
 		return SAND if above > -12.0 else GRAVEL
+
+	if biome == CWBiome.LAVALANDS:
+		if above < MAGMA_LEVEL or lava_flow(x, z):
+			return MAGMA
+		var lava_rock: float = SNOW_LINE_BASE + temperature * SNOW_LINE_SPAN
+		return STONE if above > maxf(lava_rock - ROCK_BAND, ROCK_MIN) else SCORIA
+
 	if above <= BEACH_BAND:
-		return SAND
+		# Le rivage d'une Snowlands est gele, pas sableux.
+		return SNOW if biome == CWBiome.SNOWLANDS else SAND
 
 	var snow_line: float = SNOW_LINE_BASE + temperature * SNOW_LINE_SPAN
 	if above > snow_line:
 		return SNOW
-	if above > snow_line - ROCK_BAND:
+	if above > maxf(snow_line - ROCK_BAND, ROCK_MIN):
 		return STONE
 
-	if temperature < 0.18:
-		return SNOW if humidity > 0.5 else TUNDRA
-	if temperature > 0.78 and humidity < 0.32:
-		return SAND
-	if humidity > 0.74:
-		return GRASS_JUNGLE if temperature > 0.55 else SWAMP
-	if humidity < 0.36:
-		return GRASS_DRY
-	return GRASS
+	match biome:
+		CWBiome.SNOWLANDS:
+			return SNOW if humidity > TUNDRA_H else TUNDRA
+		CWBiome.DESERTS:
+			return SAND
+		CWBiome.JUNGLES:
+			return SWAMP if humidity > SWAMP_H else GRASS_JUNGLE
+		_:
+			return GRASS_DRY if humidity < DRY_GRASS_H else GRASS
+
+
+## Bloc de surface d'une colonne, biome compris. Raccourci pour les appelants
+## qui n'ont pas deja le biome sous la main — le chemin de generation, lui, le
+## calcule une fois et appelle `surface_of` directement.
+static func surface_index(height: float, temperature: float, humidity: float,
+		sea_level: int, x: int, z: int) -> int:
+	var biome: int = CWBiome.at(height, temperature, humidity, sea_level)
+	return surface_of(biome, height - float(sea_level), temperature, humidity, x, z)
 
 
 ## Bloc juste sous la surface (quelques blocs d'epaisseur).
@@ -433,6 +554,11 @@ static func subsurface_index(surface: int) -> int:
 			return STONE
 		STONE:
 			return STONE
+		MAGMA, SCORIA:
+			# Sous une coulee comme sous la croute : de la scorie, puis la roche
+			# que `CWVoxelGenerator` pose plus bas. Du magma sur toute
+			# l'epaisseur ferait une mer de lave en coupe des le premier trou.
+			return SCORIA
 		_:
 			return DIRT
 
@@ -459,6 +585,8 @@ static func name_of(index: int) -> String:
 		GRAVEL: return "gravier"
 		WATER: return "eau"
 		WATER_DEEP: return "eau profonde"
+		MAGMA: return "magma"
+		SCORIA: return "scorie"
 		ORE_GOLD: return "filon d'or"
 		ORE_IRON: return "filon de fer"
 		ORE_SILVER: return "filon d'argent"

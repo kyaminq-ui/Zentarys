@@ -46,17 +46,16 @@ const SAVE_WAIT_MAX_MS: int = 3000
 ## temps que le terrain autour du gabarit soit maille.
 const BOARD_SHOT_DELAY: float = 8.0
 
-## Cibles de teleportation, par touche.
+## Cibles de teleportation, par touche. Six biomes, six touches : depuis le
+## jalon 1.12 ce sont des biomes et non des matieres de surface, et les touches
+## 7 a 9 n'ont plus d'emploi.
 const BIOME_KEYS: Dictionary = {
-	KEY_1: CWPalette.GRASS,
-	KEY_2: CWPalette.GRASS_DRY,
-	KEY_3: CWPalette.GRASS_JUNGLE,
-	KEY_4: CWPalette.SWAMP,
-	KEY_5: CWPalette.SAND,
-	KEY_6: CWPalette.SNOW,
-	KEY_7: CWPalette.TUNDRA,
-	KEY_8: CWPalette.STONE,
-	KEY_9: CWPalette.GRAVEL,
+	KEY_1: CWBiome.GREENLANDS,
+	KEY_2: CWBiome.SNOWLANDS,
+	KEY_3: CWBiome.DESERTS,
+	KEY_4: CWBiome.JUNGLES,
+	KEY_5: CWBiome.LAVALANDS,
+	KEY_6: CWBiome.OCEANS,
 }
 
 @export var world_seed: int = 2024
@@ -230,8 +229,9 @@ func _ready() -> void:
 ## d'obtenir une image d'une couche de rendu — un test headless n'a pas de
 ## rasteriseur —, et c'est ainsi que la couche des arbres a ete verifiee.
 ##
-## `--biome` prend un index de surface de `CWPalette` (3 herbe, 4 herbe seche,
-## 5 jungle, 6 sable, 7 neige, 9 toundra, 10 marais).
+## `--biome` prend un index de `CWBiome` : 0 Greenlands, 1 Snowlands,
+## 2 Deserts, 3 Jungles, 4 Lava Lands, 5 Oceans. Ce sont les memes que les
+## touches 1 a 6, decalees d'un.
 func _read_cmdline() -> void:
 	var args: PackedStringArray = OS.get_cmdline_user_args()
 	var i: int = 0
@@ -434,8 +434,8 @@ func _build_scale_board() -> void:
 	var lib := CWModelLibrary.shared()
 	var seen: Dictionary = {}
 	var flat: Array = []
-	for surface in CWModelLibrary.flora():
-		for m in lib.for_surface(surface):
+	for biome in CWModelLibrary.flora():
+		for m in lib.for_biome(biome):
 			if not seen.has(m.name):
 				seen[m.name] = true
 				flat.append(m)
@@ -641,7 +641,7 @@ func start_biome_search(target: int) -> void:
 	_search_target = target
 	_search_found = false
 	_search_abort = false
-	_search_status = "recherche %s..." % CWPalette.name_of(target)
+	_search_status = "recherche %s..." % CWBiome.name_of(target)
 	_hud_timer = 0.0
 	_search_from = _world_position()
 	_search_task = WorkerThreadPool.add_task(_run_biome_search)
@@ -674,7 +674,7 @@ func _probe_zone(f: CWTerrainField, zx: int, zz: int) -> bool:
 			var x: int = zx * CWWorldParams.ZONE_SIZE + tx * CWWorldParams.TILE_SIZE + half
 			var z: int = zz * CWWorldParams.ZONE_SIZE + tz * CWWorldParams.TILE_SIZE + half
 			var c: Vector3 = f.sample_column(x, z)
-			if CWPalette.surface_index(c.x, c.y, c.z, params.sea_level) == _search_target:
+			if CWBiome.at(c.x, c.y, c.z, params.sea_level) == _search_target:
 				_search_result = Vector2i(x, z)
 				_search_found = true
 				return true
@@ -689,7 +689,7 @@ func _finish_biome_search() -> void:
 		return
 	if not _search_found:
 		_search_status = "%s introuvable a moins de %d zones" % [
-			CWPalette.name_of(_search_target), SEARCH_ZONE_RINGS]
+			CWBiome.name_of(_search_target), SEARCH_ZONE_RINGS]
 		return
 	var h: float = generator.field().sample_column(_search_result.x, _search_result.y).x
 	camera.position = Vector3(
@@ -875,7 +875,9 @@ func _update_hud() -> void:
 	var wx: int = params.world_origin.x + roundi(p.x)
 	var wz: int = params.world_origin.y + roundi(p.z)
 	var c: Vector3 = generator.field().sample_column(wx, wz)
-	var surface: int = CWPalette.surface_index(c.x, c.y, c.z, params.sea_level)
+	var biome: int = CWBiome.at(c.x, c.y, c.z, params.sea_level)
+	var surface: int = CWPalette.surface_of(biome, c.x - float(params.sea_level),
+			c.y, c.z, wx, wz)
 
 	var busy: String = ""
 	if _search_status != "":
@@ -890,8 +892,9 @@ func _update_hud() -> void:
 
 	var lines: Array[String] = [
 		"%d, %d   y %d  (sol %d)%s" % [wx, wz, roundi(p.y), roundi(c.x), region],
-		"%s   T %.2f  H %.2f   %d ips%s" % [
-			CWPalette.name_of(surface), c.y, c.z,
+		"%s / %s   T %.2f (%.0f C)  H %.0f %%   %d ips%s" % [
+			CWBiome.name_of(biome), CWPalette.name_of(surface),
+			c.y, CWBiome.celsius(c.y), c.z * 100.0,
 			Engine.get_frames_per_second(), busy],
 	]
 	if _hud_detailed:

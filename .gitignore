@@ -15,3 +15,6 @@ __pycache__/
 # l'original n'y entre, et une capture d'ecran en est un. On en tire des
 # nombres — un rapport de tailles, un compte de cubes —, jamais des pixels.
 reference_*.png
+# Et les fichiers d'import que Godot genere pour elles : la capture est ignoree,
+# son `.import` ne l'etait pas, et il se serait retrouve au depot tout seul.
+reference_*.png.import

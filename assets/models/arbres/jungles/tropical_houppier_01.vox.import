@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://bjb5kyn5o721d"
+path="res://.godot/imported/tropical_houppier_01.vox-7d9141832381085e891c428a6729ce98.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/jungles/tropical_houppier_01.vox"
+dest_files=["res://.godot/imported/tropical_houppier_01.vox-7d9141832381085e891c428a6729ce98.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://c6pvel4c0erej"
+path="res://.godot/imported/broussaille.vox-aed756fbf1b652207534338e3d88572e.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/greenlands/broussaille.vox"
+dest_files=["res://.godot/imported/broussaille.vox-aed756fbf1b652207534338e3d88572e.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

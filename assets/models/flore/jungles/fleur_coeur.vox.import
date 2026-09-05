@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://ulsrv2y8fqor"
+path="res://.godot/imported/fleur_coeur.vox-e1f398d0cd8fcf6800b1487d671d1f40.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/jungles/fleur_coeur.vox"
+dest_files=["res://.godot/imported/fleur_coeur.vox-e1f398d0cd8fcf6800b1487d671d1f40.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

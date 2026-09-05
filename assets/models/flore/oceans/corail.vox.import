@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://bonyqm7dsvomt"
+path="res://.godot/imported/corail.vox-12469f37adfc082cbfd1010b98898e68.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/oceans/corail.vox"
+dest_files=["res://.godot/imported/corail.vox-12469f37adfc082cbfd1010b98898e68.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

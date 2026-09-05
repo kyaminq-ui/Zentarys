@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://cww2mkgohs11p"
+path="res://.godot/imported/arbre_epineux.vox-5e36e6e2f62671101bc2bfae0975e605.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/lavalands/arbre_epineux.vox"
+dest_files=["res://.godot/imported/arbre_epineux.vox-5e36e6e2f62671101bc2bfae0975e605.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

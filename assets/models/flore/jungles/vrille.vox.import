@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://dnfpjrmq47fcd"
+path="res://.godot/imported/vrille.vox-ecc505e6a52f79d5b246acaee41f24c6.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/jungles/vrille.vox"
+dest_files=["res://.godot/imported/vrille.vox-ecc505e6a52f79d5b246acaee41f24c6.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

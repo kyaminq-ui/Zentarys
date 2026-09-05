@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://doqyl6q4lt710"
+path="res://.godot/imported/broussaille_seche.vox-414ed6f7bc77942bdc780e2782dbdd88.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/deserts/broussaille_seche.vox"
+dest_files=["res://.godot/imported/broussaille_seche.vox-414ed6f7bc77942bdc780e2782dbdd88.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

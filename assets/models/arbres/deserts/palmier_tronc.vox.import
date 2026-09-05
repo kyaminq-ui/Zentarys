@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://cr6fu7xi41rke"
+path="res://.godot/imported/palmier_tronc.vox-5fcfe18cf26b4e0c63fa47fdb7f0f746.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/deserts/palmier_tronc.vox"
+dest_files=["res://.godot/imported/palmier_tronc.vox-5fcfe18cf26b4e0c63fa47fdb7f0f746.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

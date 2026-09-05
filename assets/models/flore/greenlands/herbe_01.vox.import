@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://dyw0tmys81i0l"
+path="res://.godot/imported/herbe_01.vox-bdaafbdb86b2a346879329059d1e04bd.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/greenlands/herbe_01.vox"
+dest_files=["res://.godot/imported/herbe_01.vox-bdaafbdb86b2a346879329059d1e04bd.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

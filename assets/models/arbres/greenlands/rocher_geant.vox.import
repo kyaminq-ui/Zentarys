@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://rdninir2prt8"
+path="res://.godot/imported/rocher_geant.vox-35038e4e87929cefc28f54852f81b1d1.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/greenlands/rocher_geant.vox"
+dest_files=["res://.godot/imported/rocher_geant.vox-35038e4e87929cefc28f54852f81b1d1.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://bd5gnweohxdci"
+path="res://.godot/imported/champignon_luisant.vox-01d5a1836bfa11fb8c17e7b86a89073f.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/lavalands/champignon_luisant.vox"
+dest_files=["res://.godot/imported/champignon_luisant.vox-01d5a1836bfa11fb8c17e7b86a89073f.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

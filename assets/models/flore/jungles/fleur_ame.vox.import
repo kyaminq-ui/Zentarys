@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://cr612ch67tvr5"
+path="res://.godot/imported/fleur_ame.vox-4cd1c70af02b24f4fb7e36a264b04ea4.tscn"
+
+[deps]
+
+source_file="res://assets/models/flore/jungles/fleur_ame.vox"
+dest_files=["res://.godot/imported/fleur_ame.vox-4cd1c70af02b24f4fb7e36a264b04ea4.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true
