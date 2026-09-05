@@ -624,13 +624,31 @@ refusés à l'écriture, enveloppe vérifiée. **14 modèles livrés** sous
 | neige | `sapin`, `sapin_enneige` |
 | toundra | `sapin_rabougri` |
 
-Mesures réelles, à connaître avant d'écrire la couche de dispersion : les trois
-futs font 88 à 105 voxels de haut (6,6 à 7,9 blocs) pour moins d'un bloc de
-rayon ; les quatre houppiers 47 à 53 de haut pour 28 à 32 de rayon (2,4 blocs) ;
-le `sapin` 111 pour 14 de rayon. **Le rayon maximum du lot est 32 voxels, soit
-3 blocs** — pas 24, comme le laissait craindre la boîte 3 × 3 × 12 de
-`thorn-tree`. La marge de `placements_in` reste donc modeste, mais elle est
-bien 1,5 fois celle de la flore, ce qui suffit à justifier la couche jumelle.
+Mesures réelles : les trois futs font 88 à 105 voxels de haut (6,6 à 7,9 blocs)
+pour moins d'un bloc de rayon ; les quatre houppiers 47 à 53 de haut pour 28 à
+32 de rayon (2,4 blocs) ; le `sapin` 111 pour 14 de rayon. Le rayon maximum du
+lot est de 32 voxels, soit 3 blocs.
+
+> ⚠️ **Ce lot est à refaire — l'échelle et le grain sont faux.** Constaté le
+> 2026-09-05 au soir sur trois captures du jeu d'origine. Les arbres y sont
+> **six à dix fois le personnage** (15 – 25 blocs, contre 8,3 pour notre
+> `sapin`), leurs houppiers sont des **dômes en parasol de 10 à 18 blocs de
+> large, plus larges que hauts** (contre 4,8 blocs, aussi hauts que larges), et
+> surtout leurs cubes de feuillage lisent **à la taille du bloc de terrain** —
+> un arbre y est bâti des mêmes cubes que le monde, pas de ceux de la flore.
+>
+> Deux raisons de le croire au-delà de l'œil. D'abord la **provenance de
+> l'échelle** : `0,075 = 3/40` est relevée dans la voie du *décor* (§8.3), et
+> aucune échelle n'a été relevée dans la voie des *entités*, par où passent les
+> arbres — ce lot reposait donc sur une extrapolation. Ensuite l'**argument
+> structurel** : §5.2 établit que le tronc est écrit dans le terrain en colonnes
+> de blocs et que le houppier est instancié séparément ; ces deux moitiés ne se
+> rejoignent proprement que si la grille du houppier est celle du bloc. Un voxel
+> = un bloc explique l'architecture de la source, 3/40 la rend impossible.
+>
+> **La couche de dispersion et le montage restent valables** ; ce sont le grain
+> et les tailles qui changent. Chiffres cibles, effets de bord et ordre des
+> travaux : `nextsteps.md`, §6.
 
 **Deux points d'ancrage relevés à la production, qui concernent l'assemblage :**
 

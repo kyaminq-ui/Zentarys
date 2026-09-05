@@ -9,3 +9,9 @@ godot.windows.editor.double.x86_64.exe
 # Caches de l'interpreteur Python des outils de generation
 __pycache__/
 *.pyc
+
+# Captures du jeu d'origine, gardees en local comme references de mesure.
+# Elles ne partent pas au depot : le cadre du projet est qu'aucun asset de
+# l'original n'y entre, et une capture d'ecran en est un. On en tire des
+# nombres — un rapport de tailles, un compte de cubes —, jamais des pixels.
+reference_*.png

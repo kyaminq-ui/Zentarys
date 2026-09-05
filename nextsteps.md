@@ -113,6 +113,14 @@ la **frontière de palette** a bougé une fois (terrain 1–31 → 1–40) pour 
 les filons, sans repeindre un seul modèle ; et les arbres se décident sur
 **leur propre champ** de bruit, pas sur les deux crêtes de la flore.
 
+> ⚠️ **Le lot d'arbres est à refaire, et on sait pourquoi** (2026-09-05 au soir,
+> après examen de trois captures du jeu d'origine). Il est **deux à trois fois
+> trop petit**, ses houppiers sont **trois fois trop étroits et de la mauvaise
+> proportion**, et il est dessiné **sept à treize fois trop fin** : les arbres de
+> l'original sont bâtis des mêmes cubes que le terrain, pas de ceux de la flore.
+> La couche de dispersion et le montage, eux, restent valables — c'est le grain
+> et les tailles qui changent, pas l'architecture. Détail et chiffres en §6.
+
 **1.7 — contenu de biome, fait** (2026-09-05, au soir). La mécanique de
 dispersion était en place depuis le 2026-09-04 ; ce qui manquait était le
 *quoi*. **La table type de décor → modèle est trouvée**, et elle n'était dans
@@ -416,74 +424,114 @@ docs/images/               gabarit, carte et composition de flore, en jeu
   par colonne avant d'être déplacé sur le chemin froid. Mesurer avant de
   supposer que c'est le verrou qui coûte.
 
-## 6. Prochaine tâche — d'abord la finesse des arbres
+## 6. Prochaine tâche — l'échelle et le grain des arbres
 
-> **À FAIRE EN PREMIER, session du 2026-09-06.** *La grille de dessin des arbres
-> est peut-être trop fine, et il y a une raison de le croire qui n'est pas une
-> question de goût.*
+> **À FAIRE EN PREMIER, session du 2026-09-06.** *Le lot d'arbres livré le
+> 2026-09-05 est à la mauvaise échelle et au mauvais grain. Ce n'est pas une
+> question de goût : trois captures du jeu d'origine, regardées le 2026-09-05 au
+> soir, le montrent, et le raisonnement structurel va dans le même sens.*
 >
-> **Le fait.** `VOXELS_PER_BLOCK = 40/3` vient de la constante d'échelle
-> **0,075 = 3/40** relevée dans le binaire — mais elle est relevée dans la
-> **voie du décor** (`docs/systems/02`, §8.3, à l'intérieur de la section 8, qui
-> est celle du décor). Les arbres passent par la **voie des entités** (§5, §6),
-> et **aucune constante d'échelle n'a été relevée de ce côté** : vérifié, la
-> section 5 ne cite l'échelle que pour dire que les boîtes en blocs la
-> recoupent. Le lot d'arbres repose donc sur une **extrapolation**, pas sur un
-> portage — c'est la seule pièce du jalon 1.11 dans ce cas, et rien ne le disait
-> jusqu'ici.
+> ### 6.1 Ce que les captures montrent
 >
-> **La mesure à faire d'abord**, parce qu'elle est bon marché et qu'elle
-> transforme une décision de goût en portage : chercher dans le binaire
-> l'échelle d'instanciation de la voie des entités. Si elle vaut 0,15 (= 3/20)
-> ou 0,3 (= 3/10), la question est réglée par la source. Points d'entrée :
-> `creature_generateAppearance` (`game_misc.cpp:3197`), qui écrit l'identifiant
-> de modèle **et une boîte englobante**, et la boucle de pose de §6.
+> Méthode : le personnage sert de règle (2,3 – 2,4 blocs, mesure de
+> `assets/models/MODELS.md`, §1), comparé à des marches de terrain à la même
+> profondeur. Les captures restent **hors du dépôt** (`.gitignore`) : on en tire
+> des nombres, jamais des pixels.
 >
-> **Si la source ne dit rien**, c'est un choix d'authoring, et je le prendrais
-> ainsi : **une grille deux fois plus grossière pour les arbres**, 40/6 ≈ 6,67
-> voxels par bloc, la flore gardant 40/3. Deux résolutions, une par voie de
-> pose — ce qui est cohérent avec le fait que la source a deux voies.
+> **1. Les arbres sont immenses, et c'est délibéré.** Les conifères occupent
+> toute la hauteur du cadre, le personnage n'en fait qu'une fraction au pied. Ils
+> lisent à **15 – 25 blocs de haut**, soit six à dix fois le personnage. Nos
+> `sapin` font 8,3 blocs : **deux à trois fois trop courts**.
 >
-> | | aujourd'hui | à 40/6 |
+> **2. Les houppiers sont larges et aplatis.** Ce sont des dômes en parasol ou en
+> chapeau de champignon, **plus larges que hauts**, de **10 à 18 blocs de large**.
+> Nos houppiers font 4,8 blocs de large et sont aussi hauts que larges : **trois
+> fois trop étroits, et de la mauvaise proportion**. C'est la canopée qui *est*
+> l'objet ; le tronc n'en est que le support, souvent caché.
+>
+> **3. Le grain d'un arbre est celui du terrain, pas celui de la flore.** Sur les
+> captures, les cubes de feuillage et les blocs de terrain lisent à la **même
+> taille**, à un facteur deux près. Un arbre y est bâti des mêmes cubes que le
+> monde. Nos arbres sont dessinés à 3/40 de bloc par voxel : **sept à treize fois
+> trop fin**.
+>
+> Ce que les captures montrent aussi, et qui confirme le reste du lot : les
+> touffes d'herbe et les fleurs, elles, sont bien sur la grille fine — des lames
+> minces devant de gros blocs. **La flore est juste, les arbres ne le sont pas**,
+> ce qui recoupe exactement la provenance des deux échelles (§6.2).
+>
+> ### 6.2 Pourquoi c'est cohérent avec la source
+>
+> **L'échelle 0,075 = 3/40 est relevée dans la voie du décor**
+> (`docs/systems/02`, §8.3, à l'intérieur de la section du décor). Les arbres
+> passent par la **voie des entités** (§5, §6), et **aucune échelle
+> d'instanciation n'y a été relevée** — vérifié : la section 5 ne cite l'échelle
+> que pour dire que les boîtes en blocs la recoupent. Le lot d'arbres reposait
+> donc sur une extrapolation, et c'est la seule pièce du jalon 1.11 dans ce cas.
+>
+> **L'argument structurel, et c'est le plus fort.** §5.2 établit que le tronc
+> d'un feuillu est **écrit dans le terrain**, en colonnes de blocs, et que le
+> houppier est **instancié séparément**. Ces deux moitiés ne se rejoignent
+> proprement que si la grille du houppier est celle du bloc, ou un diviseur
+> propre. À 3/40, un houppier instancié ne tomberait jamais sur la colonne de
+> blocs qui le porte. **Un voxel = un bloc explique l'architecture de la source ;
+> 3/40 la rend impossible.**
+>
+> Réserve honnête : les boîtes de §5.2 ne tranchent pas. `thorn-tree` fait
+> 3 × 3 × 12 blocs, ce qui se lirait bien comme les dimensions d'un modèle à un
+> voxel par bloc — mais `cactus1` fait 1,5 × 1,5 × 4, et une dimension
+> fractionnaire dit qu'il s'agit de boîtes **physiques**, pas de gabarits. Les
+> captures restent la meilleure preuve.
+>
+> ### 6.3 Ce que je ferais
+>
+> **Redessiner le lot d'arbres à 1 voxel = 1 bloc**, la flore gardant 3/40. Une
+> grille par voie de pose, ce qui est cohérent avec le fait que la source en a
+> deux — et c'est aussi la grille des filons, pour la même raison qu'eux : ce qui
+> touche le terrain se dessine à la maille du terrain.
+>
+> | | aujourd'hui | cible |
 > |---|---|---|
-> | `sapin` | 111 × 28 voxels | 56 × 14 |
-> | `houppier_01` | 64 × 53 × 51 | 32 × 27 × 26 |
-> | `tronc_feuillu` | 88 de haut | 44 |
-> | `palme` | 60 de long | 30 |
+> | `sapin`, hauteur | 8,3 blocs (111 voxels à 3/40) | **18 – 22 blocs** (18 – 22 voxels) |
+> | houppier, largeur | 4,8 blocs (64 voxels) | **12 – 16 blocs** (12 – 16 voxels) |
+> | houppier, proportion | aussi haut que large | **1,5 à 2 fois plus large que haut** |
+> | `tronc_feuillu`, hauteur | 6,6 blocs | **10 – 14 blocs** |
 >
-> **La taille en blocs ne bouge pas** — seul le grain change. Une couronne
-> passerait de ~53 cubes de large à ~27, contre ~10 pour une touffe d'herbe : à
-> grain égal, un gros objet a six fois plus de cubes qu'un petit, donc il rend
-> *lisse* là où le petit rend *cubique*. C'est exactement ce qu'on voit sur les
-> captures du 2026-09-05.
+> Un houppier deviendrait un modèle de ~14 × 14 × 8 voxels — quelques centaines
+> de voxels au lieu de sept mille. C'est vingt fois moins de matière pour une
+> silhouette **plus grande** à l'écran.
 >
-> **Pourquoi 40/6 et pas 40/9.** À 40/9, un cube d'arbre fait 0,22 bloc, soit
-> 4,4 cubes par bloc de terrain : l'arbre commencerait à concurrencer la grille
-> du terrain, ce que l'original ne fait pas — ses arbres sont nettement plus
-> fins que ses blocs. À 40/6 on est à 6,7 cubes par bloc, ce qui garde l'écart.
+> ### 6.4 Ce que ça déplace, et ce qui est déjà prêt
 >
-> **Comment procéder, dans cet ordre :**
+> - **`VOXELS_PER_BLOCK` devient un champ par bibliothèque**, comme
+>   `max_radius_blocks` l'est déjà (invariant n° 24). **La séparation des deux
+>   bibliothèques, faite le 2026-09-05, paie ici** : la flore ne bouge pas.
+> - **`CWTreeScatter` doit être resserré.** Des houppiers de 12 – 16 blocs de
+>   large avec un espacement de 7 blocs s'interpénétreraient : espacement à
+>   **12 – 18 blocs**, densité par cellule divisée d'autant, et la cellule de 64
+>   redevient peut-être trop petite pour que l'espacement morde (elle doit rester
+>   grande devant lui — voir l'en-tête de `CWTreeScatter`).
+> - `max_radius_blocks` des arbres passerait de 3 à **6 – 8 blocs**, donc la
+>   marge de `placements_in` et les boîtes de visibilité avec.
+> - Les enveloppes en voxels de `tests/tree_test.gd` et la table de
+>   `docs/prompt_generation_arbres.md` sont à réécrire **en blocs**, pas en
+>   voxels : à un voxel par bloc, les deux unités se confondent, et c'est plus
+>   clair ainsi.
+> - **Les formes sont à repenser, pas à réduire.** `reduced(2)` donnerait des
+>   moignons : les folioles de palme, les rameaux de conifère et les `pousses`
+>   des houppiers sont écrits pour du détail d'un voxel. À la maille du bloc, un
+>   houppier est **quelques dizaines de cubes bien placés**, pas une coquille de
+>   métaballe échantillonnée. Le générateur en sort simplifié, pas compliqué.
+> - **Le conifère devient des disques empilés** : sur les captures, ses étages
+>   sont des plateaux plats et nets d'un bloc d'épaisseur, larges à la base, et
+>   c'est cette superposition qui fait la silhouette — pas des rameaux.
 >
-> 1. **Voir avant de redessiner.** `CWVoxelModel.reduced(2)` existe, ne sert à
->    rien, et fait exactement ce merge n³ en gardant l'ancre au sol. L'appliquer
->    à la bibliothèque des arbres est un knob de deux lignes : une capture par
->    `-- --biome 3 --shot 32` suffit à trancher entre 1, 2 et 3.
-> 2. **Puis redessiner au bon grain, ne pas livrer des modèles réduits.** Les
->    formes sont *écrites* pour du détail d'un voxel — les folioles de palme
->    (`ecart`), les rameaux de conifère, les `pousses` des houppiers. Réduites,
->    elles redeviennent la lame pleine et les moignons que j'ai déjà corrigés
->    une fois. Il faut moins de lobes et plus gros, pas les mêmes en plus épais.
-> 3. **Ce que ça touche :** `VOXELS_PER_BLOCK` devient un champ par
->    bibliothèque, comme `max_radius_blocks` l'est déjà (invariant n° 24) ; les
->    enveloppes en voxels de `tests/tree_test.gd` et la table de
->    `docs/prompt_generation_arbres.md` se divisent par deux ; **la flore ne
->    bouge pas**, son rapport est mesuré.
+> ### 6.5 Comment trancher
 >
-> **Deux bénéfices qui ne se voient pas :** une couronne passe de ~7 000 voxels
-> à ~2 000 (la coquille décroît comme la surface), sur une couche instanciée par
-> milliers ; et la réduction en distance devient naturelle — dessiné à 40/6,
-> `reduced(2)` au loin donne 40/12 sans rien réécrire, ce qui ferme enfin la
-> ligne de dette « éclairage et LOD des modèles instanciés ».
+> Regarder, ne pas raisonner : générer le lot à deux échelles (1 et 1/2 bloc par
+> voxel), et comparer en jeu par `-- --biome 3 --shot 32` (§2), avec le
+> personnage de référence dans le cadre. C'est ce qui a déjà attrapé trois
+> défauts que la suite headless ne voyait pas.
 
 ## 7. Ensuite — 1.11 (le tronc en matière) ou 2.6 (apparition)
 
