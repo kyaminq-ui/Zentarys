@@ -416,7 +416,76 @@ docs/images/               gabarit, carte et composition de flore, en jeu
   par colonne avant d'être déplacé sur le chemin froid. Mesurer avant de
   supposer que c'est le verrou qui coûte.
 
-## 6. Prochaine tâche — 1.11 (le tronc en matière) ou 2.6 (apparition)
+## 6. Prochaine tâche — d'abord la finesse des arbres
+
+> **À FAIRE EN PREMIER, session du 2026-09-06.** *La grille de dessin des arbres
+> est peut-être trop fine, et il y a une raison de le croire qui n'est pas une
+> question de goût.*
+>
+> **Le fait.** `VOXELS_PER_BLOCK = 40/3` vient de la constante d'échelle
+> **0,075 = 3/40** relevée dans le binaire — mais elle est relevée dans la
+> **voie du décor** (`docs/systems/02`, §8.3, à l'intérieur de la section 8, qui
+> est celle du décor). Les arbres passent par la **voie des entités** (§5, §6),
+> et **aucune constante d'échelle n'a été relevée de ce côté** : vérifié, la
+> section 5 ne cite l'échelle que pour dire que les boîtes en blocs la
+> recoupent. Le lot d'arbres repose donc sur une **extrapolation**, pas sur un
+> portage — c'est la seule pièce du jalon 1.11 dans ce cas, et rien ne le disait
+> jusqu'ici.
+>
+> **La mesure à faire d'abord**, parce qu'elle est bon marché et qu'elle
+> transforme une décision de goût en portage : chercher dans le binaire
+> l'échelle d'instanciation de la voie des entités. Si elle vaut 0,15 (= 3/20)
+> ou 0,3 (= 3/10), la question est réglée par la source. Points d'entrée :
+> `creature_generateAppearance` (`game_misc.cpp:3197`), qui écrit l'identifiant
+> de modèle **et une boîte englobante**, et la boucle de pose de §6.
+>
+> **Si la source ne dit rien**, c'est un choix d'authoring, et je le prendrais
+> ainsi : **une grille deux fois plus grossière pour les arbres**, 40/6 ≈ 6,67
+> voxels par bloc, la flore gardant 40/3. Deux résolutions, une par voie de
+> pose — ce qui est cohérent avec le fait que la source a deux voies.
+>
+> | | aujourd'hui | à 40/6 |
+> |---|---|---|
+> | `sapin` | 111 × 28 voxels | 56 × 14 |
+> | `houppier_01` | 64 × 53 × 51 | 32 × 27 × 26 |
+> | `tronc_feuillu` | 88 de haut | 44 |
+> | `palme` | 60 de long | 30 |
+>
+> **La taille en blocs ne bouge pas** — seul le grain change. Une couronne
+> passerait de ~53 cubes de large à ~27, contre ~10 pour une touffe d'herbe : à
+> grain égal, un gros objet a six fois plus de cubes qu'un petit, donc il rend
+> *lisse* là où le petit rend *cubique*. C'est exactement ce qu'on voit sur les
+> captures du 2026-09-05.
+>
+> **Pourquoi 40/6 et pas 40/9.** À 40/9, un cube d'arbre fait 0,22 bloc, soit
+> 4,4 cubes par bloc de terrain : l'arbre commencerait à concurrencer la grille
+> du terrain, ce que l'original ne fait pas — ses arbres sont nettement plus
+> fins que ses blocs. À 40/6 on est à 6,7 cubes par bloc, ce qui garde l'écart.
+>
+> **Comment procéder, dans cet ordre :**
+>
+> 1. **Voir avant de redessiner.** `CWVoxelModel.reduced(2)` existe, ne sert à
+>    rien, et fait exactement ce merge n³ en gardant l'ancre au sol. L'appliquer
+>    à la bibliothèque des arbres est un knob de deux lignes : une capture par
+>    `-- --biome 3 --shot 32` suffit à trancher entre 1, 2 et 3.
+> 2. **Puis redessiner au bon grain, ne pas livrer des modèles réduits.** Les
+>    formes sont *écrites* pour du détail d'un voxel — les folioles de palme
+>    (`ecart`), les rameaux de conifère, les `pousses` des houppiers. Réduites,
+>    elles redeviennent la lame pleine et les moignons que j'ai déjà corrigés
+>    une fois. Il faut moins de lobes et plus gros, pas les mêmes en plus épais.
+> 3. **Ce que ça touche :** `VOXELS_PER_BLOCK` devient un champ par
+>    bibliothèque, comme `max_radius_blocks` l'est déjà (invariant n° 24) ; les
+>    enveloppes en voxels de `tests/tree_test.gd` et la table de
+>    `docs/prompt_generation_arbres.md` se divisent par deux ; **la flore ne
+>    bouge pas**, son rapport est mesuré.
+>
+> **Deux bénéfices qui ne se voient pas :** une couronne passe de ~7 000 voxels
+> à ~2 000 (la coquille décroît comme la surface), sur une couche instanciée par
+> milliers ; et la réduction en distance devient naturelle — dessiné à 40/6,
+> `reduced(2)` au loin donne 40/12 sans rien réécrire, ce qui ferme enfin la
+> ligne de dette « éclairage et LOD des modèles instanciés ».
+
+## 7. Ensuite — 1.11 (le tronc en matière) ou 2.6 (apparition)
 
 > **Mise à jour du 2026-09-05, tard.** Le jalon 1.11 est **aux trois quarts
 > fait** : les 14 modèles d'arbres, les 9 filons, la couche de dispersion, et
@@ -557,9 +626,9 @@ listés dans `docs/ROADMAP.md`, §1.7, « correction de sources ». Les deux qui
 comptent pour la suite : `WorldInfo_scatterObjectsInArea` **ne disperse pas
 d'objets** et `World_generateTreeRecursive` **ne génère pas d'arbres**.
 
-## 7. Assets voxels
+## 8. Assets voxels
 
-### 7.1 L'échelle — fixée le 2026-09-04, alignée sur l'original le 2026-09-05
+### 8.1 L'échelle — fixée le 2026-09-04, alignée sur l'original le 2026-09-05
 
 **Il y a deux grilles.** Le terrain a un pas d'un bloc ; les modèles ont un pas
 treize fois plus fin. **Un bloc de terrain vaut 40/3 voxels de modèle
@@ -618,7 +687,7 @@ chargé ; deux captures partent dans `user://shots`. Un `.vox` déposé dans
 Pour regarder autre chose que le gabarit sans piloter la fenêtre :
 `auto_shot_delay` sur le même nœud, puis `--quit-after`.
 
-### 7.2 Ce qu'il faut produire, par biome
+### 8.2 Ce qu'il faut produire, par biome
 
 **Rien pour le jalon 1.6** : il ne fait que déformer l'altitude, rendue avec la
 palette existante. Le jalon 1.7 (dispersion sur le terrain) est le premier qui
@@ -763,7 +832,7 @@ prompt sur trois rôles — voir §8, c'est la seule divergence qui reste.
   explicitement hors périmètre : c'est le gréement et l'animation procédurale
   qui sont portés, pas les modèles.
 
-### 7.3 Décision d'authoring — prise, et confirmée
+### 8.3 Décision d'authoring — prise, et confirmée
 
 **MagicaVoxel, pas d'éditeur maison.** `VoxelVoxLoader` est intégré au build : un
 `.vox` se charge en un appel, avec sa palette, directement dans le modèle de
@@ -830,7 +899,7 @@ Outillage Godot à écrire plus tard, et seulement là où MagicaVoxel ne peut p
 aider : placement et prévisualisation **en contexte** (une structure posée sur le
 terrain réellement généré), au jalon 4. Pas un éditeur généraliste.
 
-## 8. Décisions ouvertes
+## 9. Décisions ouvertes
 
 - Le relief lointain paraît bleuté (ambiante du ciel sur les faces détournées du
   soleil). Réglage d'ambiance, pas un défaut de génération.

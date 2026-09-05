@@ -85,7 +85,7 @@ const BIOME_KEYS: Dictionary = {
 
 ## Pose le gabarit d'echelle (mires de hauteur connue, silhouette, modeles
 ## charges) devant le point d'apparition. Sert a regler la taille des assets
-## voxels : voir nextsteps.md, §7.1.
+## voxels : voir nextsteps.md, §8.1.
 @export var scale_board: bool = false
 
 ## Capture automatique apres ce delai, en secondes. Negatif = aucune.

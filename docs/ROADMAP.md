@@ -296,7 +296,7 @@ retenu jusqu'ici était une énumération partielle — relevé corrigé le 2026
 `docs/systems/02`, §6.2. Aucun n'est repris — ce sont des créations
 originales — mais la liste des besoins, elle, ne se devine plus.
 Liste par biome, noms de fichiers et ordre de production dans `nextsteps.md`,
-§7.2. En résumé :
+§8.2. En résumé :
 
 - **28 modèles pour le jalon 1.7** ✅ **faits** (39 fichiers, un dossier par
   biome), repartis sur les neuf surfaces que `CWPalette.surface_index` sait

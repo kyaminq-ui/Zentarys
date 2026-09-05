@@ -1,7 +1,7 @@
 # Modèles voxels Zentarys — convention et échelle
 
 À lire avant de modéliser quoi que ce soit. La liste de ce qu'il faut produire
-est dans `nextsteps.md`, §7.2 ; ce fichier dit *à quelle taille* et *avec quelles
+est dans `nextsteps.md`, §8.2 ; ce fichier dit *à quelle taille* et *avec quelles
 couleurs*.
 
 ---
@@ -156,9 +156,10 @@ Plages réservées, détail dans `assets/palette/PALETTE.md`. Pour la flore :
 
 * **Végétation, indices 128 – 175** — feuillages, automne, écorces, fleurs,
   champignons, algues et coraux, cactus ;
-* **Terrain, indices 1 – 31** — pour tout ce qui est minéral : cailloux, grès,
+* **Terrain, indices 1 – 40** — pour tout ce qui est minéral : cailloux, grès,
   basalte. Les entrées 14 – 31 sont là pour ça ; 1 – 13 sont les blocs que le
-  générateur écrit lui-même.
+  générateur écrit lui-même, et 32 – 40 les neuf filons, réservés au lot qui
+  s'estampe.
 
 L'index **0 est l'air** et ne peut pas servir.
 
