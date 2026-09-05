@@ -67,11 +67,12 @@ Jalon 1 (le monde) : 1.1 à 1.6 faits ; **1.7 à moitié** — la mécanique de
 dispersion est en place et testée, l'échelle est fixée, et depuis le 2026-09-05
 **les 28 modèles du lot de flore sont livrés, intégrés et visibles en jeu** (39
 fichiers : plusieurs rôles ont un modèle par biome). Il reste la lecture du
-binaire, qui dira *quoi* poser *où* et à quelle densité — et depuis le
-2026-09-05 on sait **où lire** : `World_generateVegetationCluster` (@005d8750,
-600 lignes), et non `generateBiomeContent`, qui a été analysée et ne disperse
-pas de flore. Le reste à faire. Détail et sources analysées dans
-`docs/ROADMAP.md`. Analyses : `docs/systems/01_generation_terrain.md` (terrain),
+binaire, qui dira *quoi* poser *où* et à quelle densité. **La table des entités
+est lue** (2026-09-05) : elle est dans le `switch` de
+`creature_generateAppearance`, et non dans les deux fonctions au nom prometteur,
+qui ne dispersent de la flore ni l'une ni l'autre. Reste la seconde voie de pose,
+celle de la flore basse. Les jalons 1.8 à 1.10 sont à faire. Détail et sources
+analysées dans `docs/ROADMAP.md`. Analyses : `docs/systems/01_generation_terrain.md` (terrain),
 `docs/systems/02_contenu_de_biome.md` (contenu de biome, éléments de tuile,
 apparitions).
 
@@ -289,18 +290,57 @@ Analysée, note complète dans **`docs/systems/02_contenu_de_biome.md`**. Les
 Les types 2, 10, 14, 15 restent à isoler. Le type 9, comme le 13, est traité par
 la fonction mais jamais produit par `World_generateRegionFeatures`.
 
-### Ce qui reste — `World_generateVegetationCluster` (@005d8750)
+### Fait (2026-09-05, seconde passe) — la table modèle/biome est trouvée
 
-**600 lignes, pas 4 200.** C'est là qu'est la table modèle/biome, avec son
-appelant de haut niveau décrit à `game_misc.cpp:42457`. La répartition de §7.2 et
-les densités de `CWModelLibrary.DENSITY` restent des propositions de bon sens en
-attendant ; les remplacer coûte quelques lignes.
+Elle n'était dans **aucune** des deux fonctions au nom prometteur.
+`World_generateVegetationCluster` (@005d8750) ne disperse pas de végétation :
+c'est le *résolveur de contenu d'une tuile* — il vide les poses des 8 × 8
+cellules, lit le type de l'élément, en tire une « sorte » de contenu, choisit la
+meilleure cellule par poids d'influence et fixe un compte d'objets. Troisième
+nom trompeur du lot.
+
+La table est le `switch` d'apparence de **`creature_generateAppearance`**
+(`game_misc.cpp:3197`), croisé avec les slots de chargement de `GameController`
+(`vector_at_stride4(slot)` après chaque `"nom.cub"`). Tout est en
+`docs/systems/02`, §5.
+
+> **Flore, filons et créatures sont un seul espace de types d'entités.** Codes
+> 120–130 = plantes, 131–139 = filons, 145–155 = poissons, en dessous les
+> créatures. Une touffe d'herbe et un ours sont la même sorte d'objet. **La
+> décision du 2026-09-04 de sortir la flore des données voxels est confirmée par
+> la source** — pour une raison qui n'avait pas été anticipée.
+
+Deux recoupements qui valident du travail déjà fait :
+
+- les **boîtes englobantes** du `switch` sont en blocs de terrain et collent à
+  l'échelle fixée ici : `thorn-tree` 12 blocs, `cactus1` 4, buisson 2 (= le
+  personnage). Le `cactus_01` livré, à 48 voxels = 3 blocs, est dans le bon
+  ordre de grandeur ;
+- la sélection se fait sur le **type de bloc de surface**, pondérée par
+  température et humidité, jamais sur un identifiant de biome — c'est exactement
+  la forme de `CWPalette.surface_index`.
+
+**Verrou avant de porter la table** : la numérotation des blocs de l'original
+n'est pas celle de `CWPalette` (ici `AIR = 0`, `WATER = 12`, `SWAMP = 10` ; dans
+l'original `0` = air et `2` = eau). Recopier la table telle quelle mettrait des
+cactus dans les marais. Établir la correspondance d'abord.
+
+### Ce qui reste — la seconde voie de pose de la flore basse
+
+Ni `grass`, ni `flowers`, ni `alga`, ni `coral`, ni `reed` n'ont de code dans la
+plage 120–139 : ce ne sont pas des entités. Il existe donc une **seconde voie de
+pose** pour la flore basse, vraisemblablement du décor de rendu — et c'est elle
+qui dit ce que `CWFloraRenderer` devrait disperser. C'est la prochaine question.
+
+En attendant, la répartition de §7.2 et les densités de `CWModelLibrary.DENSITY`
+restent des propositions de bon sens ; les remplacer coûte quelques lignes.
 
 | fonction | adresse | rôle |
 |---|---|---|
-| `World_generateVegetationCluster` | `@005d8750` | **la cible : dispersion de la végétation, 600 l** |
-| — son appelant de haut niveau | `game_misc.cpp:42457` | pilote la végétation et la finalisation |
-| `WorldInfo_generateBiomeContent` | `@005e4850` | constructeur de cellule 256² — analysé, `docs/systems/02` |
+| `creature_generateAppearance` | `game_misc.cpp:3197` | **la table** : code d'entité → modèle + boîte |
+| `WorldInfo_generateBiomeContent` | `@005e4850` | constructeur de cellule 256², choix des plantes par type de sol |
+| `World_generateVegetationCluster` | `@005d8750` | résolveur de contenu d'une tuile |
+| — son appelant de haut niveau | `game_misc.cpp:42457` | pilote le contenu et la finalisation |
 | `World_populateRegionDecorations` | `game_misc.cpp:36135` | bâtisseur de village, sites de région 3 et 5 seulement (jalon 4.3) |
 | `World_carveTerrainFeatureA` / `B` | `game_misc.cpp:35597` / `35872` | formes creusées : rochers, massifs |
 | `World_generateWaterOrPathFeature` | `@005df960` | plans d'eau (type 12) |

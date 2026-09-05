@@ -4,9 +4,15 @@ Note d'analyse. Source : `qad3n/CubeWorld-Reversal`, reconstruction par classe d
 binaire alpha 2013. Le pseudo-code Ghidra n'est pas recopié ; seuls le
 comportement observé, les constantes et les noms de symboles le sont.
 
-**Statut : première passe.** `WorldInfo_generateBiomeContent` (@005e4850) fait
-4 200 lignes ; elle est ici cartographiée, pas portée. Ce qui suit est ce qui a
-été établi avec certitude, et ce qui reste ouvert est dit comme tel.
+**Portée.** Trois fonctions, analysées ensemble parce qu'elles ne se
+comprennent pas séparément : `WorldInfo_generateBiomeContent` (@005e4850,
+4 200 l), `World_generateVegetationCluster` (@005d8750, 604 l) et le `switch`
+d'apparence de `creature_generateAppearance` (game_misc.cpp:3197, 2 464 l).
+Cartographiées, pas portées. Ce qui suit est ce qui a été établi avec certitude ;
+ce qui reste ouvert est dit comme tel.
+
+**La table modèle/biome du jalon 1.7 est en §5.** Les deux premières fonctions
+portent des noms trompeurs : ni l'une ni l'autre ne disperse de végétation.
 
 ---
 
@@ -39,7 +45,7 @@ traite qu'un seizième de sa cellule.
 4. champ de densité de végétation (§3) ;
 5. écriture des colonnes : altitude fine, couleur mélangée, type de bloc ;
 6. déformations par type d'élément de tuile (§4) ;
-7. points d'apparition (§5) ;
+7. points d'apparition et pose des plantes (§5, §6) ;
 8. `World_generateTreeRecursive`, puis chargement du blob sauvegardé en base.
 
 ### Confirmation indépendante du portage existant
@@ -113,7 +119,7 @@ l'altitude.
 | 12 | **plan d'eau.** Un seul appel au centre de la tuile, `World_generateWaterOrPathFeature` de rayon 80 × 80, mode 6. | haute |
 | 3 | **parcelle bâtie.** Balayage 14 × 14 au pas de 18 u (252 u, soit la cellule), poids d'influence par site, puis `World_buildPropInstance` sur l'élément. Les 3 variantes du jalon 1.6 sont vraisemblablement les 3 dispositions. | moyenne |
 | 9 | construit un `cube::Spawn` (alloc de 0x10f0) au centre, si la cellule courante est celle de l'élément. | moyenne |
-| 1, 5 | gardent une dispersion par distance à leur centre, dans la boucle d'apparition de §5. | moyenne |
+| 1, 5 | gardent une dispersion par distance à leur centre, dans la boucle de pose de §6. | moyenne |
 | 13, 4 | convertissent leur position 16.16 en cellule et descendent la colonne jusqu'au premier bloc solide — préparation d'une pose, dont la suite n'est pas isolée. | faible |
 
 Types **9 et 13 traités ici mais jamais produits** par
@@ -125,97 +131,171 @@ Le point d'apparition du monde est en `world + 0x8000f0` / `+0x8000f4`, et
 sur **la cellule de ce point**, une seule fois — c'est la structure de départ,
 centrée par `pos = spawn − taille/2` avec la taille lue en `+0x44` / `+0x48`.
 
-## 5. Points d'apparition — matière du jalon 2.6
+## 5. Le lot d'entités : flore, filons, créatures, poissons
 
-La grande boucle finale place des `cube::Spawn`. Elle confirme la correction
-déjà notée (`WorldInfo_scatterObjectsInArea` choisit une espèce, ne disperse
-rien) et donne des constantes utilisables telles quelles :
+**C'est ici qu'est la réponse à la question du jalon 1.7**, et elle n'est pas où
+la feuille de route la cherchait.
+
+### 5.1 Un seul espace de types
+
+`creature_generateAppearance(kindOut, entite, graine)` (game_misc.cpp:3197,
+2 464 lignes) est un `switch` géant sur un **code de type d'entité** qui écrit
+l'identifiant de modèle en `+0x1c` et une boîte englobante. Le même espace de
+codes couvre, sans séparation :
+
+| plage | contenu |
+|---|---|
+| … – 119 | créatures (117 = `lich-body`) |
+| **120 – 130** | **plantes** |
+| **131 – 139** | **filons** |
+| 140 – 142 | cibles et épouvantail |
+| 145 – 155 | poissons et créatures aquatiques |
+
+**Conséquence d'architecture.** Dans l'original, une touffe d'herbe et un ours
+sont la même sorte d'objet : une entité portant un code de type, pas de la
+matière écrite dans le terrain. C'est exactement la décision prise ici le
+2026-09-04 en sortant la flore des données voxels — elle est confirmée par la
+source, et pour une raison qui n'avait pas été anticipée.
+
+### 5.2 Code de type → modèle
+
+Relevé croisé entre le `switch` ci-dessus et la table de chargement de
+`GameController` (`vector_at_stride4(slot)` donne le slot de chaque `.cub`).
+
+| code | modèle | boîte |
+|---|---|---|
+| 120 | `bush` | 2 × 2 × 2 |
+| 121 | `snow-bush` | 2 × 2 × 2 |
+| 122 | `berry-bush` | 2 × 2 × 2 |
+| 123 | `cotton-plant` | 0,5 × 0,5 × 1,5 |
+| 124 | `scrub` / `scrub-green` (tirage) | 2 × 2 × 2 |
+| 125 | `cobwebscrub` | 0,5 × 0,5 × 1,7 |
+| 126 | `fire-scrub` | 2 × 2 × 2 |
+| 127 | `ginseng` | 1 × 1 × 1 |
+| 128 | `cactus1` | 1,5 × 1,5 × 4 |
+| 129 | `fir-tree` | — |
+| 130 | `thorn-tree` | 3 × 3 × 12 |
+| 131 – 139 | `gold-`, `iron-`, `silver-`, `sandstone-`, `emerald-`, `sapphire-`, `ruby-`, `diamond-`, `ice-crystal-deposit` | — |
+
+Les boîtes sont en **blocs de terrain**, et elles recoupent l'échelle fixée ici :
+`thorn-tree` fait 12 blocs de haut, `cactus1` 4 blocs, un buisson 2 blocs — soit
+le personnage de référence. Le `cactus_01` du lot livré, mesuré à 48 voxels =
+3 blocs, est donc dans le bon ordre de grandeur.
+
+### 5.3 Choix de la plante par type de bloc de surface
+
+La sélection se fait sur le **type du bloc sous la surface** (la colonne est
+remontée jusqu'au premier bloc d'air ou d'eau, et c'est celui d'en dessous qui
+décide), jamais sur un identifiant de biome.
+
+| bloc | condition | résultat |
+|---|---|---|
+| 12 | — | `thorn-tree` (130) ou `fire-scrub` (126), tirage à pile ou face |
+| 4, 5, 9 | `rand()%3 ≠ 0` et humidité > 0,8 et température < 0,1 | `scrub-green` (124) ou `cactus1` (128), 50/50 |
+| 4 | `rand()%3 ≠ 0` et température > 0,1 | `rand()%4` : 1 → `cotton-plant`, 2 → `ginseng`, 3 → `cobwebscrub`, sinon `bush` |
+| 10 | `rand()%4 == 0` | `rand()%4` : 1 → `cotton-plant`, 2 → `cobwebscrub`, 3 → `berry-bush`, sinon `snow-bush` |
+
+Le bloc **10 donne `snow-bush`** et le bloc **12 donne `fire-scrub`** : le premier
+est donc une surface neigeuse, le second une surface volcanique. Les blocs 4, 5
+et 9 sont des surfaces végétalisées, le 4 étant le plus tempéré.
+
+> **Attention avant de porter.** La numérotation des blocs de l'original n'est
+> **pas** celle de `CWPalette` (ici `AIR = 0`, `WATER = 12`, `SWAMP = 10`) ; dans
+> l'original `0` est l'air et `2` l'eau. La correspondance entre les deux
+> numérotations reste à établir : recopier la table telle quelle mettrait des
+> cactus dans les marais. Le portage utile est la **forme** de la règle — une
+> sélection par type de sol, pondérée par le climat — pas les entiers.
+
+Réserve de lecture : la condition « humidité > 0,8 et température < 0,1 » donne
+un cactus en climat froid et humide, ce qui surprend. Les deux variables sont
+réaffectées plusieurs fois dans la fonction et Ghidra peut les avoir confondues ;
+la ligne est reportée telle qu'elle est lue, avec une confiance moyenne.
+
+### 5.4 Rareté des filons
+
+Tirage à deux étages, entièrement déterminé :
+
+```
+rand() % 10 :  0 -> or        1 -> argent
+               3 -> rand() % 100 :  0     -> diamant
+                                    1-3   -> rubis
+                                    4-8   -> saphir
+                                    sinon -> emeraude
+               sinon -> fer
+```
+
+Soit fer 70 %, or 10 %, argent 10 %, émeraude ~9,1 %, saphir 0,5 %, rubis 0,3 %,
+diamant 0,1 %.
+
+## 6. Points d'apparition — matière du jalon 2.6
+
+La grande boucle de pose est commune aux créatures et aux plantes ; elle place
+des `cube::Spawn` et donne des constantes utilisables telles quelles :
 
 - pas de 0x55 = **85 unités**, décalage +24, gigue `rand() % 10` ;
 - 1 tentative sur 4 abandonnée d'entrée (`rand() % 4 == 0`) ;
 - rejet si le poids d'influence d'un élément de tuile non nul et non-10 dépasse
-  0.3 — les apparitions **évitent** les éléments, sauf le donjon ;
+  0.3 — les poses **évitent** les éléments, sauf le donjon ;
 - humidité < 0.2 : 1 chance sur 4 d'abandonner. Idem pour la température ;
-- **espacement minimum de 20 unités** entre apparitions (comparaison à 400 sur
-  le carré de la distance, en 16.16) ;
-- la colonne est remontée jusqu'au premier bloc **d'air (0) ou d'eau (2)**, et
-  c'est le bloc en dessous qui décide : le bloc de type **12** force l'espèce à
-  126 ou 130 selon un tirage, et la catégorie à 6 ;
+- **espacement minimum de 20 unités** (comparaison à 400 sur le carré de la
+  distance, en 16.16) ;
 - lacet initial `rand() · 360 / 32767`, uniforme.
 
-Les identifiants 120 à 138 rencontrés dans la fonction sont des **espèces**,
-écrites dans le champ `[0x0b]` d'un `Spawn` ; `[0x0a]` est une catégorie. Aucun
-n'a de rapport avec un modèle de flore.
+`WorldInfo_scatterObjectsInArea` remplit le champ `[0x0b]` — le code de type —
+quand l'entité est une créature ; les branches de §5.3 y écrivent un code de
+plante. C'est le **même champ**, ce qui confirme §5.1.
 
-## 6. Deux corrections à la feuille de route
+## 7. `World_generateVegetationCluster` — encore un nom trompeur
 
-### 6.1 Les arbres *sont* des modèles
+@005d8750, 604 lignes. Elle ne disperse pas de végétation : c'est le
+**résolveur de contenu d'une tuile**. Signature reconstruite
+`(tuileX, tuileZ, liste)`, sur la grille de tuiles 8192².
 
-La feuille de route affirmait qu'aucun modèle d'arbre ne figure parmi les assets
-et que les arbres sont construits par le code. C'est faux. Le corpus charge
-nommément :
+1. Vide le vecteur de poses (`+0xa0`) des **8 × 8 cellules** de la tuile, prises
+   dans un tableau 64 × 64 à `zone + 0x10018`.
+2. Localise l'élément de tuile — `zone + 0x14018 + (tz%8 + (tx%8)·8)·0x68`.
+   **Troisième confirmation indépendante** de l'adressage porté au jalon 1.6.
+3. Remet à zéro les champs `+0x34`, `+0x41`, `+0x44`, `+0x48`.
+4. **Si le type vaut 10 (donjon), retour immédiat** : une tuile de donjon ne
+   reçoit aucun contenu par cette voie.
+5. Choisit une « sorte » de contenu par tirage uniforme dans une liste dictée par
+   le type de l'élément :
 
-```
-fir-tree.cub   thorn-tree.cub   christmas-tree.cub
-tree-leaves.cub   palm-leaf.cub   palm-leaf-diagonal.cub   wood-log.cub
-```
+   | type d'élément | sortes possibles |
+   |---|---|
+   | 0 (aucun) | {1} |
+   | 1 (bourg) | {9, 3, 4} |
+   | 14 | {5} |
+   | tout autre non nul | {5} |
 
-La lecture la plus probable, à confirmer : les conifères et l'épineux sont des
-modèles entiers, tandis que le feuillu est **composé** — un tronc et des
-houppiers `tree-leaves.cub` instanciés, ce qui expliquerait qu'il existe un
-modèle de feuillage sans modèle d'arbre feuillu correspondant. Cette composition
-reste à établir ; ce qui est acquis, c'est qu'il n'y a **pas** de générateur
-d'arbre récursif à porter.
-
-`World_generateTreeRecursive` (@005d9460) porte bien mal son nom : le corpus
-n'emploie « tree » que pour les arbres rouge-noir de la STL (`tree_nodeAlloc`,
-`tree_insertRecursive`, `tree_nodeInsertLeaf`…), et la fonction est appelée en
-toute fin de `generateBiomeContent`, juste avant le chargement du blob
-sauvegardé — c'est une **finalisation de cellule**.
-
-### 6.2 Le compte de modèles
-
-La feuille de route parle de « 154 modèles voxels nommés ». Le corpus contient
-**2 550 noms de fichiers `.cub` distincts**. Les 154 étaient sans doute une
-énumération particulière ; la liste des rôles, elle, est bien plus large.
-
-## 7. Rôles de flore — liste relevée
-
-Relevé par filtrage des noms `.cub`. **Les 28 rôles déjà produits sont tous
-confirmés** et se recoupent nom pour nom avec la liste du projet (`cornflower` =
-bleuet, `sunflower` = tournesol, `heartflower` = fleur_coeur, `soulflower` =
-fleur_ame, `ginseng-root` = fleur_ginseng, `reed` = roseau, `ivy` = lierre,
-`tendril` = vrille, `alga` = algue, `coral` = corail…). Le lot livré le
-2026-09-05 visait juste.
-
-Ce qui **manque** au projet, et qui est dans le binaire :
-
-- végétal : `berry-bush`, `snow-berry`, `snow-bush`, `thorn-plant`,
-  `shimmer-mushroom`, `desert-flower01/02`, `flowers`, `flowers2`,
-  `heartflower-frozen`, `water-lily01/02`, `underwater-plant`, `plant-fiber`,
-  `lava-grass`, `lava-flower`, `cotton-plant` ;
-- arboré : les sept fichiers de §6.1 ;
-- minéral : `runestone`, `stone2`, `sandstone` ;
-- **filons**, catégorie entièrement absente du projet et pourtant jouable :
-  `gold-`, `iron-`, `silver-`, `sandstone-`, `emerald-`, `diamond-`, `ruby-`,
-  `sapphire-`, `ice-crystal-deposit`.
-
-Les variantes `lava-*` impliquent une surface volcanique que
-`CWPalette.surface_index` ne produit pas aujourd'hui.
+6. Parcourt les entités du monde pour retenir le **niveau maximum** des joueurs
+   présents, et le passe aux constructeurs de contenu : la difficulté du contenu
+   d'une tuile est **dynamique**, pas figée à la génération.
+7. Selon la sorte : soit un contenu direct (sortes 7, 10, 11), soit la
+   **restitution d'un contenu déjà mémorisé** (sorte 1, qui recopie `+0x54`,
+   `+0x60`, `+0x64`), soit un choix de cellule.
+8. Le choix de cellule note les 64 cellules par leur poids d'influence
+   `(1 − d)²`, les trie (`introsort_float`) et retient la meilleure. Les sortes
+   **12 et 13 doublent le poids sur un damier** — `(cellX + cellZ)` impair.
+9. Le compte d'objets part dans `+0x48` : `rand()%8 + 25` (sorte 7),
+   `rand()%5 + 10` (10), `rand()%5 + 15` (11), `rand()%5 + 6` (12),
+   `rand()%10 + 10` (défaut).
 
 ## 8. Ce qui reste ouvert
 
-1. **La table modèle → biome n'est toujours pas lue.** Elle n'est pas dans
-   `generateBiomeContent`, qui ne disperse pas de flore. La piste est
-   `World_generateVegetationCluster` (@005d8750, **600 lignes**) et son appelant
-   décrit à `game_misc.cpp:42457` comme le générateur de haut niveau qui pilote
-   `generateVegetationCluster` et `generateTreeRecursive`. C'est la prochaine
-   cible évidente, et elle est petite.
-2. `World_populateRegionDecorations` (@005cc510, 4 000 lignes) n'est appelée que
+1. **La correspondance entre les types de blocs de l'original et ceux de
+   `CWPalette`** — c'est le seul verrou avant de porter la table de §5.3.
+2. La composition des arbres : `fir-tree` et `thorn-tree` sont des modèles
+   entiers, mais `tree-leaves` existe sans arbre feuillu correspondant. Un
+   assemblage tronc + houppiers reste à confirmer.
+3. Le lot 120–139 ne couvre pas tout ce que le monde montre : ni `grass`, ni
+   `flowers`, ni `alga`, ni `coral`, ni `reed` n'ont de code dans cette plage.
+   Une seconde voie de pose existe donc pour la flore basse — probablement le
+   décor de rendu, pas les entités. **C'est la prochaine question du jalon 1.7.**
+4. Les types d'éléments 2, 10, 14, 15 n'ont pas été isolés.
+5. `World_carveTerrainFeatureA` / `B` et `World_generateWaterOrPathFeature`
+   donnent la forme des rochers, massifs et plans d'eau de §4 : non analysées.
+6. `World_populateRegionDecorations` (@005cc510, 4 000 lignes) n'est appelée que
    pour les **sites de région de type 3 et 5**, avec un drapeau 3 pour le type 5.
    Elle empile `World_fillVoxelColumnTyped` (40 appels) et `Terrain_fillCuboid`
-   (11) : c'est le bâtisseur de villages du jalon 4.3, pas de la flore.
-3. Les types 2, 10, 14, 15 n'ont pas été isolés dans cette passe.
-4. `World_carveTerrainFeatureA` / `B` et `World_generateWaterOrPathFeature`
-   sont appelées mais non analysées : ce sont elles qui donnent la forme des
-   rochers, des massifs et des plans d'eau de §4.
+   (11) : bâtisseur de villages, jalon 4.3.

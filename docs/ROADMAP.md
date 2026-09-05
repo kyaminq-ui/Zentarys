@@ -35,7 +35,7 @@ et des structures.
 | 1.4 | Champ d'altitude, chenaux | `World_baseHeightField` @004f9b70 | ✅ | idem |
 | 1.5 | Générateur voxel + rendu cubes | — (portage Godot) | ✅ | idem |
 | 1.6 | Éléments de tuile | `World_generateRegionFeatures` @0050e080 | ✅ | `docs/systems/01`, §2.7 |
-| 1.7 | **Contenu de biome, dispersion** | `World_generateVegetationCluster` @005d8750 | 🔶 | mécanique faite, 28 modèles livrés, table à lire ; `docs/systems/02` |
+| 1.7 | **Contenu de biome, dispersion** | `creature_generateAppearance` + @005e4850 + @005d8750 | 🔶 | mécanique faite, 28 modèles livrés, table des entités lue ; `docs/systems/02` |
 | 1.8 | Colonnes persistantes, édition | `Chunk_getColumnAt` @00406100 + `VoxelTool` | ⬜ | |
 | 1.9 | Éclairage voxel | `VoxelChunk_propagateSunlight` | ⬜ | |
 | 1.10 | Carte du monde | `WorldMap.cpp`, `NameGen_generateRegionName` | ⬜ | |
@@ -130,11 +130,37 @@ d'éléments de tuile (6 = champ de rochers, 11 = massif isolé, 12 = plan d'eau
 jalon 2.6, et une corroboration indépendante du portage du jalon 1.6 (stride
 `0x68`, base `+0x14018`, ordre `tz + tx·8`).
 
-La **table modèle/biome reste à lire**, mais la cible a changé : elle est dans
-`World_generateVegetationCluster` (@005d8750), **600 lignes** — pas 4 200. C'est
-la prochaine tâche du jalon 1.7.
+**La table modèle/biome est trouvée** (2026-09-05, seconde passe). Elle n'était
+dans aucune des deux fonctions au nom prometteur : `generateVegetationCluster`
+(@005d8750) est le *résolveur de contenu d'une tuile*, pas un disperseur. La
+table est le `switch` d'apparence de `creature_generateAppearance`
+(game_misc.cpp:3197), croisé avec les slots de chargement de `GameController`.
 
-**Correction de sources.** Cinq noms du dépôt d'analyse sont trompeurs :
+> **Flore, filons et créatures sont un seul espace de types d'entités.** Codes
+> 120–130 = plantes, 131–139 = filons, 145–155 = poissons, en dessous les
+> créatures. Une touffe d'herbe et un ours sont la même sorte d'objet : une
+> entité portant un code, jamais de la matière écrite dans le terrain. **La
+> décision du 2026-09-04 de sortir la flore des données voxels est donc confirmée
+> par la source** — pour une raison qui n'avait pas été anticipée.
+
+Les boîtes englobantes du `switch` sont en blocs de terrain et **recoupent
+l'échelle fixée ici** : `thorn-tree` 12 blocs, `cactus1` 4 blocs, buisson 2 blocs
+— soit le personnage de référence. La sélection se fait sur le **type de bloc de
+surface**, pondérée par température et humidité, jamais sur un identifiant de
+biome : c'est exactement la forme de `CWPalette.surface_index`. Tables complètes,
+rareté des filons comprise, en `docs/systems/02`, §5.
+
+**Ce qui bloque encore le portage :** la numérotation des blocs de l'original
+n'est pas celle de `CWPalette`, et la correspondance reste à établir — recopier
+la table telle quelle mettrait des cactus dans les marais.
+
+**Question ouverte, et c'est la suivante du jalon 1.7 :** ni `grass`, ni
+`flowers`, ni `alga`, ni `coral`, ni `reed` n'ont de code dans la plage 120–139.
+Une **seconde voie de pose** existe donc pour la flore basse — vraisemblablement
+le décor de rendu, pas les entités. C'est elle qui décide de ce que
+`CWFloraRenderer` disperse aujourd'hui.
+
+**Correction de sources.** Sept noms du dépôt d'analyse sont trompeurs :
 
 - `WorldInfo_scatterObjectsInArea` (@005f56c0), listée ici comme seconde source
   de 1.7, **ne disperse pas d'objets** : elle choisit la liste d'espèces d'un
@@ -150,6 +176,11 @@ la prochaine tâche du jalon 1.7.
   colonne : sa valeur sert de base d'altitude et devient une coordonnée Y.
 - `World_placeObjectWithSpacing` **ne place rien** : elle rend un poids scalaire
   par colonne, facteur du champ de densité de végétation.
+- `World_generateVegetationCluster` (@005d8750) **ne disperse pas de
+  végétation** : c'est le résolveur de contenu d'une tuile. `docs/systems/02`, §7.
+- `creature_generateAppearance` (`game_misc.cpp:3197`) **n'est pas propre aux
+  créatures** : son `switch` couvre aussi les plantes, les filons et les
+  poissons. C'est la table code d'entité → modèle. `docs/systems/02`, §5.
 
 ### Assets à produire
 
@@ -409,6 +440,7 @@ de le résoudre.
 
 | Date | Fait |
 |---|---|
+| 2026-09-05 | Table modele/biome trouvee, seconde passe : `docs/systems/02` §5. Elle n'etait dans aucune des deux fonctions au nom prometteur — `World_generateVegetationCluster` (@005d8750) est le resolveur de contenu d'une tuile, pas un disperseur. La table est le switch d'apparence de `creature_generateAppearance` (game_misc.cpp:3197) croise avec les slots de chargement de `GameController`. **Flore, filons et creatures sont un seul espace de types d'entites** : 120-130 plantes, 131-139 filons, 145-155 poissons — ce qui confirme par la source la decision du 2026-09-04 de sortir la flore des donnees voxels. Les boites englobantes recoupent l'echelle fixee ici (thorn-tree 12 blocs, cactus1 4, buisson 2). Selection par type de bloc de surface pondere par le climat, jamais par un identifiant de biome. Rarete des filons entierement determinee (fer 70 %, or 10 %, argent 10 %, diamant 0,1 %). Reste : la correspondance des numerotations de blocs, et la seconde voie de pose de la flore basse (grass, flowers, alga, coral, reed n'ont pas de code d'entite). |
 | 2026-09-05 | Premiere passe d'analyse de `WorldInfo_generateBiomeContent` (@005e4850, 4 200 lignes) : `docs/systems/02`. Ce n'est pas le disperseur de flore mais le constructeur d'une cellule de 256 x 256 colonnes. Sortis : le champ de densite de vegetation a quatre octaves avec ses constantes, l'identite de quatre types d'elements de tuile (6 = champ de rochers, 11 = massif isole, 12 = plan d'eau, 3 = parcelle batie), les constantes de pose des points d'apparition (jalon 2.6), et une corroboration independante du portage 1.6 (stride 0x68, base +0x14018, ordre tz + tx*8). Deux affirmations de la feuille de route corrigees : **les arbres sont des assets** (`fir-tree`, `thorn-tree`, `tree-leaves`...) et il n'y a pas de generateur d'arbre recursif a porter ; et le binaire charge 2 550 modeles nommes, pas 154. Prochaine cible reduite de 4 200 a 600 lignes : `World_generateVegetationCluster` @005d8750. |
 | 2026-09-05 | Les 28 modeles du lot de flore livres et integres, en 39 fichiers ranges par biome ; `CWModelLibrary.FLORA` porte des chemins. Repare : les fichiers etaient peints sur une palette reechantillonnee par MagicaVoxel (planche de reference glissee sur le nuancier), donc bonnes teintes et mauvais index — invisible partout sauf a l'ecran ; `tools/repaint_models.gd` les remet dans la palette de projet, index et palette embarquee. Reserve de terrain 14-31 remplie (les six cailloux se rabattaient tous sur STONE) et deux entrees aquatiques ajoutees a la vegetation (le corail se rabattait sur le vert de prairie) ; le decoupage des plages n'a pas bouge. `zentarys_palette.vox` exporte : c'est le seul chargement de palette qui aligne les index. Gabarit d'echelle range par rangees de dix. 116 verifications. |
 | 2026-09-04 | Echelle des assets refixee sur une mesure au pixel d'une capture du jeu d'origine : deux grilles, 1 bloc = 16 voxels de modele, personnage a 2 blocs (contre 8 blocs et 1 voxel = 1 bloc, tranches a l'oeil le matin meme). La flore quitte les donnees voxels du monde : maillage a part, instanciation par `CWFloraRenderer`. Le generateur ne connait plus la flore, ses +14 % par bloc disparaissent ; une cellule de flore coute 1,1 ms hors du fil principal. Gabarit d'echelle refait : mires en blocs, silhouette de 32 voxels avec des yeux d'un voxel. |
