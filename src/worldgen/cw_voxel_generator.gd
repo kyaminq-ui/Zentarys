@@ -22,9 +22,15 @@ extends VoxelGeneratorScript
 ## quinzaine de blocs verticaux qui, sans lui, referaient tous le meme
 ## echantillonnage.
 ##
-## Le rendu vise VoxelMesherCubes en mode palette : un index par voxel dans
-## CHANNEL_COLOR, ce qui reproduit l'aspect « cubes colores » de l'original sans
-## bibliotheque de modeles de blocs.
+## Le rendu vise VoxelMesherCubes en mode `COLOR_RAW` : chaque voxel porte sa
+## couleur, ce qui reproduit l'aspect « cubes colores » de l'original sans
+## bibliotheque de modeles de blocs — et c'est la disposition du binaire, ou un
+## bloc fait trois octets de couleur plus un d'attributs.
+##
+## **Deux canaux sont donc remplis**, et ils ne disent pas la meme chose :
+## `CHANNEL_TYPE` porte l'index de palette, la valeur semantique dont vivent les
+## surfaces, la flore, l'edition et les collisions ; `CHANNEL_COLOR` porte la
+## couleur, que seul le mailleur lit. Voir `CWPalette`, en-tete.
 
 ## Nombre de colonnes de blocs gardees en cache. Au-dela, la generation
 ## precedente est jetee d'un bloc : un LRU a deux generations, sans ordre a
@@ -174,22 +180,23 @@ func generated_voxel(x: int, y: int, z: int) -> int:
 
 
 func _get_used_channels_mask() -> int:
-	return 1 << VoxelBuffer.CHANNEL_COLOR
+	return (1 << CWPalette.CHANNEL_TYPE) | (1 << CWPalette.CHANNEL_COLOR)
 
 
 func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: int) -> void:
 	if _shutting_down:
-		out_buffer.fill(CWPalette.AIR, VoxelBuffer.CHANNEL_COLOR)
+		out_buffer.fill(CWPalette.AIR, CWPalette.CHANNEL_TYPE)
+		out_buffer.fill(CWPalette.raw_of(CWPalette.AIR), CWPalette.CHANNEL_COLOR)
 		return
 
 	var f: CWTerrainField = field()
 	var p: CWWorldParams = f.params()
 	var size: Vector3i = out_buffer.get_size()
 	var stride: int = 1 << lod
-	var ch: int = VoxelBuffer.CHANNEL_COLOR
 	var sea: int = p.sea_level
 
-	out_buffer.fill(CWPalette.AIR, ch)
+	out_buffer.fill(CWPalette.AIR, CWPalette.CHANNEL_TYPE)
+	out_buffer.fill(CWPalette.raw_of(CWPalette.AIR), CWPalette.CHANNEL_COLOR)
 
 	var patch: ColumnPatch = _get_patch(f, p, origin_in_voxels, size, stride, lod, sea)
 
@@ -207,7 +214,8 @@ func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: i
 	if float(y_min) > patch.highest and y_min > sea:
 		return
 	if float(y_max) < patch.lowest - float(subsurface_depth):
-		out_buffer.fill(CWPalette.STONE, ch)
+		out_buffer.fill(CWPalette.STONE, CWPalette.CHANNEL_TYPE)
+		out_buffer.fill(CWPalette.raw_of(CWPalette.STONE), CWPalette.CHANNEL_COLOR)
 		return
 
 	var i: int = 0
@@ -220,18 +228,18 @@ func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: i
 
 			# Roche, du bas du bloc jusqu'a la couche meuble.
 			_fill_run(out_buffer, lx, lz, y_min, y_max, stride,
-					y_min, top - subsurface_depth, CWPalette.STONE, ch)
+					y_min, top - subsurface_depth, CWPalette.STONE)
 			# Couche meuble.
 			if subsurface_depth > 0:
 				_fill_run(out_buffer, lx, lz, y_min, y_max, stride,
 						top - subsurface_depth + 1, top - 1,
-						CWPalette.subsurface_index(surface), ch)
+						CWPalette.subsurface_index(surface))
 			# Bloc de surface.
-			_fill_run(out_buffer, lx, lz, y_min, y_max, stride, top, top, surface, ch)
+			_fill_run(out_buffer, lx, lz, y_min, y_max, stride, top, top, surface)
 			# Eau, de la surface du terrain jusqu'au niveau de la mer.
 			if top < sea:
 				_fill_run(out_buffer, lx, lz, y_min, y_max, stride,
-						top + 1, sea, CWPalette.water_index(float(sea - top)), ch)
+						top + 1, sea, CWPalette.water_index(float(sea - top)))
 
 
 func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,
@@ -316,8 +324,12 @@ func _empty_patch(size: Vector3i) -> ColumnPatch:
 
 ## Remplit l'intervalle [wy0, wy1] (coordonnees monde, bornes incluses) d'une
 ## colonne du bloc, en le rognant sur l'etendue verticale du bloc.
+## `value` est un **index de palette** : les deux canaux sont remplis ici, le
+## semantique tel quel et le rendu par `CWPalette.raw_of`. Les separer serait la
+## faute a faire — un terrain dont la couleur ne suit plus le type est un monde
+## qui ment a l'oeil sans qu'aucun test de logique ne s'en apercoive.
 func _fill_run(buf: VoxelBuffer, lx: int, lz: int, y_min: int, y_max: int,
-		stride: int, wy0: int, wy1: int, value: int, channel: int) -> void:
+		stride: int, wy0: int, wy1: int, value: int) -> void:
 	if wy1 < wy0:
 		return
 	var a: int = maxi(wy0, y_min)
@@ -330,4 +342,7 @@ func _fill_run(buf: VoxelBuffer, lx: int, lz: int, y_min: int, y_max: int,
 	var ly0: int = (a - y_min) / stride
 	@warning_ignore("integer_division")
 	var ly1: int = (b - y_min) / stride
-	buf.fill_area(value, Vector3i(lx, ly0, lz), Vector3i(lx + 1, ly1 + 1, lz + 1), channel)
+	var lo := Vector3i(lx, ly0, lz)
+	var hi := Vector3i(lx + 1, ly1 + 1, lz + 1)
+	buf.fill_area(value, lo, hi, CWPalette.CHANNEL_TYPE)
+	buf.fill_area(CWPalette.raw_of(value), lo, hi, CWPalette.CHANNEL_COLOR)

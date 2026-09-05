@@ -104,9 +104,8 @@ static func build(models: Array) -> CWScaleBoard:
 static func _build_ticks(width: int) -> MeshInstance3D:
 	var height: int = TICKS[TICKS.size() - 1]
 	var depth: int = 1
-	var buf := VoxelBuffer.new()
-	buf.create(width, height + PAD * 2, depth + PAD * 2)
-	buf.fill(CWPalette.AIR, VoxelBuffer.CHANNEL_COLOR)
+	var buf: VoxelBuffer = _new_buffer(
+			width, height + PAD * 2, depth + PAD * 2)
 
 	@warning_ignore("integer_division")
 	var cz: int = (depth + PAD * 2) / 2
@@ -117,7 +116,8 @@ static func _build_ticks(width: int) -> MeshInstance3D:
 		var cx: int = PAD + slot * SPACING + slot_mid
 		for y in t:
 			var value: int = CWPalette.STONE if (y % 2) == 0 else 250
-			buf.set_voxel(value, cx, PAD + y, cz, VoxelBuffer.CHANNEL_COLOR)
+			buf.set_voxel(CWPalette.raw_of(value), cx, PAD + y, cz,
+					CWPalette.CHANNEL_COLOR)
 
 	var mi := MeshInstance3D.new()
 	mi.name = "Mires"
@@ -136,12 +136,11 @@ static func _build_ticks(width: int) -> MeshInstance3D:
 ## Elle a des yeux d'un voxel : c'est tout l'interet de la demonstration. A
 ## 1 voxel = 1 bloc, un personnage de 2 blocs serait deux cubes.
 static func _build_figure(at: Vector3) -> MeshInstance3D:
-	var ch: int = VoxelBuffer.CHANNEL_COLOR
+	var ch: int = CWPalette.CHANNEL_COLOR
 	var w: int = 14
 	var d: int = 10
-	var buf := VoxelBuffer.new()
-	buf.create(w + PAD * 2, FIGURE_HEIGHT + PAD * 2, d + PAD * 2)
-	buf.fill(CWPalette.AIR, ch)
+	var buf: VoxelBuffer = _new_buffer(
+			w + PAD * 2, FIGURE_HEIGHT + PAD * 2, d + PAD * 2)
 
 	@warning_ignore("integer_division")
 	var cx: int = PAD + w / 2
@@ -154,7 +153,8 @@ static func _build_figure(at: Vector3) -> MeshInstance3D:
 		for y in range(y0, y1 + 1):
 			for z in range(z0, z1 + 1):
 				for x in range(x0, x1 + 1):
-					buf.set_voxel(value, cx + x, base + y, cz + z, ch)
+					buf.set_voxel(CWPalette.raw_of(value), cx + x, base + y,
+							cz + z, ch)
 
 	# Jambes, tronc, bras, tete : les proportions d'un personnage de jeu, tete
 	# large et corps court.
@@ -203,10 +203,21 @@ static func _build_model(m: CWVoxelModel, at: Vector3) -> MeshInstance3D:
 	return mi
 
 
+## Tampon de gabarit, prêt à recevoir des couleurs.
+##
+## Le gabarit dessine en **index de palette** — c'est plus lisible que des
+## couleurs, et c'est la meme unite que le reste du projet — mais le canal de
+## rendu est en `COLOR_RAW` depuis le 2026-09-05 : la conversion se fait a
+## l'ecriture, par `CWPalette.raw_of`.
+static func _new_buffer(w: int, h: int, d: int) -> VoxelBuffer:
+	var buf := VoxelBuffer.new()
+	buf.set_channel_depth(CWPalette.CHANNEL_COLOR, CWPalette.COLOR_DEPTH)
+	buf.create(w, h, d)
+	buf.fill(CWPalette.raw_of(CWPalette.AIR), CWPalette.CHANNEL_COLOR)
+	return buf
+
+
 static func _mesh_of(buf: VoxelBuffer) -> ArrayMesh:
-	var mesher := VoxelMesherCubes.new()
-	mesher.color_mode = VoxelMesherCubes.COLOR_MESHER_PALETTE
-	mesher.palette = CWPalette.build_voxel_palette()
-	mesher.greedy_meshing_enabled = true
+	var mesher: VoxelMesherCubes = CWPalette.build_cubes_mesher()
 	var mat: Material = CWPalette.build_opaque_material()
 	return mesher.build_mesh(buf, [mat, mat], {}) as ArrayMesh

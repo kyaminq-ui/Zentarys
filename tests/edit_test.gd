@@ -27,6 +27,7 @@ func run(runner: Object) -> void:
 	_test_bounds()
 	_test_persistence()
 	_test_flora_follows_edits()
+	_test_two_channels()
 
 
 func _ok(label: String, condition: bool, detail: String = "") -> void:
@@ -140,7 +141,7 @@ func _test_generated_voxel() -> void:
 	for lz in 16:
 		for lx in 16:
 			for ly in 16:
-				var want: int = buf.get_voxel(lx, ly, lz, VoxelBuffer.CHANNEL_COLOR)
+				var want: int = buf.get_voxel(lx, ly, lz, CWPalette.CHANNEL_TYPE)
 				var got: int = g.generated_voxel(lx, oy + ly, lz)
 				probed += 1
 				if want != got:
@@ -223,13 +224,13 @@ func _test_persistence() -> void:
 	var size: Vector3i = Vector3i(out.get_block_size())
 	var buf := VoxelBuffer.new()
 	buf.create(size.x, size.y, size.z)
-	buf.fill(CWPalette.AIR, VoxelBuffer.CHANNEL_COLOR)
+	buf.fill(CWPalette.AIR, CWPalette.CHANNEL_TYPE)
 	# Trois blocs distincts, dont un au niveau de la mer : c'est la valeur que
 	# laisse `erase_value`, et donc celle qu'une session de creusage ecrit
 	# vraiment sur le disque.
-	buf.set_voxel(CWPalette.STONE, 1, 2, 3, VoxelBuffer.CHANNEL_COLOR)
-	buf.set_voxel(CWWorldEdits.erase_value(0, 0), 4, 5, 6, VoxelBuffer.CHANNEL_COLOR)
-	buf.set_voxel(CWPalette.SNOW, 7, 8, 9, VoxelBuffer.CHANNEL_COLOR)
+	buf.set_voxel(CWPalette.STONE, 1, 2, 3, CWPalette.CHANNEL_TYPE)
+	buf.set_voxel(CWWorldEdits.erase_value(0, 0), 4, 5, 6, CWPalette.CHANNEL_TYPE)
+	buf.set_voxel(CWPalette.SNOW, 7, 8, 9, CWPalette.CHANNEL_TYPE)
 
 	var at := Vector3i(12, -3, 40)
 	out.save_voxel_block(buf, at, 0)
@@ -245,14 +246,14 @@ func _test_persistence() -> void:
 	_ok("le bloc sauvegarde se relit",
 			res == VoxelStream.RESULT_BLOCK_FOUND, str(res))
 	_ok("la roche posee est revenue",
-			got.get_voxel(1, 2, 3, VoxelBuffer.CHANNEL_COLOR) == CWPalette.STONE)
+			got.get_voxel(1, 2, 3, CWPalette.CHANNEL_TYPE) == CWPalette.STONE)
 	_ok("l'eau laissee par un creusage sous la mer est revenue",
-			got.get_voxel(4, 5, 6, VoxelBuffer.CHANNEL_COLOR)
+			got.get_voxel(4, 5, 6, CWPalette.CHANNEL_TYPE)
 					== CWWorldEdits.erase_value(0, 0))
 	_ok("la neige posee est revenue",
-			got.get_voxel(7, 8, 9, VoxelBuffer.CHANNEL_COLOR) == CWPalette.SNOW)
+			got.get_voxel(7, 8, 9, CWPalette.CHANNEL_TYPE) == CWPalette.SNOW)
 	_ok("le reste du bloc est reste vide",
-			got.get_voxel(0, 0, 0, VoxelBuffer.CHANNEL_COLOR) == CWPalette.AIR)
+			got.get_voxel(0, 0, 0, CWPalette.CHANNEL_TYPE) == CWPalette.AIR)
 
 	# Un bloc jamais ecrit doit se signaler comme absent, et non rendre du vide :
 	# c'est ce qui fait retomber Voxel Tools sur le generateur. Confondre les
@@ -363,3 +364,93 @@ func _test_flora_follows_edits() -> void:
 
 	sc.set_edits(null)
 	sc.clear_cache()
+
+
+# -- 6. Les deux canaux ------------------------------------------------------
+
+func _test_two_channels() -> void:
+	print("[rendu : le canal semantique et le canal de couleur]")
+
+	# Depuis le 2026-09-05 un voxel porte deux valeurs : l'index de palette dans
+	# `CHANNEL_TYPE` et la couleur rendue dans `CHANNEL_COLOR`. C'est la
+	# disposition de l'original (`docs/systems/03`, §3) et c'est ce qui permettra
+	# une lumiere par voxel — mais c'est aussi une redondance, et une redondance
+	# derive. Un terrain dont la couleur ne suit plus le type ment a l'oeil sans
+	# qu'aucun test de logique ne s'en apercoive : d'ou ce qui suit.
+
+	_ok("le canal de rendu est en 32 bits",
+			CWPalette.COLOR_DEPTH == VoxelBuffer.DEPTH_32_BIT)
+	# L'air doit rester d'alpha nul, sinon le mailleur cesse de le traiter comme
+	# du vide et le monde se remplit de cubes transparents.
+	_ok("l'air a une couleur d'alpha nul",
+			(CWPalette.raw_of(CWPalette.AIR) & 0xFF) == 0,
+			"0x%08X" % CWPalette.raw_of(CWPalette.AIR))
+	# Les deux eaux doivent rester translucides : c'est leur alpha, et lui seul,
+	# qui les range dans la seconde surface du mailleur.
+	_ok("les deux eaux sont translucides",
+			(CWPalette.raw_of(CWPalette.WATER) & 0xFF) < 255
+			and (CWPalette.raw_of(CWPalette.WATER_DEEP) & 0xFF) < 255)
+	# Et la matiere, elle, doit etre opaque.
+	var see_through: Array = []
+	for i in [CWPalette.STONE, CWPalette.DIRT, CWPalette.GRASS, CWPalette.SAND,
+			CWPalette.SNOW, CWPalette.ICE, CWPalette.GRAVEL]:
+		if (CWPalette.raw_of(i) & 0xFF) != 255:
+			see_through.append(CWPalette.name_of(i))
+	_ok("la matiere est opaque", see_through.is_empty(), str(see_through))
+
+	# La table de couleurs doit dire la meme chose que la palette dont elle sort,
+	# a la quantification pres : le canal porte huit bits par composante, la
+	# palette des flottants. La tolerance est donc exactement un pas de 1/255 —
+	# la resserrer ferait echouer sur du bruit d'arrondi, l'elargir laisserait
+	# passer une vraie derive de teinte.
+	var step: float = 1.0 / 255.0
+	var cols: PackedColorArray = CWPalette.colors()
+	var drift: Array = []
+	var worst: float = 0.0
+	for i in 256:
+		var raw: int = CWPalette.raw_of(i)
+		var back := Color8((raw >> 24) & 0xFF, (raw >> 16) & 0xFF,
+				(raw >> 8) & 0xFF, raw & 0xFF)
+		var off: float = maxf(maxf(absf(back.r - cols[i].r), absf(back.g - cols[i].g)),
+				maxf(absf(back.b - cols[i].b), absf(back.a - cols[i].a)))
+		worst = maxf(worst, off)
+		if off > step * 0.5001 and drift.size() < 4:
+			drift.append("%d : %s contre %s" % [i, str(back), str(cols[i])])
+	_ok("chaque index rend la couleur de la palette, a un pas de 1/255 pres",
+			drift.is_empty(), "ecart max %.5f pour un pas de %.5f ; %s"
+					% [worst, step, str(drift)])
+
+	# Le point qui compte : sur du vrai terrain, les deux canaux racontent la
+	# meme chose bloc par bloc.
+	var p := CWWorldParams.new()
+	p.world_seed = 2024
+	var g := CWVoxelGenerator.new()
+	g.params = p
+	var ground: int = roundi(g.field().sample_column(
+			p.world_origin.x, p.world_origin.y).x)
+	@warning_ignore("integer_division")
+	var oy: int = (ground / 16) * 16
+	var buf := VoxelBuffer.new()
+	buf.set_channel_depth(CWPalette.CHANNEL_COLOR, CWPalette.COLOR_DEPTH)
+	buf.create(16, 16, 16)
+	g._generate_block(buf, Vector3i(0, oy, 0), 0)
+
+	var mismatched: int = 0
+	var first: String = ""
+	var opaque_seen: int = 0
+	for lz in 16:
+		for lx in 16:
+			for ly in 16:
+				var t: int = buf.get_voxel(lx, ly, lz, CWPalette.CHANNEL_TYPE)
+				var c: int = buf.get_voxel(lx, ly, lz, CWPalette.CHANNEL_COLOR)
+				if t != CWPalette.AIR:
+					opaque_seen += 1
+				if c != CWPalette.raw_of(t):
+					mismatched += 1
+					if first == "":
+						first = "(%d, %d, %d) : type %s, couleur 0x%08X" % [
+								lx, ly, lz, CWPalette.name_of(t), c]
+	_ok("le bloc genere porte de la matiere", opaque_seen > 0,
+			"%d voxels non vides" % opaque_seen)
+	_ok("la couleur suit le type sur tout le bloc genere (4096 points)",
+			mismatched == 0, "%d ecarts, %s" % [mismatched, first])

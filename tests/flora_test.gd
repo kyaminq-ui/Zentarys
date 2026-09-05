@@ -12,7 +12,10 @@ extends RefCounted
 ## reussies. Une suite qui passe au vert parce qu'elle n'a rien teste est pire
 ## qu'une suite rouge.
 
-const CHANNEL: int = VoxelBuffer.CHANNEL_COLOR
+## Canal semantique : depuis le passage du rendu en `COLOR_RAW`, c'est
+## `CHANNEL_TYPE` qui porte l'index de palette. `CHANNEL_COLOR` porte la
+## couleur, et comparer un index avec une couleur passerait inapercu.
+const CHANNEL: int = CWPalette.CHANNEL_TYPE
 
 var _runner: Object
 

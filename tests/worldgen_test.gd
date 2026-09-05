@@ -366,7 +366,7 @@ func _count_values(buf: VoxelBuffer) -> Dictionary:
 	for y in s.y:
 		for z in s.z:
 			for x in s.x:
-				var v: int = buf.get_voxel(x, y, z, VoxelBuffer.CHANNEL_COLOR)
+				var v: int = buf.get_voxel(x, y, z, CWPalette.CHANNEL_TYPE)
 				counts[v] = counts.get(v, 0) + 1
 	return counts
 

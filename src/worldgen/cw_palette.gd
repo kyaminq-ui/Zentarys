@@ -10,8 +10,27 @@ extends RefCounted
 ## selection (surface pilotee par temperature et humidite melangees depuis les
 ## sites de region) provient de l'analyse du systeme.
 ##
-## Le rendu vise VoxelMesherCubes en mode COLOR_MESHER_PALETTE : le canal
-## CHANNEL_COLOR contient un index, 0 = air.
+## -- Deux canaux, comme dans l'original ---------------------------------------
+## Depuis le 2026-09-05, un voxel porte **deux** valeurs, et c'est la disposition
+## du binaire d'origine : un bloc y fait quatre octets, trois de couleur et un
+## d'attributs dont cinq bits de type (`docs/systems/03`, §3).
+##
+##   * `CHANNEL_TYPE`  (8 bits)  : l'**index de palette**, 0 = air. C'est la
+##     valeur *semantique* — ce que le jeu sait du bloc. Tout le code qui
+##     raisonne en blocs (surfaces, flore, edition, collisions) lit celle-la ;
+##   * `CHANNEL_COLOR` (32 bits) : la **couleur rendue**, RGBA8888. C'est ce que
+##     `VoxelMesherCubes` lit en mode `COLOR_RAW`, et rien d'autre ne s'en sert.
+##
+## Pourquoi ce dedoublement, alors qu'un index suffisait jusqu'ici : le mailleur
+## n'a pas de canal de lumiere, et en mode palette il cuit la couleur du
+## nuancier dans les sommets. Une luminosite par voxel n'a donc nulle part ou
+## aller tant que la couleur est un index partage. C'est le verrou identifie en
+## `docs/systems/04`, §6, et l'original le contourne de la meme facon : il stocke
+## la couleur par bloc.
+##
+## **La palette ne disparait pas** : elle reste la source des couleurs et le
+## contrat d'authoring des modeles `.vox`. Ce qui change est l'encodage du canal
+## de rendu, pas le nuancier — aucun asset n'est a repeindre.
 
 const AIR: int = 0
 const STONE: int = 1
@@ -198,10 +217,91 @@ static func _fill_asset_ranges(c: PackedColorArray) -> void:
 
 
 ## Construit la ressource de palette attendue par VoxelMesherCubes.
+##
+## Ne sert plus au rendu depuis le passage en `COLOR_RAW` : elle reste la table
+## que `VoxelVoxLoader` consulte pour convertir un `.vox` en index, et c'est
+## toujours par elle que les modeles entrent dans le projet.
 static func build_voxel_palette() -> Resource:
 	var pal: Resource = ClassDB.instantiate("VoxelColorPalette")
 	pal.colors = colors()
 	return pal
+
+
+## Canal semantique : l'index de palette. C'est lui que lit tout le code qui
+## raisonne en blocs.
+const CHANNEL_TYPE: int = VoxelBuffer.CHANNEL_TYPE
+
+## Canal de rendu : la couleur RGBA8888 que `VoxelMesherCubes` lit en
+## `COLOR_RAW`. Personne d'autre ne le lit.
+const CHANNEL_COLOR: int = VoxelBuffer.CHANNEL_COLOR
+
+## Profondeur du canal de rendu. **Un seul endroit a changer** si l'empreinte
+## memoire devient genante : `DEPTH_16_BIT` encode la meme couleur en RGBA4444,
+## soit deux octets par voxel au lieu de quatre. Le prix est de seize niveaux par
+## composante, ce qui suffit aux teintes de la palette mais fera des marches
+## visibles le jour ou la lumiere par voxel les multipliera — d'ou 32 bits ici.
+const COLOR_DEPTH: int = VoxelBuffer.DEPTH_32_BIT
+
+## Couleur rendue d'un index, en RGBA8888. L'air est zero : alpha nul, donc le
+## mailleur le traite comme du vide, exactement comme l'index 0 auparavant.
+static var _raw: PackedInt64Array = PackedInt64Array()
+static var _raw_mutex: Mutex = Mutex.new()
+
+
+static func raw_of(index: int) -> int:
+	if _raw.is_empty():
+		_build_raw()
+	return _raw[index & 0xFF]
+
+
+## Table index -> couleur, construite une fois. Sous verrou : les generateurs
+## tournent sur un pool de fils et se la disputent au premier bloc.
+static func _build_raw() -> void:
+	_raw_mutex.lock()
+	if _raw.is_empty():
+		var cols: PackedColorArray = colors()
+		var table := PackedInt64Array()
+		table.resize(256)
+		for i in 256:
+			var c: Color = cols[i]
+			var r: int = int(roundf(c.r * 255.0))
+			var g: int = int(roundf(c.g * 255.0))
+			var b: int = int(roundf(c.b * 255.0))
+			var a: int = int(roundf(c.a * 255.0))
+			table[i] = (r << 24) | (g << 16) | (b << 8) | a
+		_raw = table
+	_raw_mutex.unlock()
+
+
+## Format de canaux du terrain : l'index sur un octet, la couleur sur quatre.
+## A poser sur `VoxelTerrain.format` **avant** que le terrain ne charge quoi que
+## ce soit — un tampon deja cree garde la profondeur qu'il avait.
+static func build_voxel_format() -> Resource:
+	var fmt: Resource = ClassDB.instantiate("VoxelFormat")
+	fmt.set_channel_depth(CHANNEL_TYPE, VoxelBuffer.DEPTH_8_BIT)
+	fmt.set_channel_depth(CHANNEL_COLOR, COLOR_DEPTH)
+	return fmt
+
+
+## Mailleur en cubes partage par le terrain, les modeles et le gabarit.
+##
+## En `COLOR_RAW` le mailleur lit la couleur telle quelle : plus de nuancier a
+## lui donner. Le materiau transparent reste indispensable — l'eau a un alpha
+## inferieur a 1, et c'est cet alpha qui la range dans la seconde surface.
+static func build_cubes_mesher() -> VoxelMesherCubes:
+	var mesher := VoxelMesherCubes.new()
+	mesher.color_mode = VoxelMesherCubes.COLOR_RAW
+	mesher.greedy_meshing_enabled = true
+	mesher.opaque_material = build_opaque_material()
+
+	var water := StandardMaterial3D.new()
+	water.vertex_color_use_as_albedo = true
+	water.vertex_color_is_srgb = true
+	water.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	water.roughness = 0.12
+	water.metallic = 0.15
+	mesher.transparent_material = water
+	return mesher
 
 
 ## Materiau opaque du rendu en cubes : couleur portee par les sommets, pas de

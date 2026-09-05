@@ -252,7 +252,6 @@ func mesh() -> ArrayMesh:
 	if _mesh != null or voxel_count == 0:
 		return _mesh
 
-	var ch: int = VoxelBuffer.CHANNEL_COLOR
 	var dx: PackedInt32Array = _dx[0]
 	var dy: PackedInt32Array = _dy[0]
 	var dz: PackedInt32Array = _dz[0]
@@ -263,12 +262,19 @@ func mesh() -> ArrayMesh:
 		lo = lo.min(Vector3i(dx[i], dy[i], dz[i]))
 
 	var m: int = MESH_MARGIN
+	# Le modele est range en index de palette ; le mailleur, lui, lit desormais
+	# une couleur (`COLOR_RAW`). La conversion se fait ici, au dernier moment :
+	# c'est ce qui garde les `.vox` et leurs plages de palette comme unique
+	# contrat d'authoring — un modele reste peint dans le nuancier du projet, et
+	# personne n'a a connaitre l'encodage du canal de rendu.
+	var ch: int = CWPalette.CHANNEL_COLOR
 	var buf := VoxelBuffer.new()
+	buf.set_channel_depth(ch, CWPalette.COLOR_DEPTH)
 	buf.create(extent.x + m * 2, extent.y + m * 2, extent.z + m * 2)
-	buf.fill(CWPalette.AIR, ch)
+	buf.fill(CWPalette.raw_of(CWPalette.AIR), ch)
 	for i in voxel_count:
-		buf.set_voxel(values[i], dx[i] - lo.x + m, dy[i] - lo.y + m,
-				dz[i] - lo.z + m, ch)
+		buf.set_voxel(CWPalette.raw_of(values[i]), dx[i] - lo.x + m,
+				dy[i] - lo.y + m, dz[i] - lo.z + m, ch)
 
 	# Le maillage ne sort pas en coordonnees du tampon : le mailleur consomme sa
 	# marge de remplissage et son origine tombe sur le premier voxel utile, donc
@@ -299,16 +305,12 @@ static func mesher_padding() -> int:
 	return _shared_mesher().get_minimum_padding()
 
 
-## Mailleur partage. Construit une fois : il ne porte que la palette et le mode
-## de couleur, et les modeles sont mailles depuis le fil principal.
+## Mailleur partage. Construit une fois, et **le meme que celui du terrain** :
+## `CWPalette.build_cubes_mesher`. C'est la condition pour que les deux grilles
+## lisent comme un seul monde ; un mailleur regle a part derive tot ou tard.
 static func _shared_mesher() -> VoxelMesherCubes:
-	if _mesher != null:
-		return _mesher
-	var mesher := VoxelMesherCubes.new()
-	mesher.color_mode = VoxelMesherCubes.COLOR_MESHER_PALETTE
-	mesher.palette = CWPalette.build_voxel_palette()
-	mesher.greedy_meshing_enabled = true
-	_mesher = mesher
+	if _mesher == null:
+		_mesher = CWPalette.build_cubes_mesher()
 	return _mesher
 
 

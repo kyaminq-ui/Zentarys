@@ -100,7 +100,9 @@ func setup(terrain: Node, generator: CWVoxelGenerator, floor_y: int) -> void:
 	_floor_y = floor_y
 	if terrain != null and terrain.has_method("get_voxel_tool"):
 		_tool = terrain.get_voxel_tool()
-		_tool.channel = VoxelBuffer.CHANNEL_COLOR
+		# L'outil travaille sur le canal **semantique** : c'est lui qui dit ce
+		# qu'est un bloc. La couleur suit, ecrite par `_write`.
+		_tool.channel = CWPalette.CHANNEL_TYPE
 		_tool.mode = VoxelTool.MODE_SET
 
 
@@ -169,8 +171,7 @@ func dig(at: Vector3i) -> int:
 	if is_open(_tool.get_voxel(at)):
 		return -1
 	var left: int = erase_value(at.y, _params.sea_level)
-	_tool.value = left
-	_tool.do_point(at)
+	_write(at, left)
 	edit_count += 1
 	# Le sol de la colonne a pu descendre : si c'est lui qu'on vient d'oter, on
 	# cherche le suivant sous lui. Sinon on a creuse une galerie sous un toit
@@ -192,12 +193,25 @@ func place(at: Vector3i, index: int) -> bool:
 		return false
 	if not is_open(_tool.get_voxel(at)):
 		return false
-	_tool.value = index
-	_tool.do_point(at)
+	_write(at, index)
 	edit_count += 1
 	if not is_open(index) and at.y > _top_of(at.x, at.z):
 		_set_top(at.x, at.z, at.y)
 	return true
+
+
+## Ecrit un bloc : l'index dans le canal semantique, sa couleur dans le canal de
+## rendu. Les deux, toujours, et au meme endroit — un terrain dont la couleur ne
+## suit plus le type est un monde qui ment a l'oeil sans qu'aucun test de logique
+## ne s'en apercoive.
+func _write(at: Vector3i, index: int) -> void:
+	_tool.channel = CWPalette.CHANNEL_TYPE
+	_tool.value = index
+	_tool.do_point(at)
+	_tool.channel = CWPalette.CHANNEL_COLOR
+	_tool.value = CWPalette.raw_of(index)
+	_tool.do_point(at)
+	_tool.channel = CWPalette.CHANNEL_TYPE
 
 
 ## Premier bloc plein sur un rayon, ou null. `previous_position` donne la case

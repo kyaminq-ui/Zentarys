@@ -185,25 +185,10 @@ func _ready() -> void:
 
 
 func _build_terrain() -> void:
-	var mesher := VoxelMesherCubes.new()
-	mesher.color_mode = VoxelMesherCubes.COLOR_MESHER_PALETTE
-	mesher.palette = CWPalette.build_voxel_palette()
-	mesher.greedy_meshing_enabled = true
-
-	var opaque := StandardMaterial3D.new()
-	opaque.vertex_color_use_as_albedo = true
-	opaque.vertex_color_is_srgb = true
-	opaque.roughness = 0.95
-	opaque.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
-	mesher.opaque_material = opaque
-
-	var water := StandardMaterial3D.new()
-	water.vertex_color_use_as_albedo = true
-	water.vertex_color_is_srgb = true
-	water.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	water.roughness = 0.12
-	water.metallic = 0.15
-	mesher.transparent_material = water
+	# Le mailleur et les materiaux viennent de `CWPalette` : le terrain, les
+	# modeles instancies et le gabarit d'echelle doivent partager exactement les
+	# memes, sans quoi les deux grilles cessent de lire comme un seul monde.
+	var mesher: VoxelMesherCubes = CWPalette.build_cubes_mesher()
 
 	var box := AABB(
 			Vector3(-1_000_000, WORLD_Y_MIN, -1_000_000),
@@ -232,6 +217,7 @@ func _build_terrain() -> void:
 		lod.view_distance = lod_view_distance
 		lod.generate_collisions = false
 		lod.voxel_bounds = box
+		lod.format = CWPalette.build_voxel_format()
 		lod.stream = stream
 		terrain = lod
 	else:
@@ -246,6 +232,9 @@ func _build_terrain() -> void:
 		flat.mesh_block_size = 32
 		flat.generate_collisions = false
 		flat.bounds = box
+		# Le format se pose avant tout chargement : un tampon deja cree garde la
+		# profondeur qu'il avait, et la couleur sortirait tronquee a un octet.
+		flat.format = CWPalette.build_voxel_format()
 		flat.stream = stream
 		terrain = flat
 	add_child(terrain)
