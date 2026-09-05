@@ -25,7 +25,7 @@ ne s'ouvre pas proprement (il est déclaré dans `project.godot`).
 ## 2. Commandes
 
 ```
-# Suite de validation (124 vérifications, ~70 s)
+# Suite de validation (155 vérifications, ~70 s)
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd
 
 # Réimport après ajout d'un class_name (sinon l'éditeur ne le voit pas)
@@ -62,6 +62,7 @@ Aperçus PNG écrits par la suite de tests dans
 
 Démo : `res://scenes/terrain_demo.tscn`. Clic pour capturer la souris,
 ZQSD/WASD, Maj = rapide, Espace/Ctrl = monter/descendre, **F1** détails,
+**clic gauche** creuser, **clic droit** poser,
 **F12** capture d'écran dans `user://shots`, **Page haut/bas** distance de vue,
 **1-9** téléportation vers un biome, **Échap** rend la souris puis quitte.
 
@@ -78,10 +79,12 @@ binaire, qui dira *quoi* poser *où* et à quelle densité. **La table des entit
 est lue** (2026-09-05) : elle est dans le `switch` de
 `creature_generateAppearance`, et non dans les deux fonctions au nom prometteur,
 qui ne dispersent de la flore ni l'une ni l'autre. Reste la seconde voie de pose,
-celle de la flore basse. Les jalons 1.8 à 1.10 sont à faire. Détail et sources
+celle de la flore basse. **Le jalon 1.8 est fait** (2026-09-05) : édition du
+terrain, requête ponctuelle et persistance du diff. Restent 1.9 et 1.10. Détail et sources
 analysées dans `docs/ROADMAP.md`. Analyses : `docs/systems/01_generation_terrain.md` (terrain),
 `docs/systems/02_contenu_de_biome.md` (contenu de biome, éléments de tuile,
-apparitions).
+apparitions), `docs/systems/03_colonnes_et_edition.md` (colonnes, blocs,
+édition, persistance).
 
 ```
 src/worldgen/
@@ -98,11 +101,13 @@ src/worldgen/
   cw_model_library.gd      chargement des modèles + table modèle/biome
   cw_scatter.gd            grille de dispersion 16², cellules en cache
   cw_flora_renderer.gd     instanciation de la flore (MultiMesh par cellule)
+  cw_world_edits.gd        creuser, poser, interroger un bloc (jalon 1.8)
 src/demo/terrain_demo.gd   scène de démonstration (arbre voxel construit en code)
 src/demo/scale_board.gd    gabarit d'échelle : mires, silhouette, modèles
-tests/worldgen_test.gd     suite headless, 124 vérifications
+tests/worldgen_test.gd     suite headless, 155 vérifications
 tests/tile_features_test.gd  la moitié qui concerne les éléments de tuile
 tests/flora_test.gd        modèles, dispersion, maillage et pose (jalon 1.7)
+tests/edit_test.gd         règles d'édition, requête ponctuelle, persistance (1.8)
 tools/export_palette.gd    régénère assets/palette/*.png depuis CWPalette
 tools/preview_features.gd  gros plan ombré, avec et sans la couche d'éléments
 tools/inspect_model.gd     inventaire d'un .vox : gabarit, index, plages
@@ -202,6 +207,24 @@ docs/images/               gabarit d'échelle photographié en jeu
     calculent sur `Placement.radius_blocks()`, jamais sur `model.radius_blocks`.
     L'oublier fait disparaître les grandes touffes de la bordure du champ — et
     seulement celles-là, donc ça se voit tard.
+18. **`CWVoxelGenerator.voxel_of` a deux consommateurs qui doivent s'accorder.**
+    `_generate_block` la déroule par intervalles, `generated_voxel` l'évalue en un
+    point. Rien dans le code ne les y oblige : c'est le test « la requête
+    ponctuelle dit la même chose que le bloc généré » (4 096 points) qui tient le
+    contrat. Une couche ajoutée au générateur et oubliée dans la règle donnerait
+    des collisions portant sur un monde qui n'est plus celui qu'on voit. Et
+    l'ordre des tests dans `voxel_of` est celui des recouvrements de
+    `_generate_block` : la surface avant la roche, sinon `subsurface_depth = 0`
+    rend de la roche là où le monde montre de l'herbe.
+19. **Les éditions ne partent sur le disque que si `_flush_edits` tourne.**
+    Fermer la fenêtre passe par `WM_CLOSE_REQUEST`, mais `--quit-after` et tout
+    `SceneTree.quit()` direct n'envoient rien : d'où la seconde branche sur
+    `NOTIFICATION_EXIT_TREE`. Sans elle, une session lancée pour une capture
+    perd ses éditions sans un mot — constaté, 647 appliquées et zéro écrite.
+20. **`save_generator_output` doit rester à faux.** À vrai, chaque bloc visité
+    part sur le disque et la sauvegarde grossit comme le monde exploré au lieu
+    de grossir comme ce qu'on a touché. C'est aussi le modèle de l'original, qui
+    ne sérialise que les colonnes modifiées.
 
 ## 5. Pièges connus
 

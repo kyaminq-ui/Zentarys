@@ -36,7 +36,7 @@ et des structures.
 | 1.5 | Générateur voxel + rendu cubes | — (portage Godot) | ✅ | idem |
 | 1.6 | Éléments de tuile | `World_generateRegionFeatures` @0050e080 | ✅ | `docs/systems/01`, §2.7 |
 | 1.7 | **Contenu de biome, dispersion** | `creature_generateAppearance` + @005e4850 + @005d8750 | 🔶 | mécanique faite, 28 modèles livrés, table des entités lue ; `docs/systems/02` |
-| 1.8 | Colonnes persistantes, édition | `Chunk_getColumnAt` @00406100 + `VoxelTool` | ⬜ | |
+| 1.8 | Colonnes persistantes, édition | `Chunk_getColumnAt` @00406100 + `VoxelTool` | ✅ | `docs/systems/03` |
 | 1.9 | Éclairage voxel | `VoxelChunk_propagateSunlight` | ⬜ | |
 | 1.10 | Carte du monde | `WorldMap.cpp`, `NameGen_generateRegionName` | ⬜ | |
 
@@ -290,6 +290,70 @@ production ; il réutilisera `CWVoxelModel` tel quel.
 
 ---
 
+### 1.8 — Colonnes persistantes et édition (fait)
+
+Analyse complète en **`docs/systems/03`**. Sept fonctions courtes et sans
+ambiguïté — le système le mieux déterminé rencontré jusqu'ici.
+
+**L'échelle du monde est confirmée par un second chemin.**
+`Chunk_getColumnAt` refuse toute coordonnée hors de `[0, 0x1000000)`, soit
+exactement `CWWorldParams.WORLD_SIZE`, obtenu jusqu'ici en multipliant 1024 zones
+par 16 384 unités. Deux lectures indépendantes, le même nombre. `Grid_lookup1024`
+borne à `0..0x3ff` — c'est la grille de zones — et `Region_getChunkCell` à
+`0..0xffff`, soit 16 777 216 / 256. Trois recoupements.
+
+**Un échelon manquait à l'échelle du monde :** le **chunk de 256 × 256
+colonnes**, entre la tuile de 2 048 et le bloc — huit par huit dans une tuile.
+C'est la cellule que construit `WorldInfo_generateBiomeContent` : les deux
+analyses, menées séparément, décrivaient le même objet sans qu'on sache où le
+ranger.
+
+**La structure d'origine n'est pas portée, délibérément.** Grille de chunks,
+colonnes paginées, plages redimensionnables : c'est exactement ce que
+`VoxelTerrain` fait déjà, en natif. La réécrire serait porter une
+implémentation. Ce qui est porté, ce sont les règles qu'aucun moteur ne devine.
+
+> **L'eau n'est pas de la matière, c'est le vide sous le niveau de la mer.**
+> `World_getBlockAt` ne lit jamais un bloc d'eau : au-dessus de la colonne il
+> rend un témoin d'eau si `z <= 0` et un témoin d'air sinon, et il rabat de même
+> un bloc *stocké* de type nul sous la même altitude. Le niveau de la mer de
+> l'original est `z = 0` — `CWWorldParams.sea_level` valait déjà 0. Creuser sous
+> la mer laisse donc de l'eau, pas un trou : une tranchée depuis la plage se
+> remplit. C'est `CWWorldEdits.erase_value`.
+
+Deux relevés qui n'étaient pas cherchés :
+
+- **un bloc d'origine fait quatre octets : trois de couleur RVB et un
+  d'attributs** (type sur 5 bits, drapeau 0x40, protection 0x80).
+  `World_fillVoxelColumnTyped` donne à chaque bloc sa teinte, avec une gigue de
+  table et un canal vert poussé vers 120 par un échantillon de bruit. Ce projet
+  est en palette indexée par choix de rendu — mais cela éclaire peut-être la
+  **dalle d'eau du LOD 1** restée inexpliquée : une couleur survit à une moyenne
+  de résolution, un index de palette non. Piste, pas démonstration ;
+- **la protection (0x80) empêche la génération d'effacer un bloc posé par une
+  structure** — écrire de l'air y est refusé en silence, écrire de la matière
+  repose le drapeau. Pas de producteur avant le jalon 4, et pas de place dans un
+  canal d'un octet : documentée, non portée.
+
+**Persistance.** `VoxelStreamSQLite` avec `save_generator_output = false`, un
+fichier par graine : le monde intact reste procédural, seul le diff part sur le
+disque — le modèle de l'original, qui ne sérialise que les colonnes touchées.
+647 éditions occupent 20 Ko, écrites en 4 ms.
+
+**Une régression attrapée par la validation en jeu, pas par les tests :**
+fermer par `--quit-after` ou par un `SceneTree.quit()` direct n'envoie pas
+`WM_CLOSE_REQUEST`, donc la sauvegarde ne partait pas — 647 éditions appliquées,
+zéro écrite, sans un mot. `NOTIFICATION_EXIT_TREE` est le second filet.
+
+**Ce que 1.8 laisse ouvert :** la flore ne réagit pas aux éditions — creuser un
+cratère y laisse les plantes en l'air. C'est la conséquence connue de la
+décision du 2026-09-04, devenue visible ; la corriger demande une requête par
+plante, donc c'est un sujet du jalon 1.9. Les collisions ne sont pas branchées
+non plus : `CWWorldEdits.voxel_at` est la primitive, le consommateur est le
+contrôleur du jalon 3.1.
+
+---
+
 ## Jalon 2 — Créatures et combat
 
 | # | Système | Source | Taille | Statut |
@@ -373,7 +437,7 @@ sans valeur tant que les jalons 2 et 3 ne sont pas là.
 | Cache de colonnes | ✅ | 17 ms → 5 µs par bloc réutilisé |
 | Débit de chargement | ✅ | vue 384 : > 3 min → **27 s** ; vue 768 : **120 s** |
 | Portage du champ en GDExtension C++ | ⬜ | ~80 µs/colonne en GDScript ; **verrou de la vue lointaine**, voir ci-dessous |
-| `VoxelStream` (sauvegarde du monde modifié) | ⬜ | dépend de 1.8 |
+| `VoxelStream` (sauvegarde du monde modifié) | ✅ | `VoxelStreamSQLite`, `save_generator_output = false` : seul le diff part sur le disque, 647 éditions = 20 Ko |
 | LOD natif (`VoxelLodTerrain`) | ⛔ | testé, inutilisable avec un rendu en cubes — voir ci-dessous |
 | Étage de terrain lointain (façon Distant Horizons) | ⬜ | bloqué par la vitesse d'échantillonnage |
 | Intégration continue sur la suite headless | ⬜ | |
@@ -480,6 +544,7 @@ de le résoudre.
 
 | Date | Fait |
 |---|---|
+| 2026-09-05 | Jalon 1.8 : edition du terrain et persistance. Analyse dans `docs/systems/03` — sept fonctions courtes, le systeme le mieux determine jusqu'ici. **L'echelle du monde est confirmee par un second chemin** : `Chunk_getColumnAt` borne a `[0, 0x1000000)`, soit exactement WORLD_SIZE, obtenu jusqu'ici en multipliant 1024 zones par 16 384 ; `Grid_lookup1024` borne a 0..0x3ff (la grille de zones) et `Region_getChunkCell` a 0..0xffff. **Un echelon manquait** : le chunk de 256 x 256 colonnes, 8 x 8 par tuile — c'est la cellule de `WorldInfo_generateBiomeContent`, dont on ne savait pas ou la ranger. **L'eau n'est pas de la matiere** : `World_getBlockAt` ne lit jamais un bloc d'eau, il rend un temoin selon que z <= 0 ou non, le niveau de la mer d'origine etant 0 — la valeur que `sea_level` avait deja. Creuser sous la mer laisse donc de l'eau. Releve au passage : un bloc d'origine fait 4 octets, trois de couleur **RVB** et un d'attributs (type 5 bits, 0x40, protection 0x80) — ce qui donne une piste sur la dalle d'eau du LOD 1, une couleur survivant a une moyenne la ou un index de palette non. La structure d'origine n'est **pas** portee : `VoxelTerrain` tient deja ce role en natif, la reecrire serait porter une implementation. Persistance par `VoxelStreamSQLite`, `save_generator_output = false` : 647 editions = 20 Ko. Regression attrapee en jeu et non par les tests : `--quit-after` n'envoie pas `WM_CLOSE_REQUEST`, donc rien n'etait sauve — `NOTIFICATION_EXIT_TREE` est le second filet. 155 verifications. |
 | 2026-09-05 | Les deux frequences de bruit portees dans `CWScatter`, et la gigue d'echelle par instance. **La crete a 0,05 est le mecanisme de groupement** : la dette « semer par grappes », ouverte le 2026-09-04, se ferme sans code de groupement — `|bruit(x*0,05)| > 0,5` passe 29,2 % de la surface en plaques de 19,1 blocs, et la variance/moyenne par cellule monte a 14,3 contre ~1 pour un tirage uniforme (195 cellules vides sur 576). La **rarete entiere n'est pas portee, deliberement** : l'original la tire par colonne, soit 256 echantillonnages par cellule (~19 ms, hors budget) ; le budget de candidats a la meme moyenne, et le calcul le confirme — 256 x 0,2917 x 1/8 = 9,3 plantes par cellule contre les 9,8 de la densite posee au juge, deux chemins independants sur le meme nombre. Le **test de signe se generalise par la parite de l'indice** et non en deux moities contigues : celles-ci donnaient une region a 40 % de cailloux, propriete de l'ordre de la table et non du mecanisme — defaut vu en jeu, pas dans un test. Corrige au passage : `PLACEMENT_PASS_RATE` mesure sur 250 000 colonnes autour du point de depart donnait 0,3012, trois points de trop ; la vraie valeur sur un million de colonnes reparties est 0,2917. `MAX_PER_CELL` 32 -> 64, sans quoi il rabotait au lieu de garder. 124 verifications. |
 | 2026-09-05 | `VOXELS_PER_BLOCK` passe de 16 a **40/3**, la valeur de l'original : ses echelles d'instanciation du decor sont 0,075 / 0,09 / 0,1, et 0,075 = 3/40 exactement. Ecrit en fraction, pas en 13.333 qui derive. Un cube de reference d'un bloc n'etant plus entier, la reference d'authoring devient **3 blocs = 40 voxels**. Le personnage de 32 voxels passe de 2,0 a 2,4 blocs, ce qui recoupe les 2,3 blocs mesures au pixel : le changement rapproche du terrain mesure. Piege regle au passage : `CWScatter` utilisait le rapport comme modulo entier pour la position sous le bloc — les deux notions sont independantes et sont separees, `CWScatter.SUBBLOCK_STEPS = 16` d'un cote, la grille de dessin de l'autre. Deux tests verrouillent la fraction. 117 verifications. Ajoute : `docs/prompt_generation_flore.md`, prompt autoportant pour regenerer le lot sous Blender/bpy, avec un ecrivain .vox valide de bout en bout par le chargeur du projet. |
 | 2026-09-05 | Seconde voie de pose identifiee, `docs/systems/02` §8. Il y a **deux** voies : les plantes a silhouette sont des entites a code de type, la flore basse (herbe, fleurs, algues, corail, roseaux) est du decor instancie sans entite, produit dans la meme passe que le terrain et pousse par `ChunkBuffer_loadAndNotify` (@005c03f0). Enregistrement reconstruit par recoupement de cinq branches : type a +0, echelle a +32, lacet a +36, drapeaux a +56. **Le rapport d'echelle est confirme par une constante du binaire** : les echelles de decor valent 0,075 / 0,09 / 0,1 et 0,075 = 1/13,333 exactement — la meme valeur que la mesure au pixel du 2026-09-04, par un chemin entierement different. Nos modeles sont 20 % plus fins que l'original a bloc egal ; VOXELS_PER_BLOCK = 16 reste delibere, mais l'ecart est chiffre. Deux manques de CWFloraRenderer releves : la gigue d'echelle de 1x a 2x par instance, et les deux frequences de bruit (0,05 pour ou, 0,01 pour laquelle). Reste la table type de decor -> modele ; trois pistes eliminees, la cible est le consommateur du champ type. |

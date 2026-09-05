@@ -126,6 +126,53 @@ func clear_caches() -> void:
 		_scatter.clear_cache()
 
 
+## Bloc occupant l'altitude `y` d'une colonne, en fonction de son profil.
+##
+## C'est **la** regle qui dit ce qu'il y a a un endroit donne, et elle a deux
+## consommateurs : `_generate_block`, qui la deroule par intervalles pour remplir
+## un bloc voxel vite, et `generated_voxel`, qui l'evalue en un point pour
+## repondre a une requete. Les deux doivent dire la meme chose ; ils sont ecrits
+## differemment parce qu'ils n'ont pas le meme cout a optimiser, et un test les
+## compare colonne par colonne pour que la derive ne s'installe pas en silence.
+##
+## L'ordre des tests est celui des recouvrements de `_generate_block`, ou les
+## intervalles sont poses du plus profond au plus superficiel et s'ecrasent :
+## avec `subsurface = 0`, le remplissage de roche monte jusqu'a `top` et le bloc
+## de surface le recouvre. Tester la roche en premier ici rendrait de la roche
+## la ou le monde genere montre de l'herbe.
+##
+## Portage : `World_getBlockAt` @00405fd0 rend de meme un bloc par colonne et
+## altitude. L'original ne stocke pas l'eau — au-dessus de la matiere, il rend
+## un temoin d'eau si `z <= 0` et un temoin d'air sinon, `z = 0` etant son niveau
+## de la mer. Ici l'eau est ecrite dans les donnees, mais la regle est la meme et
+## `CWWorldEdits` la rejoue a l'effacement. Voir `docs/systems/03`, section 4.
+static func voxel_of(y: int, top: int, surface: int, subsurface: int,
+		sea: int) -> int:
+	if y == top:
+		return surface
+	if y > top:
+		if y <= sea:
+			return CWPalette.water_index(float(sea - top))
+		return CWPalette.AIR
+	if y > top - subsurface:
+		return CWPalette.subsurface_index(surface)
+	return CWPalette.STONE
+
+
+## Bloc genere en un point, en coordonnees de scene. Ne consulte aucune edition :
+## c'est le monde tel que le champ le decrit.
+##
+## Chemin froid, une colonne par appel (~75 us). Pour un volume, passer par
+## `_generate_block` ou par `sample_patch` — la remarque de `nextsteps.md` sur
+## `sample_column` vaut ici mot pour mot.
+func generated_voxel(x: int, y: int, z: int) -> int:
+	var f: CWTerrainField = field()
+	var p: CWWorldParams = f.params()
+	var c: Vector3 = f.sample_column(p.world_origin.x + x, p.world_origin.y + z)
+	var surface: int = CWPalette.surface_index(c.x, c.y, c.z, p.sea_level)
+	return voxel_of(y, floori(c.x), surface, subsurface_depth, p.sea_level)
+
+
 func _get_used_channels_mask() -> int:
 	return 1 << VoxelBuffer.CHANNEL_COLOR
 

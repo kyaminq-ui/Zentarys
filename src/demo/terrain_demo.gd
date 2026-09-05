@@ -32,6 +32,14 @@ const SEARCH_ZONE_RINGS: int = 10
 
 ## Dossier des captures prises depuis le jeu (touche F12).
 const SHOT_DIR: String = "user://shots"
+
+## Sauvegardes du monde modifie. Un fichier par graine : deux mondes ne
+## partagent pas leurs editions.
+const SAVE_DIR: String = "user://saves"
+
+## Attente maximale, en millisecondes, de la fin de la sauvegarde a la
+## fermeture. Borne : mieux vaut perdre les dernieres editions que la fenetre.
+const SAVE_WAIT_MAX_MS: int = 3000
 ## Delai, en secondes, avant la capture automatique du gabarit d'echelle : le
 ## temps que le terrain autour du gabarit soit maille.
 const BOARD_SHOT_DELAY: float = 8.0
@@ -61,6 +69,16 @@ const BIOME_KEYS: Dictionary = {
 ## Distance de vue de la flore, en blocs. Sans rapport avec celle du terrain :
 ## une touffe d'un demi-bloc ne couvre plus un pixel bien avant l'horizon.
 @export var flora_distance: int = 128
+
+## Conserve les modifications du terrain d'une session a l'autre.
+##
+## Seuls les blocs *edites* partent sur le disque : `save_generator_output` reste
+## a faux, donc le monde intact reste procedural et ne coute rien. C'est le
+## modele de l'original, qui ne serialise que les colonnes touchees.
+@export var save_edits: bool = true
+
+## Bloc pose au clic droit. Index de palette.
+@export var build_block: int = CWPalette.STONE
 
 ## Pose le gabarit d'echelle (mires de hauteur connue, silhouette, modeles
 ## charges) devant le point d'apparition. Sert a regler la taille des assets
@@ -93,6 +111,8 @@ const BIOME_KEYS: Dictionary = {
 var params: CWWorldParams
 var generator: CWVoxelGenerator
 var terrain: VoxelNode
+var edits: CWWorldEdits
+var stream: VoxelStream
 var flora: CWFloraRenderer
 var camera: Camera3D
 var hud: Label
@@ -103,6 +123,7 @@ var _captured: bool = false
 var _hud_detailed: bool = false
 var _hud_timer: float = 0.0
 var _shutting_down: bool = false
+var _edits_flushed: bool = false
 
 var _voxel_engine: Object = null
 var _viewer: VoxelViewer = null
@@ -188,6 +209,20 @@ func _build_terrain() -> void:
 			Vector3(-1_000_000, WORLD_Y_MIN, -1_000_000),
 			Vector3(2_000_000, WORLD_Y_MAX - WORLD_Y_MIN, 2_000_000))
 
+	# Flux de sauvegarde. Monte avant que le terrain ne commence a charger :
+	# poser un flux sur un terrain deja en cours de streaming laisse les blocs
+	# deja charges hors de son perimetre, donc des editions perdues sans erreur.
+	#
+	# `save_generator_output = false` est le coeur du dispositif : le monde intact
+	# se regenere, seul le diff va sur le disque. C'est le modele de l'original,
+	# qui ne serialise que les colonnes qu'on a touchees.
+	if save_edits:
+		DirAccess.make_dir_recursive_absolute(SAVE_DIR)
+		var sqlite := VoxelStreamSQLite.new()
+		sqlite.database_path = "%s/graine_%d.sqlite" % [SAVE_DIR, params.world_seed]
+		sqlite.save_generator_output = false
+		stream = sqlite
+
 	if use_lod:
 		var lod := VoxelLodTerrain.new()
 		lod.name = "VoxelLodTerrain"
@@ -197,6 +232,7 @@ func _build_terrain() -> void:
 		lod.view_distance = lod_view_distance
 		lod.generate_collisions = false
 		lod.voxel_bounds = box
+		lod.stream = stream
 		terrain = lod
 	else:
 		var flat := VoxelTerrain.new()
@@ -210,8 +246,14 @@ func _build_terrain() -> void:
 		flat.mesh_block_size = 32
 		flat.generate_collisions = false
 		flat.bounds = box
+		flat.stream = stream
 		terrain = flat
 	add_child(terrain)
+
+	# La couche d'edition prend son `VoxelTool` du terrain : elle doit donc
+	# etre montee apres lui, et refaite si le terrain est reconstruit.
+	edits = CWWorldEdits.new()
+	edits.setup(terrain, generator, WORLD_Y_MIN)
 
 
 func _build_camera() -> void:
@@ -427,6 +469,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed and not _captured:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		_captured = true
+	elif event is InputEventMouseButton and event.pressed and _captured:
+		# Souris capturee : le clic edite. Gauche creuse, droit pose.
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			_edit_at_crosshair(false)
+		elif event.button_index == MOUSE_BUTTON_RIGHT:
+			_edit_at_crosshair(true)
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		# Premiere pression : rendre la souris. Seconde : quitter. C'est aussi
 		# le seul chemin qui exerce _shutdown() au clavier.
@@ -452,6 +500,26 @@ func _unhandled_input(event: InputEvent) -> void:
 		_pitch = clampf(_pitch - event.relative.y * mouse_sensitivity,
 				-1.5, 1.5)
 		camera.rotation = Vector3(_pitch, _yaw, 0.0)
+
+
+## Creuse ou pose au centre de l'ecran.
+##
+## `VoxelTool.raycast` traverse les *donnees*, pas la physique : le terrain n'a
+## pas de collisions (`generate_collisions = false`) et n'en a pas besoin pour
+## ca. Le rayon rend la case pleine touchee et la case vide qui la precede — la
+## premiere se creuse, la seconde se batit.
+func _edit_at_crosshair(build: bool) -> void:
+	if edits == null or not edits.has_tool():
+		return
+	var hit: VoxelRaycastResult = edits.raycast(
+			camera.global_position, -camera.global_transform.basis.z)
+	if hit == null:
+		return
+	if build:
+		edits.place(hit.previous_position, build_block)
+	else:
+		edits.dig(hit.position)
+	_hud_timer = 0.0
 
 
 func _process(delta: float) -> void:
@@ -581,7 +649,13 @@ func _update_hud() -> void:
 			lines.append("flore : %d plantes sur %d cellules, vue %d blocs%s" % [
 				fs.y, fs.x, flora.view_distance,
 				"" if flora.enabled else "   (coupee)"])
+		if edits != null:
+			lines.append("editions : %d%s   pose : %s" % [
+				edits.edit_count,
+				"" if stream != null else "   (non sauvegardees)",
+				CWPalette.name_of(build_block)])
 		lines.append("ZQSD/WASD + souris · Maj vite · Espace/Ctrl · Echap souris puis quitter")
+		lines.append("Clic gauche : creuser · clic droit : poser")
 		lines.append("Page haut/bas : distance de vue")
 		lines.append("1 herbe · 2 herbe seche · 3 jungle · 4 marais · 5 sable")
 		lines.append("6 neige · 7 toundra · 8 roche · 9 fond marin")
@@ -611,6 +685,14 @@ func capture_screenshot() -> String:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		_shutdown()
+	elif what == NOTIFICATION_EXIT_TREE:
+		# Deuxieme filet, et il sert : fermer la fenetre passe bien par
+		# WM_CLOSE_REQUEST, mais `--quit-after` et tout appel direct a
+		# `SceneTree.quit()` n'envoient rien du tout. Sans cette branche, une
+		# session lancee pour une capture automatique perd ses editions en
+		# silence — constate le 2026-09-05, 647 editions appliquees et zero
+		# ecrite. `_flush_edits` se garde lui-meme contre le double appel.
+		_flush_edits()
 
 
 ## Rend la main tout de suite au lieu d'attendre la file de streaming.
@@ -621,12 +703,17 @@ func _notification(what: int) -> void:
 ##      remplis d'air en quelques microsecondes au lieu de ~20 ms ;
 ##   2. l'observateur est retire, donc plus aucun bloc n'est demande ;
 ##   3. le terrain arrete son chargement automatique.
-## Aucune donnee n'est perdue : la demo n'a pas de VoxelStream, tout est
-## regenere a la volee.
+## Le monde intact se regenere a la volee, donc il n'y a rien a sauver de ce
+## cote. Les **editions**, elles, seraient perdues : elles partent sur le disque
+## avant tout le reste, parce que les deux gestes qui suivent — generateur en
+## mode arret, chargement automatique coupe — rendent le terrain inutilisable
+## pour une sauvegarde.
 func _shutdown() -> void:
 	if _shutting_down:
 		return
 	_shutting_down = true
+
+	_flush_edits()
 
 	if generator != null:
 		generator.request_shutdown()
@@ -646,3 +733,30 @@ func _shutdown() -> void:
 
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	get_tree().quit()
+
+
+## Ecrit les blocs modifies, puis attend que le flux ait fini.
+##
+## `save_modified_blocks` est asynchrone : rendre la main tout de suite ferait
+## quitter le processus au milieu de l'ecriture. On attend donc son temoin, mais
+## avec une borne — une sauvegarde qui ne finit pas ne doit pas empecher de
+## fermer la fenetre, et le pire cas est de perdre les dernieres editions, pas
+## le fichier.
+func _flush_edits() -> void:
+	if _edits_flushed:
+		return
+	if stream == null or not is_instance_valid(terrain):
+		return
+	if edits == null or edits.edit_count == 0:
+		return
+	_edits_flushed = true
+	var tracker: VoxelSaveCompletionTracker = terrain.save_modified_blocks()
+	var waited: int = 0
+	var deadline: int = Time.get_ticks_msec() + SAVE_WAIT_MAX_MS
+	while tracker != null and not tracker.is_complete() and not tracker.is_aborted():
+		if Time.get_ticks_msec() >= deadline:
+			break
+		OS.delay_msec(4)
+		waited += 4
+	stream.flush()
+	print("[demo] %d edition(s) sauvegardees en %d ms" % [edits.edit_count, waited])
