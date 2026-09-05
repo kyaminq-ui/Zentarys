@@ -93,6 +93,13 @@ var _tops_mutex: Mutex = Mutex.new()
 ## Cellules de dispersion dont la flore est a refaire. Vidangees par le rendu.
 var _dirty_cells: Dictionary = {}
 
+## Pave englobant les blocs edites depuis le dernier reeclairage, en coordonnees
+## de scene. Vide quand il n'y a rien a refaire.
+var _relight_box: AABB = AABB()
+var _relight_pending: bool = false
+## Duree du dernier reeclairage, en microsecondes. Pour l'ATH et les tests.
+var last_relight_usec: int = 0
+
 
 func setup(terrain: Node, generator: CWVoxelGenerator, floor_y: int) -> void:
 	_generator = generator
@@ -151,6 +158,20 @@ func voxel_at(x: int, y: int, z: int) -> int:
 	return _generator.generated_voxel(x, y, z)
 
 
+## Couleur rendue stockee en un point. Pour l'inspection et les tests : c'est la
+## valeur que le mailleur lira, lumiere comprise.
+func raw_color_at(x: int, y: int, z: int) -> int:
+	if _tool == null:
+		return 0
+	var at := Vector3i(x, y, z)
+	if not _tool.is_area_editable(AABB(Vector3(at), Vector3.ONE)):
+		return 0
+	_tool.channel = CWPalette.CHANNEL_COLOR
+	var v: int = _tool.get_voxel(at)
+	_tool.channel = CWPalette.CHANNEL_TYPE
+	return v
+
+
 ## Vrai si la colonne est dans le monde. Bornes de `Chunk_getColumnAt` : les
 ## coordonnees monde tiennent dans `[0, 0x1000000)`, soit `WORLD_SIZE`.
 func in_world(x: int, z: int) -> bool:
@@ -178,6 +199,7 @@ func dig(at: Vector3i) -> int:
 	# intact, et le sommet ne bouge pas.
 	if at.y >= _top_of(at.x, at.z):
 		_set_top(at.x, at.z, _scan_top_below(at.x, at.y - 1, at.z))
+	_touch_light(at)
 	return left
 
 
@@ -197,6 +219,7 @@ func place(at: Vector3i, index: int) -> bool:
 	edit_count += 1
 	if not is_open(index) and at.y > _top_of(at.x, at.z):
 		_set_top(at.x, at.z, at.y)
+	_touch_light(at)
 	return true
 
 
@@ -293,3 +316,116 @@ func _scan_top_below(x: int, y_from: int, z: int) -> int:
 			return y
 		y -= 1
 	return _floor_y
+
+
+# -- Reeclairage local --------------------------------------------------------
+#
+# Le terrain genere n'a ni grotte ni surplomb : la descente du soleil y rend
+# « 255 partout au-dessus du sol », et le generateur n'appelle donc jamais
+# l'eclairage (`CWLight`, en-tete). C'est **l'edition** qui cree de l'ombre, et
+# c'est ici qu'on la calcule.
+#
+# Le pave a refaire est accumule pendant la frame et traite d'un coup : un
+# cratere de six cents coups de pioche ne demande qu'un reeclairage, pas six
+# cents. Sans cela le cout serait celui du pave entier, multiplie par le nombre
+# de blocs touches.
+
+
+func _touch_light(at: Vector3i) -> void:
+	var p := Vector3(at)
+	if _relight_pending:
+		_relight_box = _relight_box.expand(p)
+	else:
+		_relight_box = AABB(p, Vector3.ZERO)
+		_relight_pending = true
+
+
+## Vrai s'il reste un pave a reeclairer.
+func has_relight_pending() -> bool:
+	return _relight_pending
+
+
+## Recalcule la lumiere autour des editions accumulees et reecrit les couleurs.
+##
+## La marge de `CWLight.ITERATIONS` n'est pas facultative : la diffusion porte a
+## seize blocs, et un pave calcule sans marge est faux sur ses seize dernieres
+## colonnes — les voisins hors pave y comptent pour zero. On calcule donc large
+## et on ne reecrit que ce qui a change.
+func relight() -> int:
+	if not _relight_pending or _tool == null:
+		return 0
+	_relight_pending = false
+	var t0: int = Time.get_ticks_usec()
+
+	var m: int = CWLight.ITERATIONS
+	var lo := Vector3i(_relight_box.position) - Vector3i(m, m, m)
+	var hi := Vector3i(_relight_box.position + _relight_box.size) + Vector3i(m, m, m)
+	var size: Vector3i = hi - lo + Vector3i.ONE
+	if not _tool.is_area_editable(AABB(Vector3(lo), Vector3(size))):
+		return 0
+
+	# Les deux canaux d'un coup : les types pour calculer, les couleurs pour
+	# savoir lesquelles ont vraiment bouge.
+	#
+	# Les profondeurs se posent **avant** `create` : un tampon deja cree garde la
+	# sienne, et un canal de types en seize bits sortirait sur deux octets par
+	# voxel, ce qui decalerait toute la lecture en bloc qui suit.
+	var mask: int = (1 << CWPalette.CHANNEL_TYPE) | (1 << CWPalette.CHANNEL_COLOR)
+	var buf := VoxelBuffer.new()
+	buf.set_channel_depth(CWPalette.CHANNEL_TYPE, VoxelBuffer.DEPTH_8_BIT)
+	buf.set_channel_depth(CWPalette.CHANNEL_COLOR, CWPalette.COLOR_DEPTH)
+	buf.create(size.x, size.y, size.z)
+	_tool.copy(lo, buf, mask)
+
+	# Les canaux entiers d'un seul appel, au lieu d'un `get_voxel` par voxel :
+	# trente-six mille appels pour un simple coup de pioche, et c'etait le poste
+	# dominant du reeclairage. La disposition est celle de `VoxelBuffer` — Y
+	# d'abord —, et `CWLight` est ecrit dans cet ordre exactement pour que le
+	# canal se passe tel quel.
+	var count: int = size.x * size.y * size.z
+	var types: PackedByteArray = buf.get_channel_as_byte_array(CWPalette.CHANNEL_TYPE)
+	var colors: PackedByteArray = buf.get_channel_as_byte_array(CWPalette.CHANNEL_COLOR)
+	if types.size() != count or colors.size() != count * 4:
+		# Une profondeur de canal a change sous nos pieds. Mieux vaut ne rien
+		# reecrire que repeindre le monde de travers.
+		push_error("CWWorldEdits.relight : disposition de canal inattendue (%d, %d)"
+				% [types.size(), colors.size()])
+		return 0
+
+	var level: PackedByteArray = CWLight.compute(types, size)
+
+	# On ne reecrit que ce qui change, et on compare a la couleur **stockee** et
+	# non a celle de la palette : une case rouverte sur le ciel doit retrouver sa
+	# pleine couleur, ce qu'une comparaison a `raw_of` seule ne verrait jamais.
+	#
+	# La liste ne contient que les cases dont la couleur depend de la lumiere :
+	# ni l'air, ni la roche enterree. C'est ce qui evite de sonder chaque bloc
+	# plein du pave — dix-huit mille appels, dont l'immense majorite pour
+	# apprendre qu'un bloc n'a aucune face visible.
+	var cells: PackedInt32Array = CWLight.shaded_cells(types, level, size)
+	var written: int = 0
+	var ch: int = CWPalette.CHANNEL_COLOR
+	_tool.channel = ch
+	var sy: int = size.y
+	var sxy: int = size.y * size.x
+	var k: int = 0
+	var n: int = cells.size()
+	while k < n:
+		var i: int = cells[k]
+		var lvl: int = cells[k + 1]
+		k += 2
+		var want: int = CWLight.shade(types[i], lvl)
+		if colors.decode_u32(i * 4) == want:
+			continue
+		# Retour de l'indice aux coordonnees, dans l'ordre du tampon : Y est
+		# contigu, donc c'est lui le reste, et la colonne le quotient.
+		@warning_ignore("integer_division")
+		var col: int = i / sy
+		@warning_ignore("integer_division")
+		var cz: int = i / sxy
+		_tool.value = want
+		_tool.do_point(Vector3i(lo.x + col % size.x, lo.y + i % sy, lo.z + cz))
+		written += 1
+	_tool.channel = CWPalette.CHANNEL_TYPE
+	last_relight_usec = Time.get_ticks_usec() - t0
+	return written

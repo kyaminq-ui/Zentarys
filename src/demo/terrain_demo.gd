@@ -20,11 +20,8 @@ const VIEW_MIN: int = 128
 const VIEW_MAX: int = 3072
 const VIEW_STEP: int = 128
 
-## Nombre de coeurs laisses au fil principal et au rendu. Le reste part au pool
-## de generation : par defaut Voxel Tools n'en prend que la moitie, ce qui est
-## prudent pour un generateur natif mais bride le notre, qui est en GDScript et
-## donc le poste dominant du chargement.
-const CORES_RESERVED: int = 2
+## Fils de generation, ou -1 pour le calcul automatique. Voir `_pick_threads`.
+@export var generation_threads: int = -1
 
 ## Recherche de biome : rayon en zones de 16384 blocs, et pas de sondage a
 ## l'interieur d'une zone (un point par tuile).
@@ -65,10 +62,11 @@ const BIOME_KEYS: Dictionary = {
 @export var boost_multiplier: float = 6.0
 @export var mouse_sensitivity: float = 0.0022
 ## Distance de vue initiale, en blocs. Reglable en jeu par Page haut / Page bas.
+##
+## **La flore suit ce reglage**, toujours et sans knob separe : une couche de
+## vegetation qui s'arrete a mi-chemin du terrain trace un cercle net autour du
+## joueur, et ce cercle se voit bien plus qu'une touffe lointaine ne coute.
 @export var view_distance: int = 384
-## Distance de vue de la flore, en blocs. Sans rapport avec celle du terrain :
-## une touffe d'un demi-bloc ne couvre plus un pixel bien avant l'horizon.
-@export var flora_distance: int = 128
 
 ## Conserve les modifications du terrain d'une session a l'autre.
 ##
@@ -133,6 +131,11 @@ var _load_peak: int = 0
 var _pending_gen: int = 0
 var _pending_mesh: int = 0
 var _pending_main: int = 0
+## File du flux de sauvegarde. Elle a sa place a l'ATH au meme titre que les
+## deux autres : c'est elle qui bornait le chargement sans que rien ne le
+## montre, un flux SQLite sans index de cles faisant attendre chaque bloc au
+## disque avant sa mise en file de generation. Voir docs/ROADMAP.md.
+var _pending_stream: int = 0
 
 # Recherche de biome, executee sur un fil du pool general.
 var _search_task: int = -1
@@ -168,9 +171,7 @@ func _ready() -> void:
 
 	if Engine.has_singleton("VoxelEngine"):
 		_voxel_engine = Engine.get_singleton("VoxelEngine")
-		var wanted: int = maxi(1, OS.get_processor_count() - CORES_RESERVED)
-		if wanted > _voxel_engine.get_thread_count():
-			_voxel_engine.set_thread_count(wanted)
+		_voxel_engine.set_thread_count(_pick_threads())
 
 	_build_environment()
 	_build_terrain()
@@ -182,6 +183,33 @@ func _ready() -> void:
 		_shot_countdown = BOARD_SHOT_DELAY
 	elif auto_shot_delay > 0.0:
 		_shot_countdown = auto_shot_delay
+
+
+## Nombre de fils de generation.
+##
+## **Ce n'est pas le nombre de coeurs logiques**, et c'est contre-intuitif :
+## au-dela du nombre de coeurs *physiques*, l'echantillonnage du champ ne ralentit
+## pas, il s'effondre. Mesure du 2026-09-05, empreinte de 48 x 16 cartes de
+## hauteurs sur une machine a 16 fils logiques et 8 coeurs physiques :
+##
+##   | fils |  1   |  4  |  6  |  8  | 10  | 12   | 14   |
+##   |------|------|-----|-----|-----|-----|------|------|
+##   | mur  |12,4 s|5,7 s|4,4 s|3,2 s|7,9 s|10,9 s|13,5 s|
+##
+## A quatorze fils, le travail est **plus lent qu'en mono-fil**. La falaise tombe
+## exactement entre 8 et 10, c'est-a-dire au passage du nombre de coeurs
+## physiques : deux fils GDScript par coeur se disputent un cache et un
+## allocateur, et le surcout depasse le gain. Voir docs/ROADMAP.md.
+##
+## On suppose donc le SMT et on prend la moitie des fils logiques. Sur une
+## machine sans SMT ce choix est prudent plutot que faux ; `generation_threads`
+## est la pour le remettre en cause sur une autre machine.
+func _pick_threads() -> int:
+	if generation_threads > 0:
+		return generation_threads
+	@warning_ignore("integer_division")
+	var physical: int = OS.get_processor_count() / 2
+	return maxi(1, physical)
 
 
 func _build_terrain() -> void:
@@ -204,6 +232,15 @@ func _build_terrain() -> void:
 	if save_edits:
 		DirAccess.make_dir_recursive_absolute(SAVE_DIR)
 		var sqlite := VoxelStreamSQLite.new()
+		# Index des cles en memoire, pose **avant** la base : sans lui, chaque bloc
+		# charge attend une requete disque avant d'etre seulement mis en file de
+		# generation, et le chargement se retrouve borne par le flux au lieu de
+		# l'etre par le generateur. Mesure a 384 blocs, a nombre de fils egal :
+		# 39 s avec la requete, 32 s avec l'index, 29 s sans flux du tout.
+		#
+		# Le cache ne peut pas se tromper ici : `save_generator_output = false`, donc
+		# la base ne contient que des blocs edites, et l'index sait lesquels.
+		sqlite.set_key_cache_enabled(true)
 		sqlite.database_path = "%s/graine_%d.sqlite" % [SAVE_DIR, params.world_seed]
 		sqlite.save_generator_output = false
 		stream = sqlite
@@ -282,11 +319,18 @@ func _build_camera() -> void:
 func _build_flora() -> void:
 	flora = CWFloraRenderer.new()
 	flora.name = "Flora"
-	flora.view_distance = flora_distance
+	# Meme distance que le terrain, et non plus un reglage a part : voir
+	# `view_distance` et `set_view_distance`.
+	flora.view_distance = view_distance
 	# Le gabarit sert a lire une taille contre des mires : la flore dispersee
 	# n'y ferait qu'obstacle, et c'est justement elle qu'on cherche a regler.
 	flora.enabled = not scale_board
 	flora.setup(generator.scatter_grid(), params.world_origin, camera)
+	# Son propre outil, et non celui de `CWWorldEdits` : la couche d'edition
+	# change de canal et de mode a chaque coup de pioche, et une lecture qui
+	# tomberait au milieu lirait le mauvais canal.
+	if terrain != null and terrain.has_method("get_voxel_tool"):
+		flora.set_terrain(terrain.get_voxel_tool())
 	add_child(flora)
 
 
@@ -364,17 +408,23 @@ func _build_hud() -> void:
 	layer.add_child(hud)
 
 
-## Applique une distance de vue au terrain et a l'observateur.
+## Applique une distance de vue au terrain, a l'observateur et a la flore.
 ##
-## Sans effet en mode LOD, ou la distance est portee par `lod_view_distance`.
+## En mode LOD, le terrain garde la sienne (`lod_view_distance`) : seule la flore
+## suit. Voir le corps.
 func set_view_distance(blocks: int) -> void:
-	if use_lod:
-		return
 	view_distance = clampi(blocks, VIEW_MIN, VIEW_MAX)
-	if is_instance_valid(terrain) and terrain is VoxelTerrain:
-		terrain.max_view_distance = view_distance
-	if is_instance_valid(_viewer):
-		_viewer.view_distance = view_distance
+	# Le terrain en mode LOD porte sa propre distance (`lod_view_distance`) et ne
+	# suit pas ce reglage. La flore, elle, le suit dans les deux modes : c'est le
+	# seul cadran que le joueur ait pour la regler, et la couper court pendant que
+	# le terrain porte a deux mille blocs serait le pire des deux mondes.
+	if not use_lod:
+		if is_instance_valid(terrain) and terrain is VoxelTerrain:
+			terrain.max_view_distance = view_distance
+		if is_instance_valid(_viewer):
+			_viewer.view_distance = view_distance
+	if flora != null:
+		flora.view_distance = view_distance
 	_hud_timer = 0.0
 
 
@@ -540,6 +590,12 @@ func _process(delta: float) -> void:
 	if _search_task != -1 and WorkerThreadPool.is_task_completed(_search_task):
 		_finish_biome_search()
 
+	# Reeclairage des editions de la frame, en un seul passage. Le terrain genere
+	# n'a pas besoin de lumiere — un champ de hauteurs est eclaire partout ou on
+	# le voit — donc ceci ne tourne qu'apres un coup de pioche.
+	if edits != null and edits.has_relight_pending():
+		edits.relight()
+
 	if _shot_countdown > 0.0:
 		_shot_countdown -= delta
 		if _shot_countdown <= 0.0:
@@ -580,7 +636,8 @@ func _refresh_pending() -> void:
 	_pending_gen = int(tasks.get("generation", 0))
 	_pending_mesh = int(tasks.get("meshing", 0))
 	_pending_main = int(tasks.get("main_thread", 0))
-	var now: int = _pending_gen + _pending_mesh + int(tasks.get("streaming", 0))
+	_pending_stream = int(tasks.get("streaming", 0))
+	var now: int = _pending_gen + _pending_mesh + _pending_stream
 	if now > 0:
 		if _pending == 0:
 			_load_started_ms = Time.get_ticks_msec()
@@ -588,11 +645,12 @@ func _refresh_pending() -> void:
 		_load_peak = maxi(_load_peak, now)
 	elif _pending > 0:
 		# Front descendant : la vue est complete, la mesure devient valide.
-		print("[demo] vue %d blocs : stabilisee en %.1f s (pic %d taches, %d fils)" % [
+		print("[demo] vue %d blocs : stabilisee en %.1f s (pic %d taches, %d fils%s)" % [
 			view_distance,
 			float(Time.get_ticks_msec() - _load_started_ms) / 1000.0,
 			_load_peak,
-			_voxel_engine.get_thread_count()])
+			_voxel_engine.get_thread_count(),
+			"" if stream == null else ", flux actif"])
 	_pending = now
 
 
@@ -607,7 +665,8 @@ func _update_hud() -> void:
 	if _search_status != "":
 		busy = "   " + _search_status
 	elif _pending > 0:
-		busy = "   gen %d / maillage %d" % [_pending_gen, _pending_mesh]
+		busy = "   flux %d / gen %d / maillage %d" % [
+				_pending_stream, _pending_gen, _pending_mesh]
 
 	var lines: Array[String] = [
 		"%d, %d   y %d  (sol %d)" % [wx, wz, roundi(p.y), roundi(c.x)],
@@ -642,10 +701,11 @@ func _update_hud() -> void:
 				fs.y, fs.x, flora.view_distance,
 				"" if flora.enabled else "   (coupee)"])
 		if edits != null:
-			lines.append("editions : %d%s   pose : %s" % [
+			lines.append("editions : %d%s   pose : %s   lumiere %.1f ms" % [
 				edits.edit_count,
 				"" if stream != null else "   (non sauvegardees)",
-				CWPalette.name_of(build_block)])
+				CWPalette.name_of(build_block),
+				float(edits.last_relight_usec) / 1000.0])
 		lines.append("ZQSD/WASD + souris · Maj vite · Espace/Ctrl · Echap souris puis quitter")
 		lines.append("Clic gauche : creuser · clic droit : poser")
 		lines.append("Page haut/bas : distance de vue")

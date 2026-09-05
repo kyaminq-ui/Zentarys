@@ -39,9 +39,16 @@ const BATCH: int = 48
 ## Sans elle, une camera qui oscille sur une frontiere reconstruit sans fin.
 const KEEP_MARGIN: int = 1
 
-## Distance de vue de la flore, en blocs. Bien plus courte que celle du terrain :
-## un modele fin a plusieurs centaines de blocs ne couvre plus un pixel, et
-## l'original fait disparaitre sa flore de la meme facon.
+## Distance de vue de la flore, en blocs.
+##
+## La demo y recopie la distance de vue du terrain, et rien d'autre : une couche
+## de vegetation qui s'arrete avant lui dessine un cercle net autour du joueur,
+## et ce cercle se voit de loin. Le champ reste reglable pour les bancs d'essai
+## et les captures, ou l'on veut parfois isoler une couche.
+##
+## Ce que ca coute : la portee est un **rayon en cellules**, donc le nombre de
+## cellules croit avec son carre. Doubler la distance quadruple la memoire et le
+## travail de construction.
 @export var view_distance: int = 128:
 	set(value):
 		view_distance = maxi(0, value)
@@ -68,6 +75,26 @@ var _wanted: Dictionary = {}
 var _task: int = -1
 var _batch: Array[Vector2i] = []
 var _last_cell: Vector2i = Vector2i(0x7FFFFFFF, 0x7FFFFFFF)
+
+## Cellules tirees, mais dont le terrain n'est pas encore charge. Voir
+## `set_terrain`.
+var _waiting: Array[Vector2i] = []
+var _terrain: VoxelTool = null
+
+
+## Donne a la couche de flore de quoi savoir si le sol est arrive.
+##
+## Sans cela, la flore devance le terrain : elle se construit en une quinzaine de
+## secondes la ou le terrain en demande le double, et le joueur voit des touffes
+## flotter dans le vide en attendant que le sol les rejoigne. L'ecart grandit
+## avec la distance de vue, donc il empire exactement la ou l'on veut aller.
+##
+## La cellule attend donc que les blocs de donnees soient la sous ses plantes.
+## Le terrain passe ainsi toujours en premier — au pire d'une frame, le temps
+## que le maillage suive les donnees, ce qui est le bon ordre : du sol sans
+## flore se lit comme un monde qui charge, de la flore sans sol comme un bogue.
+func set_terrain(tool: VoxelTool) -> void:
+	_terrain = tool
 
 
 ## Transformation d'une plante : de son ancre en coordonnees monde vers le
@@ -116,6 +143,7 @@ func clear() -> void:
 		_live[c].queue_free()
 	_live.clear()
 	_queue.clear()
+	_waiting.clear()
 	_wanted.clear()
 	_last_cell = Vector2i(0x7FFFFFFF, 0x7FFFFFFF)
 
@@ -127,6 +155,7 @@ func _process(_delta: float) -> void:
 		return
 	_drop_edited()
 	_refresh_wanted()
+	_retry_waiting()
 	_pump()
 
 
@@ -163,18 +192,30 @@ func _refresh_wanted() -> void:
 	var reach: int = (view_distance + CWScatter.CELL_SIZE - 1) >> CWScatter.CELL_SHIFT
 	_wanted.clear()
 	var pending: Array[Vector2i] = []
-	for dz in range(-reach, reach + 1):
-		for dx in range(-reach, reach + 1):
-			if dx * dx + dz * dz > reach * reach:
-				continue
-			var c := Vector2i(here.x + dx, here.y + dz)
-			_wanted[c] = true
-			if not _live.has(c):
-				pending.append(c)
 
-	# Du plus proche au plus loin : ce qu'on a sous les yeux d'abord.
-	pending.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
-		return (a - here).length_squared() < (b - here).length_squared())
+	# Du plus proche au plus loin, par anneaux carres — et non par un tri.
+	#
+	# La portee suit desormais la distance de vue du joueur, qui monte a plusieurs
+	# milliers de blocs : a 3072, ce sont cent mille cellules, et les trier par
+	# comparateur GDScript prendrait plusieurs secondes **a chaque fois que la
+	# camera change de cellule**, soit tous les seize blocs parcourus. Emettre les
+	# anneaux dans l'ordre donne la meme chose — ce qu'on a sous les yeux d'abord —
+	# pour le prix du parcours seul.
+	var reach2: int = reach * reach
+	for r in range(0, reach + 1):
+		for dz in range(-r, r + 1):
+			# L'anneau de rayon r : ses deux lignes entieres, puis les deux seules
+			# colonnes qui restent. Sans ce saut on reparcourrait le disque entier
+			# a chaque rayon.
+			var step: int = 1 if absi(dz) == r else 2 * r
+			var dx: int = -r
+			while dx <= r:
+				if dx * dx + dz * dz <= reach2:
+					var c := Vector2i(here.x + dx, here.y + dz)
+					_wanted[c] = true
+					if not _live.has(c):
+						pending.append(c)
+				dx += step
 	_queue = pending
 
 	# Au-dela de la marge, on rend la memoire.
@@ -199,7 +240,10 @@ func _pump() -> void:
 		# immediat, et c'est le fil principal qui cree les noeuds.
 		for c in _batch:
 			if _wanted.has(c) and not _live.has(c):
-				_build_node(c)
+				if _ground_ready(c):
+					_build_node(c)
+				else:
+					_waiting.append(c)
 		_batch.clear()
 
 	if _queue.is_empty():
@@ -211,6 +255,53 @@ func _pump() -> void:
 	_task = WorkerThreadPool.add_task(func() -> void:
 		for c in cells:
 			scatter.cell(c.x, c.y))
+
+
+## Repasse sur les cellules qui attendaient leur sol.
+##
+## Borne a un lot par frame, et par rotation : une cellule qui n'est toujours pas
+## prete repart en fin de file au lieu de bloquer celles qui suivent. Sans cette
+## rotation, une seule cellule hors de la tranche verticale du terrain — un
+## sommet loin au-dessus de la camera, par exemple — arreterait toute la flore.
+func _retry_waiting() -> void:
+	if _waiting.is_empty():
+		return
+	var n: int = mini(_waiting.size(), BATCH)
+	var again: Array[Vector2i] = []
+	for i in n:
+		var c: Vector2i = _waiting[i]
+		if not _wanted.has(c) or _live.has(c):
+			continue
+		if _ground_ready(c):
+			_build_node(c)
+		else:
+			again.append(c)
+	_waiting = _waiting.slice(n)
+	_waiting.append_array(again)
+
+
+## Vrai si les blocs de terrain sont charges sous les plantes de la cellule.
+##
+## On interroge l'etendue verticale reelle des plantes, et non la colonne
+## entiere : le terrain ne charge qu'une tranche autour de l'observateur
+## (`view_distance_vertical_ratio`), donc exiger toute la hauteur du monde
+## reviendrait a ne jamais rien poser.
+func _ground_ready(c: Vector2i) -> bool:
+	if _terrain == null:
+		return true
+	var plants: Array = _scatter.cell(c.x, c.y)
+	if plants.is_empty():
+		return true
+	var lo: float = INF
+	var hi: float = -INF
+	for pl in plants:
+		lo = minf(lo, float(pl.y))
+		hi = maxf(hi, float(pl.y))
+	var size: float = float(CWScatter.CELL_SIZE)
+	return _terrain.is_area_editable(AABB(
+			Vector3(float(c.x * CWScatter.CELL_SIZE - _origin.x), lo,
+					float(c.y * CWScatter.CELL_SIZE - _origin.y)),
+			Vector3(size, hi - lo + 1.0, size)))
 
 
 ## Un noeud par cellule, un MultiMesh par modele qu'elle emploie.

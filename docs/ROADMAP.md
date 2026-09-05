@@ -512,11 +512,15 @@ Quatre corrections, dans l'ordre de leur effet :
    l'utilisent sont désactivés : 80 → 61 µs par colonne.
 4. **Pool de fils** porté de 8 à `cœurs − 2` (14 ici) ; Voxel Tools n'en prend
    que la moitié par défaut, ce qui est prudent pour un générateur natif mais
-   bride un générateur GDScript.
+   bride un générateur GDScript. ⚠️ **Cette correction était une erreur** : voir
+   « la falaise des fils » ci-dessous. Le bon nombre est celui des cœurs
+   *physiques*, pas des cœurs logiques.
+5. **Index des clés du flux SQLite** (`set_key_cache_enabled`), mesuré le
+   2026-09-05 — voir la section suivante, qui corrige le constat ci-dessus.
 
 | distance de vue | temps de stabilisation | pic de tâches |
 |---|---|---|
-| 384 blocs | **27 s** | 35 000 |
+| 384 blocs | **16 s** (8 fils, flux avec index) | 35 000 |
 | 768 blocs | **120 s** | 198 000 |
 
 Le débit ne s'écroule pas quand l'empreinte grandit : 1 290 tâches/s à 384,
@@ -533,6 +537,97 @@ descendant. Page haut / Page bas règlent la distance en jeu.
 portage en GDExtension qui débloque la suite, pas l'optimisation de
 l'ordonnancement : le pool est déjà saturé et le mailleur déjà à l'arrêt faute
 de matière.
+
+### Le flux de sauvegarde est passé devant la génération (2026-09-05)
+
+Le constat d'ouverture — « le poste dominant est la génération » — a cessé
+d'être vrai le jour où le jalon 1.8 a posé un `VoxelStreamSQLite` sur le
+terrain, et personne ne l'a vu parce que l'ATH n'affiche que `gen` et
+`maillage`. La file qui comptait était une troisième, invisible :
+
+| | `streaming` | `generation` | stabilisation |
+|---|---|---|---|
+| flux, sans index de clés | 34 508 en attente | **14** (= le nombre de fils) | **39 s** |
+| flux, index de clés | 33 029 en attente | 14 | **32 s** |
+| aucun flux | 0 | 32 328 en attente | **29 s** |
+
+Un `generation` bloqué à quatorze, c'est-à-dire exactement le nombre de fils,
+n'est pas un pool saturé : c'est un pool **affamé**. Chaque bloc attendait une
+requête SQLite avant d'être seulement mis en file de génération, et le
+chargement était borné par le disque au lieu de l'être par le champ de terrain.
+
+`VoxelStreamSQLite.set_key_cache_enabled(true)` tient en mémoire l'index des
+clés présentes dans la base et répond « absent » sans la toucher. Il ne peut pas
+se tromper ici : `save_generator_output = false`, donc la base ne contient que
+des blocs édités. C'est une **méthode et non une propriété exportée**, ce qui
+explique qu'elle soit passée inaperçue. Persistance revérifiée après coup :
+creuser, quitter, relire — le bloc revient bien en air.
+
+Il reste 3 s d'écart avec le monde sans flux, et elles sont structurelles : une
+tâche de flux par bloc subsiste, même quand elle ne fait que consulter un
+ensemble en mémoire. 34 500 tâches à ce prix, c'est ~8 % de débit en moins —
+c'est ce que coûte la persistance, et le prix est honnête.
+
+L'ATH affiche désormais les trois files — `flux N / gen N / maillage N` — et la
+ligne de stabilisation dit si un flux est monté. Sans cela, un ralentissement de
+ce côté serait resté invisible une seconde fois.
+
+### La falaise des fils (2026-09-05)
+
+Le pool avait été porté à `cœurs logiques − 2`, soit 14 sur cette machine, en
+supposant que plus de fils ne peut pas nuire. C'est faux, et pas d'un peu.
+Échantillonnage du champ sur une empreinte de 48 × 16 cartes de hauteurs, avec
+de vrais `Thread` :
+
+| fils | 1 | 4 | 6 | **8** | 10 | 12 | 14 |
+|---|---|---|---|---|---|---|---|
+| temps mur | 12,4 s | 5,7 s | 4,4 s | **3,2 s** | 7,9 s | 10,9 s | 13,5 s |
+| coût par fil (µs/colonne) | 63 | 113 | 112 | 128 | 368 | 604 | 885 |
+
+À quatorze fils, le travail est **plus lent qu'en mono-fil**. La falaise tombe
+exactement entre 8 et 10, c'est-à-dire au passage du nombre de cœurs physiques
+(16 fils logiques, 8 cœurs). Deux fils GDScript par cœur se disputent le cache
+et l'allocateur, et le surcoût dépasse largement ce que le SMT rapporte. Un
+témoin d'arithmétique purement locale, lui, monte bien à ×7,6 sur 14 fils : la
+falaise est propre au travail du générateur, pas à la machine.
+
+Confirmé en jeu, vue de 384 blocs :
+
+| fils | 6 | **8** | 10 | 14 |
+|---|---|---|---|---|
+| stabilisation | 17,6 s | **16,2 s** | 20,7 s | 31,5 s |
+
+Le pool prend donc la moitié des fils logiques (`TerrainDemo._pick_threads`, que
+`generation_threads` permet de forcer sur une autre machine). **31,5 s → 16,2 s
+pour un seul nombre changé**, et le temps CPU cumulé passe de 433 s à 127 s.
+
+*Méthode, pour la prochaine fois :* trois de mes bancs successifs ont menti
+avant celui-ci — l'un mesurait la taille du `WorkerThreadPool`, un autre des
+`Thread.start` qui échouaient en silence parce que j'avais filtré les erreurs.
+Un banc de parallélisme doit toujours porter un témoin dont on connaît d'avance
+le résultat.
+
+### La flore attend son sol
+
+La flore se construisait en ~16 s là où le terrain en demandait 32 : le joueur
+voyait des touffes flotter dans le vide en attendant que le sol les rejoigne, et
+l'écart grandissait avec la distance de vue — donc empirait exactement là où on
+veut aller. Une cellule attend désormais que les blocs de données soient chargés
+sous ses plantes (`CWFloraRenderer.set_terrain`, `is_area_editable` sur
+l'étendue verticale réelle des plantes, jamais sur la colonne entière : le
+terrain ne charge qu'une tranche autour de l'observateur).
+
+Les cellules pas encore prêtes tournent en fin de file plutôt que de bloquer
+celles qui suivent — sans quoi un sommet hors de la tranche verticale arrêterait
+toute la flore.
+
+### Ce qui reste, et ce qui débloquerait vraiment
+
+Après ces deux corrections, une vue de 384 blocs se stabilise en ~16 s, dont
+l'essentiel est toujours l'échantillonnage du champ : 2 304 cartes de hauteurs à
+68 µs la colonne, soit ~40 s de CPU mono-fil incompressibles en GDScript. Les
+leviers d'ordonnancement sont épuisés ; ce qui reste est le **portage du champ en
+GDExtension C++**, déjà identifié comme le verrou de la vue lointaine.
 
 ### Vue lointaine — état des lieux
 
