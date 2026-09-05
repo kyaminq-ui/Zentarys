@@ -25,7 +25,7 @@ ne s'ouvre pas proprement (il est déclaré dans `project.godot`).
 ## 2. Commandes
 
 ```
-# Suite de validation (271 vérifications, ~75 s)
+# Suite de validation (297 vérifications, ~20 s)
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd
 
 # Réimport après ajout d'un class_name (sinon l'éditeur ne le voit pas)
@@ -56,6 +56,23 @@ C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path 
 # dur par fichier. `-- --seul <nom>` ne refait qu'un modèle.
 "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" --background --factory-startup --python tools/blender/generer_flore.py
 
+# Regénération du lot d'arbres (14 .vox, ~13 s). Même chemin, mêmes garde-fous.
+"C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" --background --factory-startup --python tools/blender/generer_arbres.py
+
+# Regénération des neuf filons (~1 s). Python pur : à 1 voxel = 1 bloc, Blender
+# n'apporte rien. N'importe quel Python 3 fait l'affaire, celui de Blender aussi.
+"C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" --background --factory-startup --python tools/blender/generer_filons.py
+
+# Capture d'un biome donné, en jeu, sans piloter la fenêtre. C'est le SEUL moyen
+# de voir une couche de rendu : un test headless n'a pas de rastériseur.
+# --biome prend un index de surface (3 herbe, 4 herbe sèche, 5 jungle, 6 sable,
+# 7 neige, 9 toundra, 10 marais), --shot le délai en secondes avant la capture
+# (le temps que le terrain charge), puis la session se ferme d'elle-même.
+# Le PNG sort dans user://shots.
+./godot.windows.editor.double.x86_64.exe --path . scenes/terrain_demo.tscn \
+    --resolution 1600x900 -- --biome 7 --shot 32 --vue 256
+#   options : --sans-arbres, --sans-flore, pour isoler une couche
+
 # Gabarit d'échelle en jeu : mettre scale_board = true sur le nœud racine de
 # scenes/terrain_demo.tscn, puis lancer. Deux captures dans user://shots.
 # Carte ouverte au démarrage, pour une capture sans piloter la fenêtre :
@@ -76,7 +93,25 @@ biome, **Échap** rend la souris puis quitte.
 
 ## 3. État
 
-Jalon 1 (le monde) : **complet.** 1.1 à 1.10 sont portés, testés et vus en jeu.
+Jalon 1 (le monde) : 1.1 à 1.10 sont **portés, testés et vus en jeu** ; **1.11
+est aux trois quarts** — assets, dispersion et rendu faits, il manque le tronc
+écrit dans le terrain et la pose des filons. Suite de validation :
+**297 vérifications, 0 échec**, ~20 s.
+
+**1.11 — arbres et grande végétation, en cours** (2026-09-05). Trois temps
+prévus, deux faits. Le **lot d'assets** : 14 arbres sous
+`assets/models/arbres/` et 9 filons sous `assets/models/filons/`, produits par
+script comme la flore, déterministes — les 62 modèles du dépôt se régénèrent à
+l'identique. La **couche de dispersion** : `CWTreeScatter`, cellule de 64 blocs,
+bibliothèque à part, espacement minimum de 7 blocs qui tient au travers des
+frontières de cellule. Les arbres **sont en jeu**, sept biomes vérifiés en
+capture. Ce qui reste : le tronc en matière (donc la collision), et la pose des
+filons, qui appartient à la voie des entités du jalon 2.6.
+
+Deux décisions prises au passage, toutes deux notées dans les invariants §4 :
+la **frontière de palette** a bougé une fois (terrain 1–31 → 1–40) pour loger
+les filons, sans repeindre un seul modèle ; et les arbres se décident sur
+**leur propre champ** de bruit, pas sur les deux crêtes de la flore.
 
 **1.7 — contenu de biome, fait** (2026-09-05, au soir). La mécanique de
 dispersion était en place depuis le 2026-09-04 ; ce qui manquait était le
@@ -161,13 +196,24 @@ tools/inspect_model.gd     inventaire d'un .vox : gabarit, index, plages
 tools/repaint_models.gd    remet un .vox dans la palette de projet
 tools/preview_map.gd       aperçu de la carte, vierge et après une diagonale
 docs/prompt_generation_arbres.md  commande du lot d'arbres (jalon 1.11)
-tools/blender/             générateur du lot de flore (Python + bpy)
+tools/blender/             générateurs des lots de modèles (Python + bpy)
   flore_vox.py               palette verbatim, écriture .vox, garde-fous
   flore_formes.py            brins, tiges, feuilles, corolles, cailloux
   flore_blender.py           courbes, métaballes, échantillonnage sur grille
+  generer_flore.py           les 39 modèles de flore basse (jalon 1.7)
+  arbres_formes.py           futs, charpentes, frondaisons, conifères, palmes
+  generer_arbres.py          les 14 modèles d'arbres (jalon 1.11)
   generer_flore.py           le catalogue des 39, une graine par modèle
+  arbres_formes.py           futs, charpentes, frondaisons, conifères, palmes
+  generer_arbres.py          le catalogue des 14 arbres (jalon 1.11)
+  generer_filons.py          les 9 filons, à 1 voxel = 1 bloc
+src/worldgen/cw_tree_rules.gd    les espèces d'arbres et leurs trois montages
+src/worldgen/cw_tree_scatter.gd  la couche jumelle : cellule de 64, espacement
+tests/tree_test.gd         lot, enveloppes, dispersion, espacement, montage
 assets/palette/            palette de projet + PALETTE.md
 assets/models/flore/<biome>/  39 modèles, un dossier par biome
+assets/models/arbres/<biome>/ 14 modèles d'arbres
+assets/models/filons/      9 filons, estampables (1 voxel = 1 bloc)
 assets/models/             MODELS.md (échelle, palette et conventions)
 docs/images/               gabarit, carte et composition de flore, en jeu
 ```
@@ -296,6 +342,31 @@ docs/images/               gabarit, carte et composition de flore, en jeu
     l'autre, et une cellule ne se reproduirait plus à l'identique selon les
     rejets qu'elle a rencontrés — un monde qui change entre deux visites, sans
     rien pour le signaler.
+24. **La flore et les arbres ont deux bibliothèques, et ce n'est pas du
+    rangement.** `CWScatter` calcule la marge de `placements_in` sur
+    `CWModelLibrary.max_radius_blocks`, *tous modèles confondus* (invariant
+    n° 17). Ranger un houppier dans la bibliothèque de la flore ferait passer
+    cette marge de 2 blocs à 9 pour **toute** la flore, et chaque `MultiMesh`
+    d'herbe porterait une boîte de visibilité démesurée — sans qu'aucun test ne
+    tombe, seulement des images de plus à dessiner. `shared()` et
+    `shared_trees()` restent séparées ; deux vérifications de `tests/tree_test.gd`
+    mesurent les deux maxima et refusent qu'ils se rejoignent.
+25. **L'espacement minimum des arbres ne doit jamais consulter une cellule
+    construite.** `CWTreeScatter._candidats` est une fonction **pure de l'indice
+    de cellule** : c'est ce qui permet à une cellule de regarder ses huit
+    voisines sans déclencher leur construction. Le jour où cette fonction
+    échantillonnerait autre chose que le bruit et le centre de sa cellule, la
+    dispersion deviendrait récursive et se bloquerait sous verrou. La règle du
+    **rang absolu** `(cz, cx, i)` va avec : elle rend la décision indépendante
+    de la cellule qui la pose, et elle n'est valable que tant que
+    `ESPACEMENT <= cell_size`.
+26. **La frontière `RANGE_TERRAIN_END` / `RANGE_CREATURES_BEGIN` a bougé une
+    fois, le 2026-09-05, et ce sera la dernière fois gratuitement.** Elle est
+    passée de 31/32 à 40/41 pour loger les neuf filons. C'était sans coût
+    *parce que la plage créatures n'avait aucune entrée peinte* ; dès qu'un
+    modèle de créature existera, le même geste imposera de repasser tout un lot
+    par `tools/repaint_models.gd`. Vérifier avec `inspect_model.gd` avant de
+    toucher à une frontière, jamais après.
 
 ## 5. Pièges connus
 
@@ -345,7 +416,43 @@ docs/images/               gabarit, carte et composition de flore, en jeu
   par colonne avant d'être déplacé sur le chemin froid. Mesurer avant de
   supposer que c'est le verrou qui coûte.
 
-## 6. Prochaine tâche — 1.11 (assets) ou 2.6 (code)
+## 6. Prochaine tâche — 1.11 (le tronc en matière) ou 2.6 (apparition)
+
+> **Mise à jour du 2026-09-05, tard.** Le jalon 1.11 est **aux trois quarts
+> fait** : les 14 modèles d'arbres, les 9 filons, la couche de dispersion, et
+> les arbres sont **en jeu** — sept biomes regardés en capture. La suite passe à
+> **297 vérifications, 0 échec**, dont un fichier neuf, `tests/tree_test.gd`,
+> qui a remplacé le garde-fou provisoire qui vivait dans le script Python.
+>
+> **Ce qui reste de 1.11, et c'est la partie intéressante :**
+>
+> * **le tronc écrit dans le terrain.** Aujourd'hui il est *instancié*, comme
+>   le reste : il ne se creuse pas et ne porte pas de collision. La source
+>   l'écrit en colonnes de blocs (`World_fillVoxelColumnTyped`), et c'est le
+>   premier objet du projet à traverser la matière et l'instance — `CWWorldEdits`
+>   sait déjà écrire, `CWFloraRenderer` sait déjà instancier, il faut les faire
+>   poser au même endroit et **rester d'accord après une édition**. C'est pour
+>   cela que `CWTreeScatter._piece` met `fx = fz = 0.5` : le tronc est centré sur
+>   sa colonne, comme le sera la colonne de blocs ;
+> * **la pose des filons.** Les neuf modèles existent, le tirage de rareté est
+>   porté (`CWPalette.roll_ore`), il manque *où* ils affleurent. Cela appartient
+>   à la voie des entités, donc au jalon 2.6 ;
+> * **la réduction en distance.** `CWVoxelModel.reduced(n)` n'a toujours aucun
+>   usage. Un arbre est le premier modèle assez gros pour la justifier, et la
+>   couche existe maintenant pour l'accrocher.
+>
+> **Deux choses apprises en produisant, qui coûteraient cher à redécouvrir :**
+>
+> * **l'ancre est le centre du gabarit**, pas le pied du tronc. Les futs sont
+>   dessinés presque d'aplomb pour cette raison. Pour une **palme**, dont le
+>   point d'attache est à une extrémité, l'écart est structurel : le montage d'un
+>   palmier pose ses palmes au sommet du stipe sans décalage d'attache, ce qui se
+>   voit d'un peu près. À corriger avec le tronc en matière ;
+> * **un test headless ne montre pas une couche de rendu.** Trois défauts n'ont
+>   été trouvés qu'en capture — houppiers grumeleux, touffes d'herbe trop
+>   clairsemées, broussaille de neige orange sur sol cyan — et aucun n'aurait pu
+>   l'être autrement. D'où `-- --biome N --shot S` sur la démo (§2).
+
 
 **Où on en est, au 2026-09-05 au soir.** Les **dix systèmes du terrain sont
 faits** (1.1 à 1.10). 1.7 s'est fermé avec la table type de décor → modèle, qui
@@ -362,12 +469,13 @@ pour les arbres ; il y en a une maintenant.
 
 **Deux portes sont ouvertes, et elles ne demandent pas le même travail.**
 
-- **Jalon 1.11 — arbres et grande végétation** : c'est d'abord un **lot
-  d'assets**. La commande est écrite (`docs/prompt_generation_arbres.md`, 14
-  modèles), le chemin de production est celui de la flore — MCP Blender, `bpy`,
-  un script déterministe dans `tools/blender/` —, et le code qui suivra est une
-  seconde couche de dispersion, pas une reprise du terrain. `docs/ROADMAP.md`,
-  §1.11.
+- **Jalon 1.11 — arbres et grande végétation** : le lot d'assets ~~est d'abord
+  à produire~~ **est produit** (14 modèles, le 2026-09-05, encadré ci-dessus).
+  Ce qui reste est du code : une **seconde couche de dispersion** — cellule de
+  64 blocs plutôt que 16, densité en arbres par cellule, espacement minimum
+  entre deux troncs, sa propre marge —, puis l'**assemblage** tronc +
+  houppiers, premier objet du projet à traverser la matière et l'instance.
+  `docs/ROADMAP.md`, §1.11.
 - **Jalon 2.6 — les points d'apparition** : c'est du **code pur**, et la source
   est déjà lue.
 
@@ -631,12 +739,13 @@ prompt sur trois rôles — voir §8, c'est la seule divergence qui reste.
 
 #### Les lots suivants, pour information
 
-- **Jalon 1.11, arbres et grande végétation (14)** : houppiers, troncs, sapins,
-  palmes, arbre mort. Commande écrite en `docs/prompt_generation_arbres.md` ;
-  même chaîne que la flore. Deux choses le distinguent du lot précédent : un
-  arbre sort de l'enveloppe de la flore (jusqu'à 160 voxels, la boîte de
-  `thorn-tree` étant de 3 × 3 × 12 blocs), et un **houppier n'a pas de tronc** —
-  il se pose au sommet d'un tronc écrit dans le terrain, ce qui fait de lui le
+- ~~**Jalon 1.11, arbres et grande végétation (14)**~~ **livré le 2026-09-05** :
+  houppiers, troncs, sapins, palmes, arbre mort, sous `assets/models/arbres/`.
+  Même chaîne que la flore. Deux choses le distinguaient du lot précédent, et
+  elles se retrouvent dans le code : un arbre sort de l'enveloppe de la flore
+  (jusqu'à 160 voxels, la boîte de `thorn-tree` étant de 3 × 3 × 12 blocs),
+  d'où un plafond par classe passé à `flore_vox.ecris` ; et un **houppier n'a
+  pas de tronc** — il se pose au sommet d'un tronc, ce qui fait de lui le
   premier objet du projet à traverser les deux mondes.
 - **Jalon 1.11, les neuf filons** : **bloqués sur une décision de palette**, pas
   sur le dessin. Un filon s'estampe dans le terrain, donc chacun de ses voxels

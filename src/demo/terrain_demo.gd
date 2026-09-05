@@ -124,6 +124,7 @@ var terrain: VoxelNode
 var edits: CWWorldEdits
 var stream: VoxelStream
 var flora: CWFloraRenderer
+var trees: CWFloraRenderer
 var world_map: CWWorldMap
 var map_overlay: CWMapOverlay
 var camera: Camera3D
@@ -180,6 +181,10 @@ var _map_flushed: bool = false
 
 ## Compte a rebours de la capture automatique. Negatif = pas de capture prevue.
 var _shot_countdown: float = -1.0
+## Quitter juste apres la capture demandee en ligne de commande. Sans cela il
+## faut deviner un nombre de trames pour `--quit-after`, qui depend de la vitesse
+## de la machine et coupe la session avant la capture une fois sur deux.
+var _shot_then_quit: bool = false
 ## Capture du gabarit : 0 = vue d'ensemble, 1 = gros plan sur les modeles.
 var _shot_stage: int = 0
 var _board: CWScaleBoard = null
@@ -213,6 +218,49 @@ func _ready() -> void:
 		_shot_countdown = BOARD_SHOT_DELAY
 	elif auto_shot_delay > 0.0:
 		_shot_countdown = auto_shot_delay
+	_read_cmdline()
+
+
+## Reglages passes en ligne de commande, apres `--`.
+##
+##   <godot> --path . scenes/terrain_demo.tscn -- --biome 6 --shot 20 --graine 7
+##
+## Sert a valider en jeu sans piloter la fenetre : se poser dans un biome
+## donne, laisser charger, prendre une capture, quitter. C'est le seul moyen
+## d'obtenir une image d'une couche de rendu — un test headless n'a pas de
+## rasteriseur —, et c'est ainsi que la couche des arbres a ete verifiee.
+##
+## `--biome` prend un index de surface de `CWPalette` (3 herbe, 4 herbe seche,
+## 5 jungle, 6 sable, 7 neige, 9 toundra, 10 marais).
+func _read_cmdline() -> void:
+	var args: PackedStringArray = OS.get_cmdline_user_args()
+	var i: int = 0
+	while i < args.size():
+		match args[i]:
+			"--biome":
+				if i + 1 < args.size():
+					i += 1
+					# La recherche part sur un fil et repose la camera quand elle
+					# trouve. Le compte a rebours de la capture, lui, tourne des
+					# maintenant : il faut de toute facon laisser le terrain
+					# charger apres le saut.
+					start_biome_search(int(args[i]))
+			"--shot":
+				if i + 1 < args.size():
+					i += 1
+					_shot_countdown = float(args[i])
+					_shot_then_quit = true
+			"--vue":
+				if i + 1 < args.size():
+					i += 1
+					set_view_distance(int(args[i]))
+			"--sans-arbres":
+				if trees != null:
+					trees.enabled = false
+			"--sans-flore":
+				if flora != null:
+					flora.enabled = false
+		i += 1
 
 
 ## Nombre de fils de generation.
@@ -363,6 +411,21 @@ func _build_flora() -> void:
 		flora.set_terrain(terrain.get_voxel_tool())
 	add_child(flora)
 
+	# La couche des arbres : le meme rendu, une autre dispersion. Elle a sa
+	# cellule (64 blocs), sa bibliotheque et sa marge — voir `CWTreeScatter`.
+	# L'ombre portee, elle, est allumee ici et nulle part ailleurs : c'est la
+	# moitie de ce qui pose un arbre dans le paysage, et il y en a cent fois
+	# moins que de touffes d'herbe.
+	trees = CWFloraRenderer.new()
+	trees.name = "Trees"
+	trees.view_distance = view_distance
+	trees.enabled = not scale_board
+	trees.cast_shadows = true
+	trees.setup(generator.tree_scatter_grid(), params.world_origin, camera)
+	if terrain != null and terrain.has_method("get_voxel_tool"):
+		trees.set_terrain(terrain.get_voxel_tool())
+	add_child(trees)
+
 
 ## Pose le gabarit d'echelle au sol, devant la camera, et regarde-le.
 func _build_scale_board() -> void:
@@ -476,6 +539,8 @@ func set_view_distance(blocks: int) -> void:
 			_viewer.view_distance = view_distance
 	if flora != null:
 		flora.view_distance = view_distance
+	if trees != null:
+		trees.view_distance = view_distance
 	_hud_timer = 0.0
 
 
@@ -748,6 +813,9 @@ func _process(delta: float) -> void:
 		_shot_countdown -= delta
 		if _shot_countdown <= 0.0:
 			capture_screenshot()
+			if _shot_then_quit:
+				_shutdown()
+				return
 			if _shot_stage == 0 and _board != null:
 				# Second cliche, cadre sur les modeles : a la distance qui montre
 				# la mire de 16 blocs, une plante d'un demi-bloc est un pixel.
@@ -852,6 +920,10 @@ func _update_hud() -> void:
 			lines.append("flore : %d plantes sur %d cellules, vue %d blocs%s" % [
 				fs.y, fs.x, flora.view_distance,
 				"" if flora.enabled else "   (coupee)"])
+		if trees != null:
+			var ts: Vector2i = trees.stats()
+			lines.append("arbres : %d pieces sur %d cellules de 64%s" % [
+				ts.y, ts.x, "" if trees.enabled else "   (coupee)"])
 		if edits != null:
 			lines.append("editions : %d%s   pose : %s   lumiere %.1f ms" % [
 				edits.edit_count,

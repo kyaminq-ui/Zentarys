@@ -62,6 +62,15 @@ const KEEP_MARGIN: int = 1
 		if not enabled:
 			clear()
 
+## Les instances portent-elles une ombre ?
+##
+## Faux pour la flore, et c'est mesure : des milliers de touffes d'un demi-bloc
+## dans la carte d'ombres coutent cher pour une ombre qu'on ne distingue pas de
+## celle du sol. Vrai pour les **arbres**, ou c'est l'inverse — l'ombre portee
+## d'un arbre de huit blocs est la moitie de ce qui le pose dans le paysage, et
+## il y en a cent fois moins.
+@export var cast_shadows: bool = false
+
 var _scatter: CWScatter = null
 var _origin: Vector2i = Vector2i.ZERO
 var _camera: Node3D = null
@@ -116,7 +125,7 @@ static func instance_transform(pl: CWScatter.Placement,
 			Vector3(scale, scale, scale))
 	var pos := Vector3(
 			float(pl.x - world_origin.x) + pl.fx,
-			float(pl.y),
+			float(pl.y) + pl.fy,
 			float(pl.z - world_origin.y) + pl.fz)
 	# `mesh_offset` est dans le repere du maillage : il subit la rotation et
 	# l'echelle comme le reste, sinon la plante glisse d'un quart de gabarit a
@@ -183,13 +192,13 @@ func _drop_edited() -> void:
 ## la meme cellule, il n'y a rien a decider.
 func _refresh_wanted() -> void:
 	var here := Vector2i(
-			CWScatter.cell_of(_origin.x + floori(_camera.global_position.x)),
-			CWScatter.cell_of(_origin.y + floori(_camera.global_position.z)))
+			_scatter.cell_index(_origin.x + floori(_camera.global_position.x)),
+			_scatter.cell_index(_origin.y + floori(_camera.global_position.z)))
 	if here == _last_cell and not _wanted.is_empty():
 		return
 	_last_cell = here
 
-	var reach: int = (view_distance + CWScatter.CELL_SIZE - 1) >> CWScatter.CELL_SHIFT
+	var reach: int = (view_distance + _scatter.cell_size - 1) >> _scatter.cell_shift
 	_wanted.clear()
 	var pending: Array[Vector2i] = []
 
@@ -297,10 +306,10 @@ func _ground_ready(c: Vector2i) -> bool:
 	for pl in plants:
 		lo = minf(lo, float(pl.y))
 		hi = maxf(hi, float(pl.y))
-	var size: float = float(CWScatter.CELL_SIZE)
+	var size: float = float(_scatter.cell_size)
 	return _terrain.is_area_editable(AABB(
-			Vector3(float(c.x * CWScatter.CELL_SIZE - _origin.x), lo,
-					float(c.y * CWScatter.CELL_SIZE - _origin.y)),
+			Vector3(float(c.x * _scatter.cell_size - _origin.x), lo,
+					float(c.y * _scatter.cell_size - _origin.y)),
 			Vector3(size, hi - lo + 1.0, size)))
 
 
@@ -354,9 +363,8 @@ func _build_node(c: Vector2i) -> void:
 		mmi.name = model.name
 		mmi.multimesh = mm
 		mmi.material_override = CWPalette.build_opaque_material()
-		# Des milliers de touffes d'un demi-bloc dans la carte d'ombres coutent
-		# cher pour une ombre qu'on ne distingue pas de celle du sol.
-		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mmi.cast_shadow = (GeometryInstance3D.SHADOW_CASTING_SETTING_ON if cast_shadows
+				else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
 		instances.append(mmi)
 		node.add_child(mmi)
 

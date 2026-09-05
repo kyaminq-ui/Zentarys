@@ -28,6 +28,7 @@ func _initialize() -> void:
 	_test_generator()
 	_test_decor()
 	_test_flora()
+	_test_trees()
 	_test_edits()
 	_test_light()
 	_test_map()
@@ -306,6 +307,10 @@ func _test_flora() -> void:
 	CWFloraTest.new().run(self)
 
 
+func _test_trees() -> void:
+	CWTreeTest.new().run(self)
+
+
 func _test_edits() -> void:
 	CWEditTest.new().run(self)
 
@@ -438,6 +443,77 @@ func _test_palette() -> void:
 		if c[i].a <= 0.0 and not (i >= 228 and i <= 233):
 			asset_holes += 1
 	_ok("plages d'assets renseignees", asset_holes == 0, "%d trous" % asset_holes)
+
+	# -- Les neuf filons (jalon 1.11) -----------------------------------------
+	#
+	# Ils ont fait bouger `RANGE_TERRAIN_END` de 31 a 40 le 2026-09-05. Ce qui
+	# est verrouille ici, c'est ce dont depend la suite : qu'ils soient bien
+	# **dans la plage terrain** (un filon est de la matiere, il s'estampe et il
+	# se mine), qu'ils soient **consecutifs et alignes sur les codes d'entite
+	# 131-139** de la source, et que leurs teintes se distinguent — neuf filons
+	# de la meme couleur dans une paroi grise ne servent a rien.
+	_ok("les neuf filons sont dans la plage terrain",
+			CWPalette.ORE_BEGIN >= CWPalette.RANGE_TERRAIN_BEGIN
+			and CWPalette.ORE_END <= CWPalette.RANGE_TERRAIN_END,
+			"%d-%d dans %d-%d" % [CWPalette.ORE_BEGIN, CWPalette.ORE_END,
+			CWPalette.RANGE_TERRAIN_BEGIN, CWPalette.RANGE_TERRAIN_END])
+	_ok("neuf filons, exactement",
+			CWPalette.ORE_END - CWPalette.ORE_BEGIN + 1 == 9)
+
+	# `index = 32 + (code - 131)`. Ce sera le chemin le plus court le jour ou la
+	# voie des entites sera portee : la table de rarete rend un rang, ce rang est
+	# un code, ce code est un index.
+	var mapping_ok: bool = true
+	for code in range(CWPalette.ORE_CODE_BEGIN, CWPalette.ORE_CODE_BEGIN + 9):
+		var idx: int = CWPalette.ore_of_code(code)
+		if not CWPalette.is_ore(idx) or CWPalette.code_of_ore(idx) != code:
+			mapping_ok = false
+	_ok("code d'entite 131-139 <-> index de filon, aller-retour", mapping_ok)
+	_ok("un code hors de la plage ne rend pas de filon",
+			CWPalette.ore_of_code(CWPalette.ORE_CODE_BEGIN - 1) == CWPalette.AIR
+			and CWPalette.ore_of_code(CWPalette.ORE_CODE_BEGIN + 9) == CWPalette.AIR
+			and CWPalette.code_of_ore(CWPalette.STONE) == -1)
+
+	var teintes: Dictionary = {}
+	for i in range(CWPalette.ORE_BEGIN, CWPalette.ORE_END + 1):
+		teintes[c[i]] = true
+	_ok("les neuf filons ont neuf teintes distinctes", teintes.size() == 9,
+			"%d teintes" % teintes.size())
+
+	# La table de rarete de `docs/systems/02`, §5.4, portee verbatim. On la
+	# deroule sur les 1 000 combinaisons possibles plutot que par tirage : le
+	# resultat est exact, et il tombe sur les pourcentages annonces par l'analyse.
+	var counts: Dictionary = {}
+	for a in 10:
+		for b in 100:
+			var ore: int = CWPalette.roll_ore(a, b)
+			counts[ore] = int(counts.get(ore, 0)) + 1
+	var pct := func(ore: int) -> float:
+		return 100.0 * float(counts.get(ore, 0)) / 1000.0
+	print("     filons : fer %.1f %%, or %.1f %%, argent %.1f %%, emeraude %.1f %%, saphir %.1f %%, rubis %.1f %%, diamant %.1f %%"
+			% [pct.call(CWPalette.ORE_IRON), pct.call(CWPalette.ORE_GOLD),
+			pct.call(CWPalette.ORE_SILVER), pct.call(CWPalette.ORE_EMERALD),
+			pct.call(CWPalette.ORE_SAPPHIRE), pct.call(CWPalette.ORE_RUBY),
+			pct.call(CWPalette.ORE_DIAMOND)])
+	_ok("rarete des filons conforme a la table de la source",
+			is_equal_approx(pct.call(CWPalette.ORE_IRON), 70.0)
+			and is_equal_approx(pct.call(CWPalette.ORE_GOLD), 10.0)
+			and is_equal_approx(pct.call(CWPalette.ORE_SILVER), 10.0)
+			and is_equal_approx(pct.call(CWPalette.ORE_EMERALD), 9.1)
+			and is_equal_approx(pct.call(CWPalette.ORE_SAPPHIRE), 0.5)
+			and is_equal_approx(pct.call(CWPalette.ORE_RUBY), 0.3)
+			and is_equal_approx(pct.call(CWPalette.ORE_DIAMOND), 0.1), str(counts))
+
+	# Les neuf modeles sur le disque, et rien que de la matiere de terrain
+	# dedans : un filon peint en feuillage sortirait vert.
+	var ore_dir: String = "res://assets/models/filons/"
+	var ore_missing: Array = []
+	for nom in ["or", "fer", "argent", "gres", "emeraude", "saphir", "rubis",
+			"diamant", "cristal_de_glace"]:
+		if not FileAccess.file_exists(ore_dir + nom + ".vox"):
+			ore_missing.append(nom)
+	_ok("les neuf modeles de filon sont sur le disque", ore_missing.is_empty(),
+			str(ore_missing))
 
 	var pal: Resource = CWPalette.build_voxel_palette()
 	_ok("ressource VoxelColorPalette construite",

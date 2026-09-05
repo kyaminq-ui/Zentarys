@@ -31,7 +31,8 @@ et des structures.
 se génère, se creuse, se sauvegarde, s'éclaire, se garnit et se cartographie.
 **1.11 est ouvert par-dessus** — la grande végétation, qui prolonge 1.7 sans le
 remettre en cause : c'est un lot d'assets et une seconde couche de dispersion,
-pas une reprise du terrain. Le reste des points ouverts est de la finition,
+pas une reprise du terrain. **Le lot d'assets est livré** (14 modèles, le
+2026-09-05) ; il reste du code. Le reste des points ouverts est de la finition,
 listée en dette technique, plus les questions d'analyse encore pendantes de
 `docs/systems/02`, §9.
 
@@ -47,7 +48,7 @@ listée en dette technique, plus les questions d'analyse encore pendantes de
 | 1.8 | Colonnes persistantes, édition | `Chunk_getColumnAt` @00406100 + `VoxelTool` | ✅ | `docs/systems/03` |
 | 1.9 | Éclairage voxel | `VoxelChunk_propagateSunlight` @0059a0e0 | ✅ | porté, rendu passé en `COLOR_RAW` ; `docs/systems/04` |
 | 1.10 | Carte du monde | `WorldMap.cpp`, `loadLandscapeTile` @006024d0, `NameGen_generateRegionName` | ✅ | pièces de Voronoï, découverte, noms ; `docs/systems/05` |
-| 1.11 | **Arbres et grande végétation** | voie des entités, `docs/systems/02` §5.2 | ⬜ | lot d'assets + seconde couche de dispersion ; le feuillu est un assemblage |
+| 1.11 | **Arbres et grande végétation** | voie des entités, `docs/systems/02` §5.2 | 🔶 | **assets (14 + 9 filons) et dispersion faits, arbres en jeu** ; reste le tronc écrit dans le terrain (collision) et la pose des filons |
 
 ### 1.6 — Éléments de tuile (fait)
 
@@ -241,7 +242,7 @@ La table par biome de `CWModelLibrary` devient une table **par rôle** : les 39
 modèles sont répartis en neuf rôles (couvert, fleur, caillou, sous-bois, rare,
 roseau, algue, corail, fond), et deux vérifications tiennent la correspondance —
 aucun rôle atteignable sans modèle, aucun modèle rangé sous un rôle
-inatteignable. 271 vérifications au total.
+inatteignable. 271 vérifications au total à cette date.
 
 **Ce qui reste ouvert**, et ce n'est plus bloquant : le nénuphar (pas de modèle
 dans le lot, et `surface_index` ne rend jamais `WATER`), le lacet libre de trois
@@ -563,7 +564,7 @@ en met dix-huit par région.
 
 ---
 
-### 1.11 — Arbres et grande végétation (à faire)
+### 1.11 — Arbres et grande végétation (assets faits, code à faire)
 
 Le jalon 1.7 a porté la **flore basse** : ce qui pousse au sol, treize fois plus
 fin qu'un bloc, instancié sans entité. Il ne couvre pas **ce qui a une
@@ -601,14 +602,16 @@ ses houppiers —, sans doute inlinée dans `generateBiomeContent`.
 
 **Trois choses à faire, dans cet ordre.**
 
-**1 — Le lot d'assets, par le même chemin que la flore.** Le lot des 39 modèles
-de flore est produit par script — `tools/blender/generer_flore.py`, une graine
-en dur par fichier, le lot se régénère à l'identique —, et le document qui a
-servi à le commander est `docs/prompt_generation_flore.md`. Le lot d'arbres suit
-exactement ce chemin : `docs/prompt_generation_arbres.md` pour la commande,
-`tools/blender/generer_arbres.py` pour la production, les mêmes garde-fous —
-palette de projet recopiée verbatim, index hors plages refusés à l'écriture,
-enveloppe vérifiée. Contenu proposé, **~14 modèles** :
+**1 — Le lot d'assets, par le même chemin que la flore. ✅ Fait le 2026-09-05.**
+Le lot des 39 modèles de flore est produit par script —
+`tools/blender/generer_flore.py`, une graine en dur par fichier, le lot se
+régénère à l'identique —, et le document qui a servi à le commander est
+`docs/prompt_generation_flore.md`. Le lot d'arbres a suivi exactement ce chemin :
+`docs/prompt_generation_arbres.md` pour la commande,
+`tools/blender/generer_arbres.py` + `arbres_formes.py` pour la production, les
+mêmes garde-fous — palette de projet recopiée verbatim, index hors plages
+refusés à l'écriture, enveloppe vérifiée. **14 modèles livrés** sous
+`assets/models/arbres/<biome>/` :
 
 | surface | modèles |
 |---|---|
@@ -620,21 +623,98 @@ enveloppe vérifiée. Contenu proposé, **~14 modèles** :
 | neige | `sapin`, `sapin_enneige` |
 | toundra | `sapin_rabougri` |
 
+Mesures réelles, à connaître avant d'écrire la couche de dispersion : les trois
+futs font 88 à 105 voxels de haut (6,6 à 7,9 blocs) pour moins d'un bloc de
+rayon ; les quatre houppiers 47 à 53 de haut pour 28 à 32 de rayon (2,4 blocs) ;
+le `sapin` 111 pour 14 de rayon. **Le rayon maximum du lot est 32 voxels, soit
+3 blocs** — pas 24, comme le laissait craindre la boîte 3 × 3 × 12 de
+`thorn-tree`. La marge de `placements_in` reste donc modeste, mais elle est
+bien 1,5 fois celle de la flore, ce qui suffit à justifier la couche jumelle.
+
+**Deux points d'ancrage relevés à la production, qui concernent l'assemblage :**
+
+- **l'ancre d'un modèle est le centre de son gabarit**, pas le pied du tronc
+  (`CWVoxelModel.load_from`). Les futs sont donc dessinés presque d'aplomb —
+  au-delà, l'arbre se poserait à côté de son propre tronc. Pour les palmes, dont
+  le point d'attache est à une extrémité, l'écart est structurel : l'assembleur
+  devra porter un décalage d'attache explicite, il ne peut pas le déduire du
+  modèle ;
+- **le tronc existe en deux formes** et ce n'est pas une contradiction :
+  `tronc_feuillu` et `tronc_palmier` sont des modèles instanciables, là où la
+  source écrit le tronc en colonnes de blocs. L'assemblage écrira la matière là
+  où il faut qu'on la creuse et qu'elle porte collision ; le modèle sert au
+  bosquet lointain et à la réduction de niveau de détail.
+
 Plus les **neuf filons** (code 131-139), qui sont un lot à part : ceux-là se
 dessinent à **1 voxel = 1 bloc** et s'estampent dans le terrain, puisqu'on doit
 pouvoir les miner. C'est le premier lot de ce genre du projet, et
-`assets/models/MODELS.md` §3 en donne déjà la règle.
+`assets/models/MODELS.md` §3 en donne déjà la règle. **Dessinés le 2026-09-05**,
+sous `assets/models/filons/`, une fois la décision de palette prise :
 
-**2 — Une seconde couche de dispersion, et non un élargissement de la première.**
-`CWScatter` calcule sa marge sur `CWModelLibrary.max_radius_blocks`, tous modèles
-confondus (invariant n° 17). Ranger un arbre de 12 blocs dans la même
-bibliothèque ferait passer cette marge de 2 blocs à 24 pour **toute** la flore :
-`placements_in` balaierait une couronne de cellules dix fois plus large, et
-chaque `MultiMesh` d'herbe porterait une boîte de visibilité démesurée. Il faut
-donc une couche jumelle — cellule plus grande (64 blocs plutôt que 16), densité
-en arbres par cellule, espacement minimum réel entre deux troncs — qui réemploie
-`CWDecorRules` pour le choix du rôle et `CWVoxelModel` pour le maillage, mais
-tient ses propres cellules et sa propre marge.
+> **La décision.** Les filons demandaient neuf **types de bloc** et la réserve
+> terrain 14 – 31 était pleine. Des trois issues posées par
+> `docs/prompt_generation_arbres.md`, aucune n'a été prise telle quelle. La plage
+> équipement (96 – 127) aurait fait porter à un bloc minable un index déclaré
+> « armes et équipement », c'est-à-dire organisé la panne que le découpage
+> existe pour éviter. Réemployer des entrées existantes est impossible depuis
+> 1.9. Restait la troisième — déplacer une frontière —, dont le prix annoncé
+> était « invalide tous les modèles déjà peints » ; il ne l'était que si on les
+> déplace **toutes**.
+>
+> `RANGE_TERRAIN_END` passe donc de 31 à 40 et `RANGE_CREATURES_BEGIN` de 32 à
+> 41, **et rien d'autre**. Aucun modèle n'est à repeindre, vérifié plutôt que
+> supposé : les 53 modèles du dépôt n'emploient que 14 – 29 et 128 – 175. La
+> plage créatures perd neuf entrées sur 64 et n'en a **aucune de peinte**,
+> l'apparence des créatures étant hors périmètre — c'est ce qui rend l'opération
+> gratuite, et c'est pour cela qu'elle est possible aujourd'hui et ne le sera
+> plus au jalon 2. Les neuf index sont consécutifs et alignés sur les codes
+> d'entité : `index = 32 + (code − 131)`, verrouillé par un test, comme la table
+> de rareté de §5.4 (fer 70 %, or 10 %, argent 10 %, émeraude 9,1 %, saphir
+> 0,5 %, rubis 0,3 %, diamant 0,1 % — portée verbatim dans `CWPalette.roll_ore`).
+
+**Ce qui reste des filons** est leur *pose* : où affleure un filon, selon quelle
+roche et quelle profondeur. Elle appartient à la voie des entités, avec les
+points d'apparition du jalon 2.6 — c'est là que le tirage de rareté trouvera son
+appelant.
+
+**2 — Une seconde couche de dispersion, et non un élargissement de la première.
+✅ Faite le 2026-09-05.** `CWScatter` calcule sa marge sur
+`CWModelLibrary.max_radius_blocks`, tous modèles confondus (invariant n° 17).
+Ranger un houppier dans la même bibliothèque ferait passer cette marge de 2 blocs
+à 9 pour **toute** la flore : `placements_in` balaierait une couronne de cellules
+cinq fois plus large, et chaque `MultiMesh` d'herbe porterait une boîte de
+visibilité démesurée. D'où une couche jumelle, `CWTreeScatter`, qui **hérite** de
+`CWScatter` — cache de cellules, verrou, reprise après édition et requête
+d'empreinte sont identiques — et redéfinit ce qui diffère :
+
+- **cellule de 64 blocs** (16 << 2, donc une cellule d'arbres couvre exactement
+  seize cellules de flore : la conversion des cellules salies par une édition est
+  un décalage, sans perte) ;
+- **bibliothèque à part**, `CWModelLibrary.shared_trees()`. Mesuré : rayon
+  maximum 2 blocs pour la flore, 3 pour les arbres. Deux maxima, deux marges ;
+- **espacement minimum réel entre deux troncs**, 7 blocs. Le mécanisme est celui
+  de la source (comparaison sur le carré de la distance, §6) ; la valeur ne l'est
+  pas, et il faut le dire — les 20 unités de §6 appartiennent à la boucle des
+  points d'apparition, qui place des `cube::Spawn`, et à 20 blocs d'écart aucune
+  forêt ne serait possible. La règle est **sans état et sans récursion** : chaque
+  cellule tire ses candidats de sa seule graine, et un candidat est écarté si un
+  candidat de **rang absolu inférieur** du voisinage 3 × 3 est trop proche. Comme
+  l'espacement est inférieur à la cellule, la décision est la même quelle que
+  soit la cellule qui la pose. Vérifié par un test, frontières comprises ;
+- **crête de placement à 0,02** au lieu de 0,05. Même forme, même seuil, mêmes
+  décalages ; seule la fréquence change, et c'est ce qui **répond à la question
+  laissée ouverte ci-dessous** : les arbres se décident sur leur propre champ. À
+  0,05 les plaques font 19 blocs — la taille d'une touffe, pas d'un peuplement —
+  et partager la crête de la flore aurait mis chaque arbre dans une plaque
+  d'herbe, deux couches corrélées à cent pour cent se lisant comme une seule.
+
+**Le montage est fait au niveau de l'instance**, pas encore de la matière :
+`CWTreeRules` tient les espèces et leurs trois montages — arbre entier, feuillu
+(un tronc puis un à trois houppiers empilés en se chevauchant), palmier (un stipe
+puis une couronne de palmes). Toutes les pièces d'un arbre partagent leur
+colonne, leur altitude et leur échelle ; les houppiers se posent à une hauteur
+**fractionnaire** (`Placement.fy`, ajouté pour eux), la hauteur d'un tronc étant
+un nombre de voxels divisé par 40/3 qui ne tombe pas sur un bloc.
 
 **3 — L'assemblage.** Un feuillu se pose en deux temps : un tronc écrit dans les
 données voxels (donc il se creuse, et il porte collision), puis un à trois
@@ -650,11 +730,13 @@ les faire poser au même endroit et rester d'accord après une édition.
   donne gratuitement ; le houppier, non.
 - **la réduction en distance.** `CWVoxelModel.reduced(n)` est prêt et ne sert
   encore à rien. Un arbre est le premier modèle assez gros pour la justifier.
-- **la sélection.** Le rôle `ARBRE` s'ajoute-t-il à `CWDecorRules.FAMILIES` — donc
-  aux mêmes deux crêtes, ce qui donnerait des bosquets là où la crête passe — ou
-  se décide-t-il sur son propre champ ? La source place les arbres par la voie
-  des entités, qui a ses propres constantes (`docs/systems/02`, §6) ; c'est
-  l'occasion de les lire.
+- ~~**la sélection.**~~ **Tranché le 2026-09-05 : son propre champ.** Le rôle
+  `ARBRE` ne rejoint pas `CWDecorRules.FAMILIES`, pour deux raisons. Les deux
+  crêtes de la flore sont à 0,01 et tranchent une *famille de décor* — de l'herbe
+  contre des fleurs ; un arbre ne concourt pas avec le couvert pour la même
+  place, il se pose par-dessus. Et la source les sépare elle-même : la flore
+  basse est du décor poussé en fin de boucle de colonne, les arbres passent par
+  la voie des entités. Détail dans `CWTreeRules`, en-tête.
 
 **Dépend de :** 1.7 (les rôles, la bibliothèque, le mailleur), 1.8 (l'écriture
 dans le terrain, pour le tronc). **Débloque :** un paysage lisible à distance, et
@@ -732,14 +814,14 @@ sans valeur tant que les jalons 2 et 3 ne sont pas là.
 
 | Sujet | Statut | Détail |
 |---|---|---|
-| Suite de tests headless | ✅ | 271 vérifications, `tests/worldgen_test.gd` |
+| Suite de tests headless | ✅ | 297 vérifications, `tests/worldgen_test.gd` |
 | Gabarit d'échelle en jeu | ✅ | `src/demo/scale_board.gd`, capture automatique ; mires en blocs et modèles à la grille fine |
 | Capture différée de la démo | ✅ | `TerrainDemo.auto_shot_delay` + `--quit-after` : regarder une couche sans piloter la fenêtre |
 | Flore instanciée (MultiMesh par cellule) | ✅ | `src/worldgen/cw_flora_renderer.gd`, 1,1 ms/cellule hors fil principal |
 | Groupement de la flore en grappes | ✅ | il n'y avait pas de mécanisme à écrire : la crête de bruit à 0,05 le produit seule (variance/moyenne 14,3 contre ~1) |
 | Table de sélection du décor | ✅ | `src/worldgen/cw_decor_rules.gd` : deux crêtes à 0,01, neuf rôles, `docs/systems/02` §8.5-8.6 |
 | Lacet libre du décor | ⬜ | trois rôles le demandent ; `CWVoxelModel` ne précalcule que quatre quarts de tour |
-| Éclairage et LOD des modèles instanciés | ⬜ | la flore ne profite ni de l'éclairage voxel (1.9) ni d'une réduction en distance ; `CWVoxelModel.reduced(n)` est prêt et trouvera son premier usage réel au jalon 1.11 |
+| Éclairage et LOD des modèles instanciés | ⬜ | ni la flore ni les arbres ne profitent de l'éclairage voxel (1.9) ni d'une réduction en distance ; `CWVoxelModel.reduced(n)` est prêt et n'a toujours aucun usage. Les arbres, posés depuis le 2026-09-05, sont le premier modèle assez gros pour la justifier |
 | Aperçu de la carte hors du jeu | ✅ | `tools/preview_map.gd`, vierge et parcourue |
 | Cache disque des dalles de carte | ⬜ | 43 ms la dalle, recalculée à chaque session ; l'original la compresse en base |
 | Inventaire des modèles `.vox` | ✅ | `tools/inspect_model.gd`, contrôle des plages de palette |
@@ -951,6 +1033,8 @@ de le résoudre.
 
 | Date | Fait |
 |---|---|
+| 2026-09-05 | Jalon 1.11, deuxieme temps : **les arbres sont en jeu**, et la question des filons est tranchee. (1) **La decision de palette.** Les neuf filons demandaient neuf types de bloc et la reserve terrain etait pleine ; des trois issues du prompt, aucune telle quelle. `RANGE_TERRAIN_END` passe de 31 a 40 et `RANGE_CREATURES_BEGIN` de 32 a 41, **et rien d'autre** — le prix annonce de cette issue (« invalide tous les modeles peints ») ne valait que si on deplacait *toutes* les frontieres. Aucun repeint : les 53 modeles du depot n'emploient que 14-29 et 128-175, et la plage creatures n'a aucune entree peinte, l'apparence des creatures etant hors perimetre. C'est ce qui rend l'operation gratuite **aujourd'hui**, et elle ne le sera plus au jalon 2. Les neuf index sont alignes sur les codes d'entite (`index = 32 + (code - 131)`) et la table de rarete de §5.4 est portee verbatim dans `CWPalette.roll_ore` — les deux verrouillees par des tests, la seconde deroulee sur ses 1 000 combinaisons plutot que tiree. Neuf modeles a **1 voxel = 1 bloc** sous `assets/models/filons/`, premier lot de ce genre du projet ; leur *pose* reste a faire et appartient au jalon 2.6. (2) **La seconde couche de dispersion.** `CWTreeScatter` herite de `CWScatter` — cache, verrou, reprise apres edition sont identiques — et redefinit la cellule (64 blocs), la bibliotheque (a part : rayon max 2 blocs pour la flore, 3 pour les arbres), la densite, et un **espacement minimum reel** de 7 blocs entre troncs. Cet espacement est le seul endroit interessant : il doit tenir **au travers des frontieres de cellule** sans etat partage ni recursion, d'ou la regle du rang absolu `(cz, cx, i)` sur le voisinage 3 x 3 — comme l'espacement est inferieur a la cellule, tout candidat genant est dans la fenetre, et la decision est la meme quelle que soit la cellule qui la pose. Verifie par un test sur 169 cellules : plus courte distance mesuree 7,0 blocs exactement. (3) **La question de la selection est tranchee** : les arbres ont leur propre champ, crete a 0,02 (bosquets de 50 blocs) et non les deux cretes de la flore a 0,01 — les partager aurait mis chaque arbre dans une plaque d'herbe, et deux couches correlees a cent pour cent se lisent comme une seule. (4) **Le montage** se fait au niveau de l'instance : `Placement.fy` est ajoute pour poser un houppier a une hauteur fractionnaire, la hauteur d'un tronc etant un nombre de voxels divise par 40/3. Le tronc ecrit dans le terrain — donc la collision — reste a faire. (5) **Validation en jeu** : `terrain_demo` accepte `-- --biome N --shot S`, ce qui donne une capture d'un biome donne sans piloter la fenetre ; sept biomes regardes. Trois defauts corriges dans la foulee, tous invisibles hors du jeu : les houppiers sortaient grumeleux (resolution de metaballe 0,32 -> 0,22), les trois touffes d'herbe — l'objet le plus instancie du jeu — etaient trop clairsemees, et la broussaille de neige ressortait en tache orange sur un sol cyan, seul objet chaud d'un paysage froid (bois assombri et neige posee dessus, meme fonction que pour `sapin_enneige`). 297 verifications, 0 echec. |
+| 2026-09-05 | Jalon 1.11, premier temps : **les quatorze modeles d'arbres sont livres**, par le meme chemin que la flore — `docs/prompt_generation_arbres.md` pour la commande, `tools/blender/generer_arbres.py` et `arbres_formes.py` pour la production, une graine en dur par fichier, le lot se regenere a l'identique (verifie : quatorze empreintes md5 inchangees d'une execution a l'autre). Les garde-fous de `flore_vox` sont reemployes tels quels ; seul le **plafond d'enveloppe** est devenu un parametre, par classe — arbre entier 160 voxels, houppier 80, palme 60 —, la plage des index restant ce qu'elle etait. La suite de tests ne connaissant pas encore ce lot, la **fourchette de hauteur commandee est portee dans la table `LOT` du generateur** et verifiee a l'ecriture : c'est le garde-fou provisoire, en attendant celui de la couche de dispersion. Trois choses ont ete apprises en dessinant, toutes dans les notes de `arbres_formes` : une couronne dont les lobes ne se chevauchent pas sort en **guirlande** — un anneau de billes separees, troue au milieu — et il lui faut un lobe central plus une enveloppe en oeuf, la coquille se faisant a l'echantillonnage et non en ecartant les lobes ; une palme dont les folioles sont posees a chaque point de rachis sort en **lame pleine**, il faut un pas de trois ; un lacet par pas de 0,05 sur un rachis de 74 voxels **enroule** la palme d'a peu pres 120 degres, la rotation totale valant `balance x longueur / 2`. Le rayon maximum du lot est de **32 voxels, soit 3 blocs**, et non les 24 que laissait craindre la boite de `thorn-tree`. Restent le code : la seconde couche de dispersion, puis l'assemblage. |
 | 2026-09-05 | Jalon 1.11 ouvert : **les arbres**, qui n'avaient aucune etape prevue. La meme lecture des slots de chargement qui a donne la table du decor donne celle des entites — `slot = 1969 + code`, tenue par treize valeurs consecutives : les neuf filons sortent dans l'ordre exact de la table de rarete de `docs/systems/02` §5.4, et les trois cibles confirment la ligne « 140-142 » que rien n'etayait. Le mecanisme « le slot de chargement est le code, a une base pres » est donc general, et non une particularite du decor. **La question ouverte n° 2 est reglee** : `tree-leaves` porte son propre code (143), loin des deux arbres (129 fir-tree, 130 thorn-tree), et le corpus n'a ni `tree-trunk` ni equivalent — le conifere et l'arbre a epines sont des modeles entiers, le feuillu et le palmier sont des assemblages, et leur tronc est ecrit dans le terrain. Corrige au passage une affirmation fausse de `assets/models/MODELS.md` §4 (« aucun arbre n'est un modele ») et son decompte de 154 modeles, qui est de 2 449. Travaux prevus en trois temps : le lot d'assets par le meme chemin que la flore (`docs/prompt_generation_arbres.md`, 14 modeles), une **seconde couche de dispersion** — ranger un arbre de 12 blocs dans la bibliotheque de la flore ferait passer la marge de `placements_in` de 2 a 24 blocs pour toute la flore —, puis l'assemblage tronc + houppiers, premier objet du projet a traverser la matiere et l'instance. Les neuf filons sont **bloques sur une decision de palette** : ils s'estampent, donc chacun de leurs voxels est un type de bloc, et la reserve terrain 14-31 est pleine. |
 | 2026-09-05 | Jalon 1.7 clos, et le jalon 1 avec lui : **la table type de decor -> modele est trouvee**. Elle n'etait dans aucune fonction — elle est dans le **tableau des slots de chargement**. `GameController_load_game_assets` range 2 449 modeles `.cub` a des indices qui ne suivent pas l'ordre de chargement (les huit enseignes sont chargees dans le desordre et rangees a la suite), et le decor y occupe un bloc contigu : `slot = 2418 + type`, tenu par cinq recoupements pris dans trois fonctions — roseau sur sol humide, deux nenuphars sur l'eau, huit enseignes pour huit genres de batiment, lierre et rosiers de mur, art incan. Reserve dite en clair : la meme base ne tient pas sous le type 22, ou les cinq couvre-sols demandent une base decalee de cinq ; les deux lectures s'accordent en revanche sur la *nature* de chaque decor, et c'est elle qui est portee, sous le nom de **role**. Trois choses en sont sorties. **Il y a deux cretes de selection a 0,01, pas une** — decalages `(9843, 8437)` et `(34234, 234234)`, la premiere pour la famille, la seconde pour la variante ; leurs signes ne s'accordent que 50,8 % du temps, soit le hasard, donc la seconde porte bien une information que la premiere n'a pas. La parite d'indice de `CWScatter._choose` etait une invention de ce projet faute de connaitre la table : elle est retiree. **Le second seuil est biaise** (`n2 <= 0,5`), ce qui garde le minoritaire a une fois sur quatre — prairie mesuree apres portage : couvert 43,5 %, fleur 41,0 %, caillou 8,4 %, sous-bois 7,0 %. **Les echelles disent la taille du role** : 0,075 est la reference, soit exactement `3/40` — le rapport de ce projet —, le roseau a 1,2x, le caillou a 1,33-1,6x, le sous-bois humide a 0,67-1,33x. Releve au passage sur la question ouverte n° 1 : `terrain_surfaceColor_blend` (@005c56e0) **est** la regle de surface de l'original, l'equivalent exact de `CWPalette.surface_index`, et elle n'ecrit que cinq types (4, 6, 9, 10, 12) — la correspondance de numerotation n'est plus qu'a une ambiguite pres, celle de savoir lequel de ses deux parametres climatiques est la temperature. `CWModelLibrary` passe d'une table par biome a une table **par role**, et deux verifications la tiennent : aucun role atteignable sans modele, aucun modele range sous un role inatteignable. 271 verifications. |
 | 2026-09-05 | Jalon 1.10 : la carte du monde. Analyse dans `docs/systems/05` — onze fonctions, dont quatre au nom trompeur. **Une piece de carte est une cellule de Voronoi** : `loadLandscapeTile` balaie la zone plus une zone de marge, deforme chaque point de la grille de chunks et ne garde que ceux dont le site de region le plus proche est celui de la zone. La carte n'est donc pas un quadrillage, et ses frontieres sont **exactement celles du climat** — meme point deforme que le melange de sites du jalon 1.3. Consequence : **aucune constante numerique nouvelle**, `World_getColumnDataAt2` est mot pour mot `warped_point` et la recherche est `nearest_site`. **Troisieme confirmation de l'echelle** : `WorldMap::getTile` borne a `[0, 0x10000)` et indexe `>> 6` puis `& 63`, soit une case de 256 unites — le chunk du jalon 1.8 — et 64 x 64 par zone. **L'image stockee ne porte pas de couleur** : trois clartes, 200 / 220 / 255, et rien d'autre ; la teinte vient du dessin, et le portage garde cette separation. Decouverte : un bit par chunk et un compteur, seul etat persiste par l'original (4 octets, cle `discovered`). Marqueurs : ce sont les elements de tuile du jalon 1.6, releves une troisieme fois par le couple `0x68` / `+0x14018`. Noms de region : deux syllabes tirees de deux tables de vingt, indexees en croix par le point deforme en unites de zone ; le mecanisme est porte, les syllabes sont des creations originales. **Septieme nom trompeur** : `Terrain_sampleHeightNoise` n'echantillonne pas une altitude, c'est la deformation a ±500 en unites de zone — `edge_warped_point`, portee au 1.4. Defaut vu en jeu et par aucun test : poser les seules ancres d'un `Control` sous un `CanvasLayer` le laisse de taille nulle, et la carte sortait par le coin superieur gauche. Cout : dalle de 4 096 cases en 43 ms, vue de 5 x 5 zones en 1,4 s a froid, nom en 14 us. 256 verifications. |

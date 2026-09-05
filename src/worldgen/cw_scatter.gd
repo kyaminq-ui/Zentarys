@@ -69,6 +69,13 @@ extends RefCounted
 
 ## Cote d'une cellule de dispersion, en blocs. Aligne sur le bloc de donnees de
 ## Voxel Tools : une cellule par bloc, donc une couronne de 3 x 3 a consulter.
+##
+## C'est la valeur de la **flore basse**. Depuis le jalon 1.11, la couche des
+## arbres (`CWTreeScatter`) herite de cette classe avec une cellule quatre fois
+## plus grande : les deux tailles coexistent, et c'est pourquoi les champs
+## `cell_size` / `cell_shift` ci-dessous existent en plus des constantes. Le
+## code qui ne sert qu'a la flore continue de lire les constantes ; le code
+## partage — le rendu — lit les champs de l'instance.
 const CELL_SIZE: int = 16
 const CELL_SHIFT: int = 4
 
@@ -164,6 +171,12 @@ class Placement extends RefCounted:
 	## Tire au pas d'un voxel, donc reproductible comme le reste.
 	var fx: float = 0.0
 	var fz: float = 0.0
+	## Decalage vertical sous le bloc, en blocs. Nul pour tout ce qui pose au
+	## sol — c'est-a-dire toute la flore. Il sert aux pieces d'un arbre
+	## assemble : un houppier se pose au sommet d'un tronc, dont la hauteur est
+	## un nombre de voxels divise par 40/3 et ne tombe donc pas sur un bloc.
+	## Arrondir le mettrait a un demi-bloc de son tronc, ce qui se voit.
+	var fy: float = 0.0
 	var model: CWVoxelModel = null
 	var rotation: int = 0
 	## Role tenu par la plante (`CWDecorRules.Role`). Decide sa taille, et
@@ -178,13 +191,18 @@ class Placement extends RefCounted:
 
 	## Position de l'ancre, en blocs, coordonnees monde.
 	func origin() -> Vector3:
-		return Vector3(float(x) + fx, float(y), float(z) + fz)
+		return Vector3(float(x) + fx, float(y) + fy, float(z) + fz)
 
 	## Rayon reellement occupe, en blocs, gigue comprise. C'est cette valeur —
 	## et non `model.radius_blocks` — qui decide si la plante mord dans un cadre.
 	func radius_blocks() -> int:
 		return ceili(float(model.radius_blocks) * scale)
 
+
+## Cote de cellule de *cette* couche, et son decalage binaire. Egaux aux
+## constantes pour la flore ; `CWTreeScatter` les remonte a 64 blocs.
+var cell_size: int = CELL_SIZE
+var cell_shift: int = CELL_SHIFT
 
 var _field: CWTerrainField
 var _lib: CWModelLibrary
@@ -252,6 +270,13 @@ static func cell_of(v: int) -> int:
 	return v >> CELL_SHIFT
 
 
+## La meme, mais sur la taille de cellule de *cette* couche. Le rendu passe par
+## celle-ci : c'est le seul point ou il doit ignorer s'il sert la flore ou les
+## arbres.
+func cell_index(v: int) -> int:
+	return v >> cell_shift
+
+
 ## Plantes dont le gabarit mord dans l'empreinte [x0, x0 + nx) x [z0, z0 + nz),
 ## en coordonnees monde, exprimee en blocs.
 ##
@@ -270,10 +295,10 @@ func placements_in(x0: int, z0: int, nx: int, nz: int) -> Array:
 	# une demi-plante a la frontiere de deux blocs.
 	var margin: int = ceili(float(_lib.max_radius_blocks) * SCALE_MAX
 			* CWDecorRules.SCALE_RATIO_MAX)
-	var cx0: int = cell_of(x0 - margin)
-	var cx1: int = cell_of(x0 + nx - 1 + margin)
-	var cz0: int = cell_of(z0 - margin)
-	var cz1: int = cell_of(z0 + nz - 1 + margin)
+	var cx0: int = cell_index(x0 - margin)
+	var cx1: int = cell_index(x0 + nx - 1 + margin)
+	var cz0: int = cell_index(z0 - margin)
+	var cz1: int = cell_index(z0 + nz - 1 + margin)
 	var x1: int = x0 + nx
 	var z1: int = z0 + nz
 	for cz in range(cz0, cz1 + 1):
@@ -326,12 +351,12 @@ func _build_cell(cx: int, cz: int) -> Array:
 	rng.next()
 
 	var sea: int = _field.params().sea_level
-	var base_x: int = cx << CELL_SHIFT
-	var base_z: int = cz << CELL_SHIFT
+	var base_x: int = cx << cell_shift
+	var base_z: int = cz << cell_shift
 
 	# Combien de plantes : decide sur le centre de la cellule.
 	@warning_ignore("integer_division")
-	var mid: int = CELL_SIZE / 2
+	var mid: int = cell_size / 2
 	var centre: Vector3 = _field.sample_column(base_x + mid, base_z + mid)
 	var density: float = CWModelLibrary.density_of(
 			CWPalette.surface_index(centre.x, centre.y, centre.z, sea))
@@ -350,8 +375,8 @@ func _build_cell(cx: int, cz: int) -> Array:
 	for i in count:
 		if out.size() >= MAX_PER_CELL:
 			break
-		var x: int = base_x + rng.mod(CELL_SIZE)
-		var z: int = base_z + rng.mod(CELL_SIZE)
+		var x: int = base_x + rng.mod(cell_size)
+		var z: int = base_z + rng.mod(cell_size)
 
 		# Crete de placement, *avant* l'echantillonnage de colonne : un candidat
 		# hors plaque coute un bruit (~1 us) au lieu d'une colonne (~75 us).

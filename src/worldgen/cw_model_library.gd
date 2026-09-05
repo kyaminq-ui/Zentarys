@@ -143,8 +143,20 @@ static func flora() -> Dictionary:
 
 
 static var _shared: CWModelLibrary = null
+## Bibliotheque des arbres, tenue **a part** et non ajoutee a celle de la flore.
+##
+## Ce n'est pas un rangement, c'est l'invariant n° 17 : `CWScatter` calcule la
+## marge de `placements_in` sur `max_radius_blocks`, tous modeles confondus.
+## Ranger un houppier de 3 blocs de rayon dans la bibliotheque de la flore ferait
+## passer cette marge de 2 blocs a 9 pour **toute** la flore — `placements_in`
+## balaierait une couronne de cellules cinq fois plus large, et chaque
+## `MultiMesh` d'herbe porterait une boite de visibilite demesuree. Deux
+## bibliotheques, deux maxima, deux marges.
+static var _shared_trees: CWModelLibrary = null
 static var _shared_mutex: Mutex = Mutex.new()
 
+## Dossier racine des chemins de cette bibliotheque.
+var _dir: String = FLORA_DIR
 var _models: Dictionary = {}
 ## Par biome : les modeles reellement disponibles sur le disque.
 var _by_surface: Dictionary = {}
@@ -173,11 +185,72 @@ static func shared() -> CWModelLibrary:
 	return out
 
 
-## Oublie la bibliotheque partagee. Pour les tests et le rechargement d'assets.
+## Bibliotheque des arbres, construite au premier appel. Voir `_shared_trees`
+## pour la raison d'etre de la separation.
+static func shared_trees() -> CWModelLibrary:
+	if _shared_trees != null:
+		return _shared_trees
+	_shared_mutex.lock()
+	if _shared_trees == null:
+		var lib := CWModelLibrary.new()
+		lib._dir = CWTreeRules.TREE_DIR
+		lib._load_trees()
+		_shared_trees = lib
+	var out: CWModelLibrary = _shared_trees
+	_shared_mutex.unlock()
+	return out
+
+
+## Oublie les bibliotheques partagees. Pour les tests et le rechargement d'assets.
 static func reset_shared() -> void:
 	_shared_mutex.lock()
 	_shared = null
+	_shared_trees = null
 	_shared_mutex.unlock()
+
+
+## Charge le lot d'arbres. Pas de roles ici : c'est `CWTreeRules` qui tient le
+## montage, et une espece se designe par les chemins de ses pieces.
+##
+## Une espece dont une seule piece manque du disque est ecartee **en entier** :
+## un tronc sans houppier ou un houppier sans tronc se verrait immediatement,
+## alors qu'une plante manquante ne fait qu'une clairiere.
+func _load_trees() -> void:
+	var palette: Resource = CWPalette.build_voxel_palette()
+	for surface in CWTreeRules.surfaces():
+		var available: Array[CWVoxelModel] = []
+		for sp in CWTreeRules.SPECIES[surface]:
+			var pieces: Array = ([sp["tronc"]] as Array) + (sp["couronnes"] as Array)
+			var loaded: Array[CWVoxelModel] = []
+			var complete: bool = true
+			for path in pieces:
+				var m: CWVoxelModel = _get_or_load(path, palette)
+				if m == null:
+					complete = false
+					break
+				loaded.append(m)
+			if not complete:
+				continue
+			for m in loaded:
+				if not available.has(m):
+					available.append(m)
+		if not available.is_empty():
+			_by_surface[surface] = available
+
+
+## Une espece est-elle entierement sur le disque ? Reponse par chemin, pour que
+## la dispersion puisse ecarter une espece incomplete sans relire le disque.
+func has_paths(paths: Array) -> bool:
+	for path in paths:
+		if _models.get(path) == null:
+			return false
+	return true
+
+
+## Le modele charge pour ce chemin, ou `null`. Les arbres se designent par
+## chemin et non par role : c'est `CWTreeRules` qui tient l'assemblage.
+func model(path: String) -> CWVoxelModel:
+	return _models.get(path)
 
 
 func _load_all() -> void:
@@ -206,7 +279,7 @@ func _get_or_load(model_name: String, palette: Resource) -> CWVoxelModel:
 	if _models.has(model_name):
 		return _models[model_name]
 	var m: CWVoxelModel = CWVoxelModel.load_from(
-			FLORA_DIR + model_name + ".vox", palette, model_name)
+			_dir + model_name + ".vox", palette, model_name)
 	# Meme absent, on retient la reponse : sans cela chaque biome qui reference
 	# un modele manquant retente un acces disque a chaque construction.
 	_models[model_name] = m

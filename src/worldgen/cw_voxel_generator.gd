@@ -62,6 +62,7 @@ class ColumnPatch extends RefCounted:
 		params = value
 		_field = null
 		_scatter = null
+		_tree_scatter = null
 		clear_caches()
 
 ## Epaisseur de la couche meuble sous la surface.
@@ -69,6 +70,7 @@ class ColumnPatch extends RefCounted:
 
 var _field: CWTerrainField
 var _scatter: CWScatter
+var _tree_scatter: CWTreeScatter
 var _field_mutex: Mutex = Mutex.new()
 var _patches: Dictionary = {}
 var _patches_prev: Dictionary = {}
@@ -106,6 +108,7 @@ func field() -> CWTerrainField:
 			params = CWWorldParams.new()
 		_field = CWTerrainField.new(params)
 		_scatter = CWScatter.new(_field)
+		_tree_scatter = CWTreeScatter.new(_field)
 	var f: CWTerrainField = _field
 	_field_mutex.unlock()
 	return f
@@ -122,6 +125,14 @@ func scatter_grid() -> CWScatter:
 	return _scatter
 
 
+## Grille de dispersion des **arbres** — la couche jumelle, cellule de 64 blocs
+## et bibliotheque a part (`CWTreeScatter`). Meme raison d'etre ici : elle
+## s'appuie sur le meme champ de terrain que la flore et que la generation.
+func tree_scatter_grid() -> CWTreeScatter:
+	field()
+	return _tree_scatter
+
+
 func clear_caches() -> void:
 	_patch_mutex.lock()
 	_patches.clear()
@@ -130,6 +141,8 @@ func clear_caches() -> void:
 	_patch_mutex.unlock()
 	if _scatter != null:
 		_scatter.clear_cache()
+	if _tree_scatter != null:
+		_tree_scatter.clear_cache()
 
 
 ## Bloc occupant l'altitude `y` d'une colonne, en fonction de son profil.

@@ -38,7 +38,7 @@ d'apparition, dont les constantes sont déjà relevées.
 ## Démarrer
 
 ```
-godot --headless --path . -s tests/worldgen_test.gd   # 271 vérifications
+godot --headless --path . -s tests/worldgen_test.gd   # 297 vérifications
 ```
 
 Scène de démonstration : `scenes/terrain_demo.tscn`. Clic pour capturer la
