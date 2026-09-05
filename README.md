@@ -20,8 +20,10 @@ terrain avec sauvegarde du seul diff, l'éclairage voxel, et la carte du monde :
 un puzzle de régions, chacune la cellule de son site dans le domaine déformé,
 avec ses noms et sa découverte.
 
-La suite est le jalon 2 : créatures, comportements, combat — en commençant par
-les points d'apparition, dont les constantes sont déjà relevées.
+Deux chantiers suivent : le **jalon 1.11**, les arbres — un lot d'assets produit
+par le même chemin que la flore, plus une seconde couche de dispersion —, et le
+**jalon 2**, créatures et comportements, en commençant par les points
+d'apparition, dont les constantes sont déjà relevées.
 
 - `docs/ROADMAP.md` — les cinq jalons, leur avancement, les mesures
 - `docs/systems/01_generation_terrain.md` — l'analyse du système de terrain
@@ -30,6 +32,7 @@ les points d'apparition, dont les constantes sont déjà relevées.
 - `docs/systems/03_colonnes_et_edition.md` — colonnes, blocs, édition, sauvegarde
 - `docs/systems/04_eclairage.md` — éclairage voxel : les deux passes
 - `docs/systems/05_carte_du_monde.md` — carte, découverte, noms de région
+- `docs/prompt_generation_arbres.md` — la commande du lot d'arbres (jalon 1.11)
 - `nextsteps.md` — reprise de session : chemins, commandes, invariants, pièges
 
 ## Démarrer

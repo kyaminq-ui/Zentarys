@@ -259,14 +259,27 @@ Conséquences à connaître :
 
 Un modèle destiné à *faire partie du terrain* — un bloc de minerai, un rocher
 qu'on doit pouvoir miner — est un cas différent : celui-là se dessine à
-**1 voxel = 1 bloc** et s'estampe. Il n'y en a aucun pour l'instant.
+**1 voxel = 1 bloc** et s'estampe. Il n'y en a aucun pour l'instant ; les neuf
+filons du jalon 1.11 seront les premiers.
 
 ---
 
 ## 4. Ce qui n'est pas un modèle
 
-* **Les arbres.** Aucun modèle d'arbre parmi les 154 chargés par l'original :
-  ils sont construits par le code, à l'échelle du terrain. Algorithme à porter,
-  pas modèle à dessiner.
+* ~~**Les arbres.**~~ **Faux — corrigé le 2026-09-05.** Cette ligne disait
+  qu'aucun arbre n'était un modèle et qu'il y avait un algorithme à porter. Le
+  décompte de 154 modèles était lui-même faux : l'original en charge **2 449**.
+  Le vrai partage, établi en `docs/systems/02` §5.2, est plus fin :
+  * le **conifère** (`fir-tree`, code 129) et l'**arbre à épines**
+    (`thorn-tree`, code 130, boîte 3 × 3 × 12 blocs) sont des **modèles
+    entiers** ;
+  * le **houppier** (`tree-leaves`, code 143) est un modèle **posé
+    séparément** ; le **feuillu** et le **palmier** sont donc des assemblages —
+    un tronc, puis des houppiers ou des palmes ;
+  * seul le **tronc** est procédural : il n'existe aucun modèle de tronc, et
+    l'original a la primitive pour l'écrire en colonnes de blocs.
+
+  À dessiner, donc, sauf le tronc. Jalon 1.11 ; commande en
+  `docs/prompt_generation_arbres.md`.
 * **Les maisons.** Une grille de 3 × 3 × 4 cellules remplie procéduralement. Ce
   sont les *meubles* qui sont des modèles, pas le bâtiment.

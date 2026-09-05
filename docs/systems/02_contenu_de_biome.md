@@ -191,6 +191,59 @@ Les boîtes sont en **blocs de terrain**, et elles recoupent l'échelle fixée i
 le personnage de référence. Le `cactus_01` du lot livré, mesuré à 48 voxels =
 3 blocs, est donc dans le bon ordre de grandeur.
 
+**La base d'index des entités est `slot = 1969 + code`** (2026-09-05, sixième
+passe). C'est le même mécanisme que celui du décor (§8.5), sur un second bloc de
+slots, et il est tenu par **treize valeurs consécutives** :
+
+| code | slot | modèle |
+|---|---|---|
+| 126 | 2095 | `fire-scrub` |
+| 127 | 2096 | `ginseng` |
+| **129** | **2098** | **`fir-tree`** |
+| **130** | **2099** | **`thorn-tree`** |
+| 131-139 | 2100-2108 | `gold-`, `iron-`, `silver-`, `sandstone-`, `emerald-`, `sapphire-`, `ruby-`, `diamond-`, `ice-crystal-deposit` |
+| 140 | 2109 | `scarecrow` |
+| 141 | 2110 | `aim` |
+| 142 | 2111 | `dummy` |
+| **143** | **2112** | **`tree-leaves`** |
+
+Les **neuf filons sortent dans l'ordre exact** de la table de rareté de §5.4, et
+les trois cibles confirment la ligne « 140-142 = cibles et épouvantail » de §5.1
+que rien n'étayait jusque-là. Cinq recoupements de plus, sur un bloc de slots
+différent de celui du décor : le mécanisme « le slot de chargement *est* le code,
+à une base près » est donc général, et ce n'est pas une coïncidence du décor.
+
+> **Réserve sur les codes bas.** Sous cette base, les codes 120 à 125 et 128
+> tombent sur `cobwebscrub`, `berry-bush`, `snow-berry`, `snow-berry-mash`,
+> `scrub`, `scrub-green` et `ginseng-root` — pas sur ce que la table ci-dessus
+> annonce, qui vient de la lecture du `switch`. Les deux lectures divergent d'un
+> ou deux rangs, et sans uniformité : 124 et 126 s'accordent, 120 et 128 non.
+> Le bloc de slots 2087-2099 contient d'ailleurs deux buissons et deux aliments
+> (`snow-berry`, `snow-berry-mash`, `ginseng-root`) que le `switch` ne cite pas.
+> **La partie haute — arbres, filons, cibles, houppier — est sûre ; la partie
+> basse ne l'est pas.** Elle n'a pas été retranchée car c'est la lecture du
+> `switch`, faite indépendamment.
+
+**Ce que cela règle : `tree-leaves` a son propre code d'entité.** Il est en 143,
+loin des deux arbres en 129-130, juste après les trois cibles — donc il est
+**posé séparément**, pas contenu dans un modèle d'arbre. Et il n'existe dans tout
+le corpus **aucun** `tree-trunk`, `oak`, `broadleaf` ni équivalent. Il suit que :
+
+- le **sapin** (`fir-tree`) et l'**arbre à épines** (`thorn-tree`) sont des
+  modèles entiers, posés en une fois ;
+- le **feuillu n'est pas un modèle** : c'est un assemblage, un tronc surmonté
+  d'un ou plusieurs houppiers `tree-leaves` instanciés. Le tronc n'étant pas un
+  modèle non plus, il est très probablement **écrit dans le terrain** en
+  colonnes de blocs — l'original en a la primitive, `World_fillVoxelColumnTyped`
+  (@005df600), qui écrit un type et une couleur bruitée sur une hauteur donnée ;
+- le **palmier** suit la même construction : `palm-leaf` (2300) et
+  `palm-leaf-diagonal` (2301) sont deux palmes, il n'y a pas de modèle de
+  palmier.
+
+C'est la réponse à la question ouverte n° 2 de §9, et elle a une conséquence de
+portage : un feuillu ne se pose pas comme une plante. Voir `docs/ROADMAP.md`,
+§1.11.
+
 ### 5.3 Choix de la plante par type de bloc de surface
 
 La sélection se fait sur le **type du bloc sous la surface** (la colonne est
@@ -606,9 +659,13 @@ surface `WATER` n'est jamais rendue par `surface_index`. Les décors de mur
    2 = eau, 3 = sol humide. Reste à décider lequel de `param_5`/`param_6` est
    la température et lequel l'humidité — Ghidra les échange plusieurs fois
    dans la fonction, et c'est la même réserve qu'en §5.3.
-2. La composition des arbres : `fir-tree` et `thorn-tree` sont des modèles
-   entiers, mais `tree-leaves` existe sans arbre feuillu correspondant. Un
-   assemblage tronc + houppiers reste à confirmer.
+2. ~~La composition des arbres~~ — **résolue** le 2026-09-05, §5.2.
+   `tree-leaves` porte son propre code d'entité (143), donc il est posé
+   séparément ; `fir-tree` (129) et `thorn-tree` (130) sont des modèles entiers ;
+   le feuillu et le palmier sont des assemblages, et leur tronc n'est pas un
+   modèle. Reste à trouver *qui* assemble : la fonction qui pose un tronc puis
+   ses houppiers n'a pas été localisée, et elle est sans doute inlinée dans
+   `generateBiomeContent`. Jalon 1.11.
 3. ~~La table type de décor → modèle~~ — **résolue** le 2026-09-05, §8.5 et
    §8.6, avec une réserve documentée sur les types inférieurs à 22. Portée
    dans `src/worldgen/cw_decor_rules.gd`.

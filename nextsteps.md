@@ -160,6 +160,7 @@ tools/preview_features.gd  gros plan ombré, avec et sans la couche d'éléments
 tools/inspect_model.gd     inventaire d'un .vox : gabarit, index, plages
 tools/repaint_models.gd    remet un .vox dans la palette de projet
 tools/preview_map.gd       aperçu de la carte, vierge et après une diagonale
+docs/prompt_generation_arbres.md  commande du lot d'arbres (jalon 1.11)
 tools/blender/             générateur du lot de flore (Python + bpy)
   flore_vox.py               palette verbatim, écriture .vox, garde-fous
   flore_formes.py            brins, tiges, feuilles, corolles, cailloux
@@ -344,15 +345,34 @@ docs/images/               gabarit, carte et composition de flore, en jeu
   par colonne avant d'être déplacé sur le chemin froid. Mesurer avant de
   supposer que c'est le verrou qui coûte.
 
-## 6. Prochaine tâche — jalon 2.6, les points d'apparition
+## 6. Prochaine tâche — 1.11 (assets) ou 2.6 (code)
 
-**Où on en est, au 2026-09-05 au soir.** Le **jalon 1 est complet**. 1.7 s'est
-fermé avec la table type de décor → modèle, qui n'était dans aucune fonction :
-elle est dans le tableau des slots de chargement de `GameController`. Détail en
-`docs/systems/02`, §8.5 et §8.6 ; portage en `src/worldgen/cw_decor_rules.gd`.
+**Où on en est, au 2026-09-05 au soir.** Les **dix systèmes du terrain sont
+faits** (1.1 à 1.10). 1.7 s'est fermé avec la table type de décor → modèle, qui
+n'était dans aucune fonction : elle est dans le tableau des slots de chargement
+de `GameController`. Détail en `docs/systems/02`, §8.5 et §8.6 ; portage en
+`src/worldgen/cw_decor_rules.gd`.
 
-La porte suivante est le **jalon 2.6, les points d'apparition**, et c'est celle
-que la feuille de route désignait déjà comme la relève :
+**Un onzième système a été ouvert dans la foulée** : 1.11, les arbres. La même
+lecture des slots a réglé la question laissée ouverte depuis le 2026-09-05 —
+`tree-leaves` porte son propre code d'entité (143), donc le conifère et l'arbre
+à épines sont des modèles entiers tandis que le feuillu et le palmier sont des
+assemblages dont le tronc n'est pas un modèle. Il n'y avait aucune étape prévue
+pour les arbres ; il y en a une maintenant.
+
+**Deux portes sont ouvertes, et elles ne demandent pas le même travail.**
+
+- **Jalon 1.11 — arbres et grande végétation** : c'est d'abord un **lot
+  d'assets**. La commande est écrite (`docs/prompt_generation_arbres.md`, 14
+  modèles), le chemin de production est celui de la flore — MCP Blender, `bpy`,
+  un script déterministe dans `tools/blender/` —, et le code qui suivra est une
+  seconde couche de dispersion, pas une reprise du terrain. `docs/ROADMAP.md`,
+  §1.11.
+- **Jalon 2.6 — les points d'apparition** : c'est du **code pur**, et la source
+  est déjà lue.
+
+Le reste de cette section décrit 2.6, qui était la relève désignée par la
+feuille de route :
 
 - `WorldInfo_scatterObjectsInArea` (@005f56c0) est lue — elle **ne disperse pas
   d'objets**, elle choisit la liste d'espèces d'un point d'apparition selon le
@@ -611,6 +631,18 @@ prompt sur trois rôles — voir §8, c'est la seule divergence qui reste.
 
 #### Les lots suivants, pour information
 
+- **Jalon 1.11, arbres et grande végétation (14)** : houppiers, troncs, sapins,
+  palmes, arbre mort. Commande écrite en `docs/prompt_generation_arbres.md` ;
+  même chaîne que la flore. Deux choses le distinguent du lot précédent : un
+  arbre sort de l'enveloppe de la flore (jusqu'à 160 voxels, la boîte de
+  `thorn-tree` étant de 3 × 3 × 12 blocs), et un **houppier n'a pas de tronc** —
+  il se pose au sommet d'un tronc écrit dans le terrain, ce qui fait de lui le
+  premier objet du projet à traverser les deux mondes.
+- **Jalon 1.11, les neuf filons** : **bloqués sur une décision de palette**, pas
+  sur le dessin. Un filon s'estampe dans le terrain, donc chacun de ses voxels
+  est un *type de bloc*, et la réserve terrain 14 – 31 est pleine depuis le
+  2026-09-05. Les trois issues sont posées à la fin de
+  `docs/prompt_generation_arbres.md`. Trancher avant de dessiner.
 - **Jalon 4, décor bâti (~50)** : mobilier (table, tabouret, banc, lit, table de
   chevet, buffet, 3 étagères, comptoir, 3 tapis, 2 tableaux, 4 vases, lustre,
   3 bougies), artisanat (enclume, four, établi, scie, métier à tisser, rouet,
