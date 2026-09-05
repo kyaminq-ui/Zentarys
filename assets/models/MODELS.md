@@ -32,17 +32,46 @@ dessiner.**
 
 **Un bloc de terrain vaut 40/3 voxels de modèle — autrement dit 3 blocs valent
 exactement 40 voxels.** Le personnage de référence mesure **32 voxels**, soit
-2,4 blocs.
+2,4 blocs. C'est la grille du **personnage, des créatures, du mobilier et des
+objets** ; les deux autres lots ont la leur, et le tableau de la §1.1 ci-dessous
+les donne toutes les trois.
 
 > **La référence à poser dans MagicaVoxel est un cube de 40, pas de 13.** Un bloc
 > ne tombe pas sur un nombre entier de voxels : c'est le prix de la fidélité au
 > rapport de l'original. Un cube de 40 à côté du modèle vaut trois blocs de
 > terrain, et une silhouette de 32 vaut le personnage.
 
+### 1.1 — Les trois grilles
+
+| lot | voxels par bloc | d'où vient la valeur |
+|---|---|---|
+| personnage, créatures, mobilier, objets | **40/3** | mesurée dans l'original (0,075 = 3/40) |
+| **flore : herbes et fleurs** | **6** | décision de rendu, 2026-09-06 — voir ci-dessous |
+| **flore : buissons, cactus, champignons** | **4** | idem |
+| arbres, filons | **1** | structurelle : le tronc est écrit dans le terrain |
+
+**La flore en a deux, et ce n'est pas un flottement.** Quatre voxels par bloc va
+bien à ce qui est une *masse* — un buisson, un cactus se lisent à n'importe
+quelle résolution parce que leur forme est leur volume. Six va à ce dont la
+forme **tient dans un trait** : une touffe d'herbe est cinq lignes, une fleur
+une tige et une corolle, et à quatre voxels une corolle n'est plus qu'une croix.
+La liste qui fait foi est `CWModelLibrary.GRILLE_FINE`, et la colonne `FIN` du
+catalogue de `tools/blender/generer_flore.py` doit dire la même chose.
+
+**La flore a quitté la valeur mesurée le 2026-09-06, et il faut le dire dans ce
+sens-là.** 3/40 n'est pas contesté : c'est bien l'échelle du décor de l'alpha, et
+elle implique qu'une touffe d'herbe y est dessinée treize fois plus fin qu'un
+bloc. C'est le **rendu** qui l'a refusée — vu en jeu, un brin de 0,08 bloc à côté
+d'un cube d'un bloc lit comme un cheveu, et une prairie entière comme une
+fourrure. Une constante du générateur de flore est donc un quart de bloc, ou un
+sixième pour les petits props ; le personnage y mesure 9,6 ou 14,4 voxels. La
+taille des plantes **en blocs** n'a pas changé. Note complète :
+`CWVoxelModel.VOXELS_PER_BLOCK_FLORE`.
+
 C'est de là que vient tout le reste, et c'est ce qui sépare ce rendu de celui de
-Minecraft : le terrain est fait de gros cubes, mais ce qui est posé dessus est
-treize fois plus fin. Une touffe d'herbe n'est pas un cube vert, c'est une dizaine
-de lames d'un voxel d'épaisseur. Un personnage n'est pas six pavés, il a des yeux
+Minecraft : le terrain est fait de gros cubes, et ce qui est posé dessus est plus
+fin — quatre à six fois pour une plante, treize fois pour un personnage. Un personnage
+n'est pas six pavés, il a des yeux
 d'un voxel.
 
 ### D'où sort le nombre
@@ -240,10 +269,10 @@ signale tout index sorti des plages autorisées.
   enveloppe et son propre script.
 * Noms en minuscules sans accent, souligné pour séparer, variante numérotée sur
   deux chiffres quand les modèles sont interchangeables : `herbe_01`,
-  `fleur_bleuet`, `caillou_02`. Rien d'autre dans le nom — ni la taille du
+  `fleur_bleuet`, `cactus_02`. Rien d'autre dans le nom — ni la taille du
   gabarit, ni le biome, qui est déjà le dossier.
-* **Un même rôle a un modèle par biome.** `caillou_01` existe dans Greenlands
-  et dans Snowlands, et ce sont deux modèles, chacun dans les teintes de son
+* **Un même rôle a un modèle par biome.** `cotonnier` existe dans Snowlands
+  et dans Deserts, et ce sont deux modèles, chacun dans les teintes de son
   biome. Le lot du jalon 1.12 ne partage **aucun** fichier entre biomes, et un
   test refuse qu'un chemin traverse : un modèle listé sous Jungles doit être
   dans `jungles/`. Rien n'interdit techniquement le partage — le cache est
@@ -252,13 +281,14 @@ signale tout index sorti des plages autorisées.
   compris : `"greenlands/herbe_01"`. Un test vérifie que chaque entrée de la
   table existe sur le disque, et un autre qu'aucun modèle ne dort sous un rôle
   que les deux crêtes de sélection n'atteignent jamais.
-* **Les quarante-trois modèles de flore sont produits par script**, pas dessinés
+* **Les trente-huit modèles de flore sont produits par script**, pas dessinés
   à la main : `tools/blender/generer_flore.py`, une graine en dur par fichier.
   Une retouche faite dans MagicaVoxel serait écrasée à la prochaine génération —
-  corriger le générateur, puis regénérer :
+  corriger le générateur, puis regénérer. **Python pur depuis le 2026-09-06** :
+  à quatre voxels par bloc, `bpy` n'apporte plus rien.
 
   ```
-  blender --background --factory-startup --python tools/blender/generer_flore.py
+  python tools/blender/generer_flore.py
   #  -- --seul <nom>  pour ne refaire qu'un fichier
   ```
 
@@ -297,8 +327,8 @@ signale tout index sorti des plages autorisées.
 * Gabarit du `.vox` : **libre**, le plus juste possible autour de la matière.
   16³ suffit à presque tout ; un cactus de 3,5 blocs demande 48³. La matière est
   extraite au chargement et le vide jeté, donc un tampon large ne coûte rien —
-  il rend seulement la relecture pénible. Ce qui est un contrat, c'est le rapport
-  de **40/3 voxels par bloc**, pas la taille de la boîte.
+  il rend seulement la relecture pénible. Ce qui est un contrat, c'est le
+  **rapport de voxels par bloc de son lot** (§1.1), pas la taille de la boîte.
 
 ### Orientation
 

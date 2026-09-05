@@ -249,16 +249,16 @@ const FAMILIES: Dictionary = {
 	# sous-bois et le caillou, que la branche d'origine, a deux feuilles,
 	# n'avait pas ou mettre. C'est le biome le plus fourni du monde et celui ou
 	# les quatre roles ont chacun plusieurs modeles.
-	CWBiome.GREENLANDS: [[Role.FLEUR, Role.SOUS_BOIS], [Role.COUVERT, Role.CAILLOU]],
+	CWBiome.GREENLANDS: [[Role.FLEUR, Role.SOUS_BOIS], [Role.COUVERT]],
 	# Snowlands : le froid inverse les poids. Le couvert y est rare et court, le
 	# sous-bois — buisson blanc, snowberry — porte l'essentiel de la silhouette,
 	# et le caillou erratique tient le role du mineral pose.
-	CWBiome.SNOWLANDS: [[Role.FLEUR, Role.CAILLOU], [Role.SOUS_BOIS, Role.COUVERT]],
+	CWBiome.SNOWLANDS: [[Role.FLEUR], [Role.SOUS_BOIS, Role.COUVERT]],
 	# Deserts : la branche chaude et seche de la source, ou la seconde crete
 	# fait entrer le mineral. Pas de couvert du tout — un desert n'a pas de
 	# tapis herbace, et c'est ce qui le distingue d'une steppe. Les cactus
 	# tiennent le sous-bois, sans quoi la rarete a 1 sur 100 les effacerait.
-	CWBiome.DESERTS: [[Role.SOUS_BOIS, Role.CAILLOU], [Role.SOUS_BOIS, Role.RARE]],
+	CWBiome.DESERTS: [[Role.SOUS_BOIS], [Role.SOUS_BOIS, Role.RARE]],
 	# Jungles : la branche humide et chaude. La source y met du decor a echelle
 	# reduite d'un cote, du couvert de l'autre. C'est le biome le plus dense.
 	CWBiome.JUNGLES: [[Role.SOUS_BOIS, Role.RARE], [Role.COUVERT, Role.FLEUR]],
@@ -269,7 +269,7 @@ const FAMILIES: Dictionary = {
 	# (`docs/systems/02`, Sec. 7), l'une des trois variantes `lava-*` que ce
 	# projet n'avait pas pu produire tant qu'il n'avait pas de surface
 	# volcanique — il en a une depuis le jalon 1.12.
-	CWBiome.LAVALANDS: [[Role.SOUS_BOIS, Role.CAILLOU], [Role.FLEUR, Role.RARE]],
+	CWBiome.LAVALANDS: [[Role.SOUS_BOIS], [Role.FLEUR, Role.RARE]],
 	# Oceans : le test de signe du fond marin, verbatim — d'un cote ce qui
 	# rampe, de l'autre les deux dresses. Une ile n'est pas Oceans : des qu'une
 	# colonne emerge, `CWBiome.at` rend son biome climatique et elle porte la
@@ -283,14 +283,17 @@ const FAMILIES: Dictionary = {
 ## Le sol humide est la seule branche de la source qui soit attachee a un type
 ## de bloc et non a un climat (`reed` sur le type 3), et elle est gardee telle
 ## quelle : un bord de riviere de jungle porte des roseaux, pas des lianes.
-## L'herbe seche, elle, est la frange de Greenlands vers le desert — elle garde
-## la composition de Greenlands moins la fleur, qui n'y tient pas.
+##
+## **Elle est la seule qui reste.** L'herbe seche avait la sienne ; la matiere
+## est retiree depuis le 2026-09-06 (`CWPalette`, note des deux entrees
+## retirees), et l'exception avec elle. C'est le bon sens de l'exception : une
+## matiere merite sa propre composition quand elle porte quelque chose que le
+## biome ne porte pas — le roseau —, pas quand elle n'est qu'une nuance du sol.
 const FAMILIES_SURFACE: Dictionary = {
 	CWPalette.SWAMP: [[Role.ROSEAU, Role.RARE], [Role.COUVERT, Role.FLEUR]],
-	CWPalette.GRASS_DRY: [[Role.SOUS_BOIS, Role.CAILLOU], [Role.COUVERT, Role.SOUS_BOIS]],
 }
 
-## Le biome qui produit chacune de ces deux matieres. Ce n'est pas de la
+## Le biome qui produit chacune de ces matieres. Ce n'est pas de la
 ## documentation : c'est ce qui permet a `tests/decor_test.gd` de verifier que
 ## les roles d'une exception ont bien un modele **dans le biome ou l'exception
 ## peut se produire**.
@@ -302,5 +305,4 @@ const FAMILIES_SURFACE: Dictionary = {
 ## produit quoi, et les deux tables doivent rester d'accord.
 const FAMILIES_SURFACE_BIOME: Dictionary = {
 	CWPalette.SWAMP: CWBiome.JUNGLES,
-	CWPalette.GRASS_DRY: CWBiome.GREENLANDS,
 }

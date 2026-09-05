@@ -135,13 +135,27 @@ def conifere(g, rng, hauteur, r_base, clair, sombre, etages=6,
     (`nextsteps.md`, Sec. 6.4). C'est litteralement ce que fait cette fonction,
     et elle tient en dix lignes la ou la version fine en demandait cinquante.
     """
-    # **Le fut s'arrete sous le dernier plateau.** Vu en capture le 2026-09-06 :
-    # monte jusqu'au sommet, il ressortait en stub brun au-dessus du feuillage,
-    # sur tous les coniferes du monde a la fois. Un conifere ne montre son tronc
-    # qu'entre le sol et son premier etage ; au-dessus, il est dans la masse.
-    colonne(g, rng, hauteur * 0.82, fut_r + 0.4, fut_r, ecorce[0], ecorce[1])
+    # -- Le fut monte jusqu'au dernier etage pose, et pas plus haut -----------
+    #
+    # Deux contraintes se sont telescopees le 2026-09-06, et il a fallu une
+    # capture en jeu pour les voir toutes les deux :
+    #
+    #   * un fut qui monte jusqu'au sommet ressort en stub brun **au-dessus** du
+    #     feuillage, sur tous les coniferes du monde a la fois ;
+    #   * un fut arrete a une **fraction de la hauteur nominale** — c'etait
+    #     `hauteur * 0.82`, le remede du matin — laisse un trou des que le pas
+    #     entre etages depasse un bloc. Pour le pin, le pas vaut 2,8 blocs : le
+    #     fut s'arretait a z = 15, l'avant-dernier etage etait a z = 15 et le
+    #     dernier a z = 18. Les deux etages du haut et la fleche flottaient
+    #     ensemble, detaches du reste de l'arbre.
+    #
+    # La seule des deux contraintes qui compte est la premiere, et elle se dit
+    # sans fraction : **le fut s'arrete au dernier etage pose**. Il ne depasse
+    # pas — l'etage est dessine par-dessus lui et `Grille.pose` ecrase — et il ne
+    # laisse pas de trou, quel que soit le pas. D'ou les etages calcules
+    # d'abord, le fut ensuite, et le dessin en dernier.
     z0 = hauteur * 0.20
-    dernier = z0
+    plateaux = []
     for i in range(etages):
         t = i / max(1, etages - 1)
         z = z0 + (hauteur - z0 - 2.0) * t
@@ -150,6 +164,38 @@ def conifere(g, rng, hauteur, r_base, clair, sombre, etages=6,
         r = r_base * (1.0 - 0.72 * t) * rng.uniform(0.92, 1.08)
         if r < 0.9:
             continue
+        plateaux.append((z, r, t))
+    dernier = plateaux[-1][0] if plateaux else z0
+    premier = plateaux[0][0] if plateaux else z0
+
+    avant_fut = set(g.v)
+    # Le rayon haut est **plancheise a 1,0**, ce qui vaut cinq voxels. Sous
+    # cette valeur `disque` n'en pose plus qu'un seul, et le fut se reduit a un
+    # fil entre deux etages : sur `sapin_enneige`, z = 14 ne portait qu'**un**
+    # voxel entre un etage de neuf et un de cinq. C'est la moitie de ce qui
+    # faisait lire le sommet comme une boule posee sur un cou.
+    colonne(g, rng, int(dernier) + 1, fut_r + 0.4, max(1.0, fut_r),
+            ecorce[0], ecorce[1])
+
+    # **Un conifere ne montre son ecorce qu'entre le sol et son premier etage.**
+    # Au-dessus, le fut est dans la masse du feuillage, et c'est ce qu'on voit
+    # sur les captures. Le pas entre etages vaut deux a trois blocs : sans cette
+    # reprise, chaque intervalle laisse voir une colonne brune et l'arbre se lit
+    # comme une pile d'assiettes enfilees sur un piquet. Vu en jeu le
+    # 2026-09-06, une fois le fut prolonge jusqu'au dernier etage.
+    #
+    # La reprise se fait ici et non dans `colonne` : c'est le conifere qui a des
+    # etages, pas le fut. Elle passe avant le dessin des plateaux, qui ecrasent.
+    # Elle ne touche que les voxels que `colonne` vient de poser : un appelant
+    # qui aurait deja dessine dans la grille — une souche, un contrefort — ne
+    # verrait pas sa matiere repeinte en feuillage.
+    for cle in set(g.v) - avant_fut:
+        if cle[2] > int(premier):
+            g.v[cle] = teinte(clair, sombre, 0.9)
+
+    # Le dernier etage n'est **pas dessine** : la fleche prend sa place. Voir
+    # ci-dessous.
+    for (z, r, t) in plateaux[:-1]:
         # Deux disques par etage quand il est large : un plateau d'un seul bloc
         # d'epaisseur disparait vu de cote a partir de quinze blocs.
         disque(g, 0, 0, int(z), r,
@@ -157,21 +203,34 @@ def conifere(g, rng, hauteur, r_base, clair, sombre, etages=6,
         if r > 2.5:
             disque(g, 0, 0, int(z) + 1, r * 0.72,
                    lambda u, t=t: teinte(clair, sombre, 0.2 + 0.5 * t + 0.3 * u))
-        dernier = z
-    # La fleche : le sommet d'un conifere est une pointe, pas un plateau. Elle
-    # part du dernier etage pose, et non d'une hauteur nominale — sans quoi elle
-    # flotte des qu'un etage est refuse par le seuil de rayon.
+
+    # -- La fleche : conique, et jamais plus large que ce qui la porte --------
     #
-    # **Elle est conique, pas filaire.** Premiere version, c'etait une colonne
-    # d'un voxel de large sur trois de haut : a vingt blocs de distance elle
-    # rendait un pieu brun plante au sommet de l'arbre, et on la prenait pour le
-    # fut qui depassait. Deux disques qui retrecissent puis un voxel : la pointe
-    # se lit comme la fin de la pile d'etages, ce qu'elle est.
-    disque(g, 0, 0, int(dernier) + 1, 1.8,
+    # Vu en jeu le 2026-09-06 : le sommet des coniferes de Snowlands lisait
+    # comme une **boule** posee sur un cou. Le profil en Z de `sapin_enneige` le
+    # disait mot pour mot — 9, 1, 5, **9**, 5, 1 : la silhouette se pincait a un
+    # voxel puis regonflait a neuf.
+    #
+    # Deux causes, et il fallait les deux :
+    #
+    #   * le fut se reduisait a un fil entre les deux derniers etages (corrige
+    #     plus haut, rayon planche a 1,0) ;
+    #   * **la fleche etait plus large que l'etage qui la portait.** Son rayon
+    #     etait une constante — 1,8, soit neuf voxels — alors que le dernier
+    #     etage d'un conifere fait 1,3 a 1,5, soit cinq a neuf. Une pointe qui
+    #     s'elargit avant de se fermer est une boule, par definition.
+    #
+    # La fleche part donc de l'avant-dernier etage et **remplace le dernier**
+    # plutot que de s'ajouter a lui. Deux consequences voulues : ses rayons
+    # decroissent strictement, donc la silhouette est monotone du pied a la
+    # pointe ; et l'arbre perd exactement **un bloc** de haut, la pointe passant
+    # de `dernier + 3` a `dernier + 2`.
+    r_ref = plateaux[-2][1] if len(plateaux) > 1 else 1.8
+    disque(g, 0, 0, int(dernier), max(1.0, r_ref * 0.55),
            lambda u: teinte(clair, sombre, 0.6 + 0.3 * u))
-    disque(g, 0, 0, int(dernier) + 2, 1.1,
+    disque(g, 0, 0, int(dernier) + 1, max(0.6, r_ref * 0.30),
            lambda u: teinte(clair, sombre, 0.75 + 0.2 * u))
-    g.pose(0, 0, int(dernier) + 3, teinte(clair, sombre, 0.9))
+    g.pose(0, 0, int(dernier) + 2, teinte(clair, sombre, 0.9))
 
 
 def palme_paire(g, rng, longueur, clair, sombre, diagonale=False, retombe=0.35):

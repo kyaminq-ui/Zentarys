@@ -12,10 +12,13 @@ extends Node3D
 ## faut une regle. Ce noeud est cette regle — a poser sur le terrain genere, a
 ## cote de la plante, et a photographier.
 ##
-## Il montre du meme coup les **deux grilles** : les mires sont a l'echelle du
-## terrain (un cube = un bloc), la silhouette et les modeles a l'echelle fine
-## (1 / CWVoxelModel.VOXELS_PER_BLOCK). C'est exactement ce rapport qu'on vient
-## verifier.
+## Il montre du meme coup **toutes les grilles** : les mires sont a l'echelle du
+## terrain (un cube = un bloc), la silhouette a la grille du personnage
+## (1 / `VOXELS_PER_BLOCK`, soit 40/3), et **chaque modele a la sienne** — 4 ou 6
+## voxels par bloc pour la flore, 1 pour un arbre. C'est pour cela que
+## `_build_model` lit `m.voxels_per_block` et non la constante : depuis le
+## 2026-09-06 le lot de flore en a deux, et un gabarit qui les confondrait
+## mentirait sur le seul rapport qu'il existe pour verifier.
 ##
 ## Ce n'est pas du contenu de jeu : rien ici n'est ecrit dans le terrain, ce sont
 ## des maillages isoles qu'on ajoute et qu'on retire sans rien changer au monde.

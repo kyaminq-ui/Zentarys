@@ -252,15 +252,52 @@ func _test_matiere() -> void:
 	_ok("la calotte de sommet des autres biomes reste nue", cimes_nues)
 
 	# Les matieres de plaine passent, sans quoi le monde entier serait nu.
-	var plaines: Array = [CWPalette.GRASS, CWPalette.GRASS_DRY,
-			CWPalette.GRASS_JUNGLE, CWPalette.SWAMP, CWPalette.SAND,
-			CWPalette.TUNDRA, CWPalette.GRAVEL, CWPalette.SCORIA]
+	var plaines: Array = [CWPalette.GRASS, CWPalette.GRASS_JUNGLE,
+			CWPalette.SWAMP, CWPalette.SAND, CWPalette.GRAVEL,
+			CWPalette.SCORIA]
 	var refusees: Array = []
 	for surface in plaines:
 		if not CWDecorRules.decor_allowed(CWBiome.GREENLANDS, surface):
 			refusees.append(CWPalette.name_of(surface))
 	_ok("les matieres de plaine portent du decor", refusees.is_empty(),
 			str(refusees))
+
+	# -- Les deux matieres retirees ne reviennent pas ------------------------
+	#
+	# `GRASS_DRY` et `TUNDRA` gardent leur index — les liberer decalerait la
+	# reserve peinte dans les .vox — mais plus rien ne doit les produire. Sans
+	# ce balayage, remettre une frange d'humidite dans `surface_of` ne leverait
+	# rien : la couleur reviendrait en jeu, et le nom du sol contredirait de
+	# nouveau celui du biome. C'est la seule chose qui tienne le retrait.
+	var retirees: Dictionary = {}
+	# Et les deux bandes d'altitude, retirees le meme jour : la roche nue et la
+	# calotte de neige ne doivent plus apparaitre **hors du biome dont elles
+	# sont la matiere**. Elles ne se contredisaient pas comme les franges
+	# d'humidite, elles ne portaient rien : `decor_allowed` refuse le decor sur
+	# la roche et sur la neige hors Snowlands, donc chaque sommet de Greenlands
+	# rendait un plateau nu. Une matiere qui ne porte rien est un trou.
+	var sols_nus: Dictionary = {}
+	for i in 4096:
+		var t: float = float(i % 64) / 63.0
+		var h: float = float(i / 64) / 63.0
+		for biome in CWBiome.all():
+			for above in [-30.0, -4.0, 8.0, 40.0, 120.0, 260.0]:
+				var m: int = CWPalette.surface_of(biome, above, t, h,
+						i * 37, i * 91)
+				if m == CWPalette.GRASS_DRY or m == CWPalette.TUNDRA:
+					retirees[CWPalette.name_of(m)] = true
+				if CWDecorRules.decor_allowed(biome, m):
+					continue
+				# Ce qui reste ici est une matiere nue. Seuls Oceans — le fond
+				# marin est sous l'eau — et Lava Lands ont le droit d'en
+				# produire ; l'eau elle-meme n'est pas rendue par `surface_of`.
+				if biome != CWBiome.OCEANS and biome != CWBiome.LAVALANDS:
+					sols_nus["%s/%s" % [CWBiome.name_of(biome),
+							CWPalette.name_of(m)]] = true
+	_ok("aucune matiere retiree n'est produite", retirees.is_empty(),
+			str(retirees.keys()))
+	_ok("aucun biome ne produit de matiere nue hors Oceans et Lava Lands",
+			sols_nus.is_empty(), str(sols_nus.keys()))
 
 
 # -- 4. La composition regionale ----------------------------------------------

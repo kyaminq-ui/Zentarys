@@ -41,11 +41,28 @@ INDEX_VALIDES = frozenset(list(range(1, 12)) + list(range(14, 32))
 # vegetal : un filon vert serait un filon d'emeraude, pas une plante.
 INDEX_FILONS = frozenset([1] + list(range(14, 20)) + list(range(32, 41)))
 
-# Enveloppe verifiee par tests/flora_test.gd : 4 blocs de haut, 2 de rayon,
-# a 40/3 voxels par bloc.
-VOXELS_PAR_BLOC = 40.0 / 3.0
-HAUTEUR_MAX = int(4 * VOXELS_PAR_BLOC)   # 53
-RAYON_MAX = int(2 * VOXELS_PAR_BLOC)     # 26
+# Enveloppe verifiee par tests/flora_test.gd : 4 blocs de haut, 2 de rayon.
+#
+# **La grille du lot de flore est passee de 40/3 a 4 voxels par bloc le
+# 2026-09-06** (`CWVoxelModel.VOXELS_PER_BLOCK_FLORE`), puis les petits props —
+# herbes et fleurs — a **6** le soir meme
+# (`VOXELS_PER_BLOCK_FLORE_FINE`). L'enveloppe, elle, n'a jamais bouge : elle est
+# dite en *blocs*, et c'est pour cela qu'elle a survecu aux deux changements sans
+# qu'on y touche. Ce sont les plafonds en voxels qui suivent, d'ou `plafond_de`.
+VOXELS_PAR_BLOC = 4.0
+HAUTEUR_MAX = int(4 * VOXELS_PAR_BLOC)   # 16
+RAYON_MAX = int(2 * VOXELS_PAR_BLOC)     # 8
+
+
+def plafond_de(voxels_par_bloc):
+    """L'enveloppe (hauteur, rayon) en voxels, pour une grille donnee.
+
+    L'enveloppe est **4 blocs de haut et 2 de rayon**, quelle que soit la
+    grille : c'est une taille d'objet dans le monde, pas une resolution de
+    dessin. Passer la grille ici plutot que d'ecrire deux couples de constantes
+    est ce qui garantit que les deux lots de flore restent comparables.
+    """
+    return (int(4 * voxels_par_bloc), int(2 * voxels_par_bloc))
 
 
 def lit_bloc_rgba(chemin=PALETTE_VOX):

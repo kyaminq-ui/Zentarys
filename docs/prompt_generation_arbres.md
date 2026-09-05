@@ -1,7 +1,7 @@
 # Prompt — génération du lot d'arbres, à la maille du bloc
 
 Document à donner tel quel à un agent. Il est autoportant, et il suit le même
-chemin que `docs/prompt_generation_flore.md`, qui a produit les 43 modèles de
+chemin que `docs/prompt_generation_flore.md`, qui a produit les 38 modèles de
 flore basse : un document de commande, un script Python déterministe, une graine
 en dur par fichier, le lot se régénère à l'identique.
 

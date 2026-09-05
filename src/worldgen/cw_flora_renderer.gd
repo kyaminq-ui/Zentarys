@@ -5,9 +5,9 @@ extends Node3D
 ## `CWScatter`, instanciees autour de l'observateur.
 ##
 ## -- Pourquoi pas dans le terrain ---------------------------------------------
-## Un modele de flore est sur la grille fine (1 / CWVoxelModel.VOXELS_PER_BLOCK
-## de bloc) : l'ecrire dans les donnees voxels du monde reviendrait a le grossir
-## treize fois. Il est donc maille a part — meme mailleur, meme palette, meme
+## Un modele de flore est sur une grille plus fine que le terrain — 4 voxels par
+## bloc, ou 6 pour les petits props : l'ecrire dans les donnees voxels du monde
+## reviendrait a le grossir de quatre a six fois. Il est donc maille a part — meme mailleur, meme palette, meme
 ## materiau que le terrain, ce qui est la condition pour que les deux grilles
 ## lisent comme un seul monde — puis instancie a l'echelle.
 ##

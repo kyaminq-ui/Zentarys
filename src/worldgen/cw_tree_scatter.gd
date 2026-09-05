@@ -387,9 +387,24 @@ func _couronne_de_palmes(out: Array, couronnes: Array, x: int, z: int,
 		var m: CWVoxelModel = _lib.model(couronnes[k % couronnes.size()])
 		if m == null:
 			continue
+		# **L'attache d'une palme est le voxel le plus HAUT du modele.**
+		# `_piece` pose une piece par sa base ; sans correction, l'attache se
+		# retrouve `m.height - 1` blocs au-dessus du sommet du stipe — trois
+		# blocs pour le dattier de desert, quatre pour le palmier de jungle — et
+		# la couronne flotte, detachee du tronc. Vu en jeu le 2026-09-06.
+		#
+		# C'est la moitie en Z du decalage d'attache : `palme_paire` avait mis
+		# l'attache sur l'ancre dans le **plan horizontal** (invariant n° 30),
+		# ce qui a fait croire le probleme regle. Il ne l'etait que sur deux axes
+		# sur trois.
+		#
+		# La conversion passe par `voxels_per_block` du modele et non par la
+		# constante : c'est l'invariant n° 28, et c'est la meme formule que
+		# `haut` juste au-dessus.
+		var attache: float = float(m.height - 1) * echelle / m.voxels_per_block
 		# Les palmes descendent legerement a mesure qu'on en pose : une couronne
 		# dont toutes les pieces sont a la meme hauteur se lit comme un disque.
-		var y: float = haut - float(k) * 0.35
+		var y: float = haut - attache - float(k) * 0.35
 		@warning_ignore("integer_division")
 		var quart: int = (turn + k / couronnes.size()) % CWVoxelModel.ROTATIONS
 		out.append(_piece(m, x, z, ground, y, quart, echelle))

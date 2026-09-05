@@ -1,17 +1,24 @@
-# Prompt — génération du lot de flore sous Blender (bpy)
+# Prompt — génération du lot de flore
 
-Document à donner tel quel à un agent disposant du MCP Blender. Il est
-autoportant : tout ce qui suit est vérifiable dans le dépôt, et la boucle de
-validation est fournie.
+Document à donner tel quel à un agent. Il est autoportant : tout ce qui suit est
+vérifiable dans le dépôt, et la boucle de validation est fournie.
+
+> **Le lot est passé à quatre voxels par bloc le 2026-09-06, et le générateur
+> est en Python pur** (`tools/blender/generer_flore.py`, formes dans
+> `tools/blender/flore_blocs.py`). À cette maille, `bpy` n'apporte plus rien :
+> une métaballe échantillonnée rend un tas de cubes, une courbe rend une ligne
+> de cubes. La section 4 ci-dessous, sur l'usage de Blender, ne vaut donc plus
+> que pour les lots à la **grille fine** — le personnage et les créatures du
+> jalon 2. Le raisonnement du changement de maille est en `nextsteps.md`,
+> §6ter.1.
 
 ---
 
 ## Le prompt
 
-> Tu produis **39 fichiers `.vox`** de flore pour Zentarys, un jeu voxel sous
-> Godot. Tu travailles **uniquement en Python** : `bpy` pour construire les
-> formes, puis un écrivain `.vox` maison pour la sortie. Aucune interaction
-> manuelle avec l'interface de Blender.
+> Tu produis **38 fichiers `.vox`** de flore pour Zentarys, un jeu voxel sous
+> Godot. Tu travailles **uniquement en Python** : à quatre voxels par bloc, tu
+> poses les voxels directement, puis un écrivain `.vox` maison pour la sortie.
 >
 > Le dépôt est en `C:\Users\Admin\Documents\zentarys`. Lis
 > `assets/models/MODELS.md` avant de commencer : il fait autorité sur l'échelle
@@ -63,21 +70,37 @@ Interdits, sans exception : **0** (c'est l'air), **12 et 13** (eau, translucide)
 et tout ce qui est hors de ces plages. Les indices translucides sortent opaques
 au rendu — c'est un piège silencieux de plus.
 
-**1.3 — L'échelle : 3 blocs = 40 voxels.**
+**1.3 — L'échelle : 1 bloc = 4 voxels, ou 6 pour les petits props.**
 
-Un bloc de terrain vaut **40/3 ≈ 13,333 voxels de modèle**. La valeur vient de
-l'original (`docs/systems/02`, §8.3) ; elle n'est pas ronde, c'est assumé.
+Ce n'est pas la valeur de l'original — la sienne est 3/40, relevée dans le
+binaire (`docs/systems/02`, §8.3) — et l'écart est délibéré : à 3/40 un brin
+d'herbe fait 0,08 bloc et lit comme un cheveu à côté d'un cube de terrain. Note
+complète sur `CWVoxelModel.VOXELS_PER_BLOCK_FLORE`.
+
+**Deux grilles, et le critère n'est pas la taille de l'objet mais la façon dont
+il porte sa forme.** Un buisson, un cactus, un champignon sont des *masses* :
+leur forme est leur volume, et un volume se lit à quatre voxels par bloc. Une
+touffe d'herbe et une fleur portent leur forme **dans un trait** — cinq lignes,
+ou une tige et une corolle — et à quatre voxels il ne reste d'une corolle qu'une
+croix. Celles-là sont à **six**. La liste qui fait foi est la colonne `FIN` du
+catalogue, et elle doit dire la même chose que `CWModelLibrary.GRILLE_FINE`.
 
 Ce qu'il faut en retenir en dessinant :
 
-- le **personnage de référence fait 32 voxels** de haut, soit 2,4 blocs. C'est
-  ton mètre étalon : une touffe d'herbe lui arrive au genou, un cactus le
-  dépasse ;
-- plafond dur, vérifié par un test : **hauteur ≤ 53 voxels**, **rayon ≤ 26
-  voxels** depuis l'axe. Au-delà le lot est refusé ;
-- la matière est **fine**. Une touffe d'herbe est une dizaine de lames d'**un
-  voxel d'épaisseur**, pas un volume vert. C'est ce qui sépare ce rendu de
-  celui de Minecraft. Ne remplis jamais un volume que tu peux suggérer.
+- **une constante que tu écris est un quart de bloc** — un sixième sur la grille
+  fine. `hauteur = 7` à quatre voxels se lit « 1,75 bloc », et `hauteur = 10,5` à
+  six voxels dit la même chose ;
+- le **personnage de référence fait 9,6 voxels** de haut sur la grille à quatre,
+  **14,4** sur celle à six, soit 2,4 blocs dans les deux cas. C'est ton mètre
+  étalon : une touffe d'herbe lui arrive à l'épaule, un cactus le dépasse de
+  moitié ;
+- plafond dur, vérifié par un test : **4 blocs de haut, 2 de rayon**, soit 16 et
+  8 voxels sur la grille à quatre, 24 et 12 sur celle à six (`flore_vox.
+  plafond_de`). Au-delà le lot est refusé ;
+- la matière est **mince, pas fine**. Un brin d'herbe fait **un voxel de
+  section** — c'est déjà un quart de bloc, l'épaisseur d'un doigt à l'échelle du
+  personnage. Doubler ferait une lame de couteau. Ce qui reste vrai : ne remplis
+  jamais un volume que tu peux suggérer.
 
 ### 2. Orientation et ancrage
 
@@ -143,64 +166,60 @@ jalon 1.12 : ce sont les biomes de l'alpha 2013, décidés par `CWBiome`, et non
 les neuf matières de surface d'avant. Noms en minuscules sans accent. **Le nom
 ne porte ni le biome — c'est le dossier — ni la taille.**
 
-Les rôles reviennent d'un biome à l'autre : un `caillou_01` de Greenlands et un
-de Snowlands sont **deux fichiers différents**, chacun dans les teintes de son
-biome. Un test refuse qu'un chemin traverse.
+Les rôles reviennent d'un biome à l'autre : un `cotonnier` de Snowlands et un du
+désert sont **deux fichiers différents**, chacun dans les teintes de son biome.
+Un test refuse qu'un chemin traverse.
 
-> **Les hauteurs de cette table sont celles du lot regénéré le 2026-09-06.**
-> Elles corrigent d'un facteur ~2,5 celles du premier lot, qui suivaient un
-> repère faux de `MODELS.md` §1 — « touffe d'herbe au genou », là où les captures
-> du jeu d'origine la montrent à l'épaule du personnage. Raisonnement complet
-> dans `nextsteps.md`, §6.
+> **Les hauteurs de cette table sont en voxels de la grille du modèle** — 6 pour
+> les lignes marquées `FIN`, 4 pour les autres. Divise par la grille pour lire
+> des blocs. Les **tailles en blocs n'ont pas changé** depuis le lot du matin :
+> c'est la résolution de dessin qui a changé, pas l'enveloppe.
 >
 > **Deux règles de forme comptent autant que ces hauteurs** : une touffe se fait
-> de **cinq ou six brins** longs et écartés, pas de dix à vingt serrés ; et un
-> brin fait **deux voxels de large**, pas un — à 28 voxels de long, une lame d'un
-> voxel est un cheveu. La densité avait été montée le 2026-09-05 au matin pour
-> compenser un rendu « clairsemé » : c'était traiter le symptôme à l'envers, les
-> touffes lisaient clairsemées parce qu'elles faisaient la moitié de leur taille.
+> de **cinq ou six brins** longs et écartés ; et ce qui distingue deux plantes à
+> cette maille est la **courbe**, pas le détail — un roseau est droit, une touffe
+> d'herbe est arquée, une fronde de fougère monte et retombe. Il n'y a plus de
+> place pour des folioles, et il n'en faut pas.
 
-| dossier | fichiers | hauteur visée (voxels) | teintes |
-|---|---|---|---|
-| `greenlands/` | `herbe_01` `herbe_02` `herbe_03` | 25 – 30 | feuillage 128 – 137 |
-| | `herbe_seche` | 24 – 28 | automne 140 – 146 |
-| | `fleur_bleuet` | 6 – 10 | tige 134 – 138, pétales 160 – 161 |
-| | `fleur_tournesol` | 26 – 32 | tige 134, cœur 148, pétales 158 – 159 |
-| | `fleur_coeur` | 18 – 22 | tige 133 – 138, cœurs 156 – 157 |
-| | `ginseng` | 15 – 18 | tige 136 – 139, ombelle 158 – 159 |
-| | `buisson` | 20 – 22 | feuillage 128 – 139, branches 148 – 151 |
-| | `scrub` | 15 – 18 | branches 151 – 155, toiles 14 |
-| | `broussaille` | 16 – 18 | 140 – 146 + branches 148 – 152 |
-| | `fougere` | 40 – 46 | 129 – 136 |
-| | `caillou_01` `caillou_02` | 28 – 34 | roche nue 14 – 19 |
-| `snowlands/` | `herbe_gelee` | 20 – 24 | 136 – 139 + neige 14 – 15 |
-| | `fleur_de_glace` | 20 – 22 | 136 – 139, corolle 160 – 161 |
-| | `buisson_neige` | 19 – 21 | 136 – 139, écorce 151 – 155 |
-| | `snowberry` | 14 – 16 | 136 – 139, baies 14 |
-| | `cotonnier` | 22 – 25 | 136 – 139, capsules 14 – 15 |
-| | `caillou_01` | 28 – 32 | roche nue 14 – 19 |
-| `deserts/` | `cactus_01` | 40 – 46 | cactus 172 – 175 |
-| | `cactus_02` | 24 – 28 | 172 – 175, figues 156 – 157 |
-| | `broussaille_seche` | 16 – 18 | 141 – 147 |
-| | `cotonnier` | 22 – 25 | 140 – 146, capsules 14 – 15 |
-| | `habanero` | 14 – 16 | 129 – 136, piments 156 |
-| | `gres` | 32 – 36 | grès 20 – 24 |
-| `jungles/` | `feuille_large` | 16 – 18 (large) | 128 – 133 |
-| | `fougere_geante` | 38 – 42 | 128 – 135, stipe 150 – 153 |
-| | `liane` `vrille` | 32 – 36 (retombantes) | feuillage 128 – 134 |
-| | `lierre` | 22 – 26 | 129 – 135 |
-| | `fleur_coeur` | 18 – 22 | tige 133, fleur 156 – 157 |
-| | `fleur_ame` | 20 – 22 | tige 137, clochettes 162 – 163 |
-| | `roseau` | 28 – 32 | 138 – 144 |
-| | `champignon` | 14 – 16 | pied 168, chapeau 164 – 166 |
-| `lavalands/` | `fire_shrub` | 20 – 22 | 156 – 157, écorce 153 – 155, braises 30 |
-| | `herbe_de_lave` | 18 – 20 | scorie 25 – 27, pointes 30 – 31 |
-| | `fleur_de_lave` | 14 – 16 | hampe 25 – 27, corolle 30 – 31 |
-| | `caillou_basalte` | 26 – 30 | basalte 25 – 27, veine 30 |
-| | `champignon_luisant` | 12 – 14 | pied 166 – 169, chapeau **240 – 243** |
-| `oceans/` | `algue` | 28 – 32 | 170 – 171 + 130 – 134 |
-| | `corail` | 22 – 26 | **170 – 171** |
-| | `etoile_de_mer` | 5 – 8 | 156 – 157 |
+| dossier | fichiers | grille | hauteur (voxels) | teintes |
+|---|---|---|---|---|
+| `greenlands/` | `herbe_01` | **FIN** | 10 | feuillage 128 – 133 |
+| | `herbe_02` | **FIN** | 12 | feuillage 129 – 135 |
+| | `herbe_03` | **FIN** | 6 | feuillage 128 – 135 |
+| | `herbe_seche` | **FIN** | 11 | feuillage 133 – 139, brins **droits** |
+| | `fleur_bleuet` | **FIN** | 4 | tige 135 – 136, pétales 160 – 161 |
+| | `fleur_tournesol` | **FIN** | 10 | tige 133 – 136, cœur 148, pétales 158 |
+| | `fleur_coeur` | **FIN** | 8 | tige 133 – 135, cœurs 156 – 157 |
+| | `ginseng` | **FIN** | 7 | tige 137 – 138, ombelle 158 – 159 |
+| | `buisson` | GROS | 6 | feuillage 128 – 135, pied 150 |
+| | `scrub` | GROS | 6 | branches 151 – 153, feuilles 133 – 137 |
+| | `broussaille` | GROS | 5 | branches 148 – 150, feuilles 133 – 139 |
+| | `fougere` | GROS | 14 | 130 – 133 |
+| `snowlands/` | `herbe_gelee` | **FIN** | 8 | 136 – 139 + neige 14 – 15 |
+| | `fleur_de_glace` | **FIN** | 8 | 137 – 138, corolle 160 – 161 |
+| | `buisson_neige` | GROS | 6 | 136 – 138 + neige 14 – 15 |
+| | `snowberry` | GROS | 4 | 137 – 138, baies 14 |
+| | `cotonnier` | GROS | 7 | tiges 153 – 154, capsules 14 – 15 |
+| `deserts/` | `cactus_01` | GROS | 13 | cactus 172 – 174 |
+| | `cactus_02` | GROS | 9 | 172 – 174, fleur 156 – 157 |
+| | `broussaille_seche` | GROS | 5 | automne 142 – 145 |
+| | `cotonnier` | GROS | 7 | 143 – 145, capsules 14 – 15 |
+| | `habanero` | GROS | 3 | 130 – 133, piments 156 |
+| `jungles/` | `feuille_large` | GROS | 5 (large) | 128 – 131 |
+| | `fougere_geante` | GROS | 13 | 129 – 132 |
+| | `liane` `vrille` | GROS | 10 | feuillage 128 – 132 |
+| | `lierre` | GROS | 5 (rampant) | 130 – 132 |
+| | `fleur_coeur` | **FIN** | 8 | tige 133 – 135, fleur 156 – 157 |
+| | `fleur_ame` | **FIN** | 8 | tige 137 – 138, corolle 162 – 163 |
+| | `roseau` | **FIN** | 13 | 138 – 142, brins **droits** |
+| | `champignon` | GROS | 5 | pied 166 – 167, chapeau 164 – 165 |
+| `lavalands/` | `fire_shrub` | GROS | 6 | scorie 25 – 26, braises 30 |
+| | `herbe_de_lave` | **FIN** | 9 | scorie 25 – 27, pointes 30 |
+| | `fleur_de_lave` | **FIN** | 7 | hampe 26 – 27, corolle 30 – 31 |
+| | `champignon_luisant` | GROS | 5 | pied 166 – 167, chapeau **240 – 242** |
+| `oceans/` | `algue` | GROS | 9 | 130 – 132 |
+| | `corail` | GROS | 6 | **170 – 171** |
+| | `etoile_de_mer` | GROS | 2 | 156 – 157 |
 
 **Trois contraintes de palette, et aucune n'est cosmétique.**
 
@@ -262,7 +281,7 @@ générateur. Le découpage des plages est un contrat.
 
 ### 8. Ce que tu rends
 
-1. les 43 `.vox` en place sous `assets/models/flore/<biome>/`, six biomes ;
+1. les 42 `.vox` en place sous `assets/models/flore/<biome>/`, six biomes ;
 2. le ou les scripts Python qui les produisent, dans `tools/blender/`, avec les
    graines en dur ;
 3. la sortie de `inspect_model.gd` et le compte final de la suite de tests ;

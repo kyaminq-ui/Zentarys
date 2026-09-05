@@ -36,17 +36,37 @@ const AIR: int = 0
 const STONE: int = 1
 const DIRT: int = 2
 const GRASS: int = 3
+## Retire le 2026-09-06 : `surface_of` ne le rend plus. Voir la note ci-dessous.
 const GRASS_DRY: int = 4
 const GRASS_JUNGLE: int = 5
 const SAND: int = 6
 const SNOW: int = 7
 const ICE: int = 8
+## Retire le 2026-09-06, comme `GRASS_DRY`.
 const TUNDRA: int = 9
 const SWAMP: int = 10
 const GRAVEL: int = 11
 const WATER: int = 12
 const WATER_DEEP: int = 13
 const COUNT: int = 14
+
+# -- Deux entrees retirees, et pourquoi elles gardent leur place --------------
+#
+# `GRASS_DRY` (4) et `TUNDRA` (9) etaient les deux franges seches heritees du
+# systeme d'avant le jalon 1.12 : une prairie sous 0,46 d'humidite virait au
+# kaki, une Snowlands sous 0,50 au gris-olive. Depuis que `CWBiome` classe le
+# climat, une seconde matiere de plaine par biome ne dit rien de plus que le
+# biome — et en jeu elle disait le contraire de lui. `surface_of` ne les rend
+# plus (2026-09-06).
+#
+# **Leur index reste alloue, et ce n'est pas de la negligence.** Les entrees 1 a
+# 13 sont contigues et la reserve de matiere des modeles commence a 14 : liberer
+# le 4 et le 9 decalerait tout ce qui suit, donc les plages 14-19 (roche nue),
+# 20-24 (gres), 25-27 (basalte) — qui sont **peintes dans les 66 fichiers .vox
+# du depot**. Le geste coute un repassage complet par `tools/repaint_models.gd`
+# pour economiser deux entrees sur 256. C'est exactement l'arbitrage de
+# l'invariant n° 31, et il se tranche dans le meme sens. Aucun modele n'employait
+# ces deux index — verifie avant de les retirer, pas apres.
 
 # -- Lava Lands : deux types de bloc de plus, sans deplacer une frontiere -----
 #
@@ -158,6 +178,19 @@ const RANGE_FX_END: int = 255
 
 ## Altitude au-dessus du niveau de la mer a partir de laquelle une colonne est
 ## consideree comme un sommet. Depend du climat : il neige plus bas au froid.
+##
+## **Ces trois constantes ne servent plus qu'a Lava Lands depuis le 2026-09-06.**
+## Elles decidaient les deux bandes d'altitude — roche nue, puis neige de sommet
+## — qui traversaient tous les biomes ; ces bandes sont retirees, parce qu'elles
+## ne portaient aucun decor et rendaient un plateau nu au sommet de chaque relief
+## (voir la note de `surface_of`). Lava Lands s'en sert encore pour separer sa
+## croute de scorie de la roche de ses hauteurs, ce qui est une regle de volcan
+## et non une regle d'altitude — d'ou le nom local `lava_rock`.
+##
+## Elles sont gardees parce que le jour ou une falaise aura sa propre regle —
+## `terrain_surfaceColor_blend` force le type 6 sur la falaise dans la source,
+## et cette voie n'est pas portee — c'est une **pente** qu'il faudra mesurer,
+## pas une altitude, et ces valeurs serviront de point de depart.
 const SNOW_LINE_BASE: float = 40.0
 const SNOW_LINE_SPAN: float = 360.0
 ## Epaisseur de roche nue juste sous la ligne de neige.
@@ -433,18 +466,11 @@ static func build_opaque_material() -> StandardMaterial3D:
 	return mat
 
 
-## Humidite sous laquelle une prairie se lit en herbe seche. C'est la frange
-## de Greenlands vers le desert, pas un biome : `CWBiome` n'en a que six, et la
-## steppe est une *matiere*, comme la roche d'altitude.
-const DRY_GRASS_H: float = 0.46
-
-## Humidite au-dessus de laquelle un sol de jungle se lit en sol humide. Meme
-## statut que ci-dessus : le marais est une matiere de Jungles, pas un biome.
+## Humidite au-dessus de laquelle un sol de jungle se lit en sol humide. Le
+## marais est une *matiere* de Jungles, pas un biome — et c'est la seule frange
+## d'humidite qui reste, parce qu'elle porte quelque chose : le roseau de la
+## source pousse sur ce type de bloc et sur aucun autre.
 const SWAMP_H: float = 0.92
-
-## Humidite au-dessus de laquelle une Snowlands se lit en neige plutot qu'en
-## toundra. La toundra est la frange seche du froid.
-const TUNDRA_H: float = 0.50
 
 ## Altitude sous laquelle une cuvette de Lava Lands est remplie de magma : un
 ## lac de lave au fond d'un bassin.
@@ -516,24 +542,47 @@ static func surface_of(biome: int, above: float, temperature: float,
 		return STONE if above > maxf(lava_rock - ROCK_BAND, ROCK_MIN) else SCORIA
 
 	if above <= BEACH_BAND:
-		# Le rivage d'une Snowlands est gele, pas sableux.
+		# Le rivage d'une Snowlands est gele, pas sableux. C'est la **seule**
+		# bande d'altitude qui reste (voir ci-dessous), et elle reste parce
+		# qu'un rivage est un lieu et non une nuance : on y aborde, on y pose
+		# un village, et le sable y dit quelque chose que le biome ne dit pas.
 		return SNOW if biome == CWBiome.SNOWLANDS else SAND
 
-	var snow_line: float = SNOW_LINE_BASE + temperature * SNOW_LINE_SPAN
-	if above > snow_line:
-		return SNOW
-	if above > maxf(snow_line - ROCK_BAND, ROCK_MIN):
-		return STONE
-
+	# -- Un biome, une matiere. C'est tout ----------------------------------
+	#
+	# Deux retraits, le meme jour, et c'est la meme erreur prise par deux bouts.
+	#
+	# **Les franges d'humidite** — l'herbe seche de Greenlands, la toundra de
+	# Snowlands — etaient un reste du systeme d'avant le jalon 1.12, ou « biome »
+	# voulait dire « matiere de bloc » et ou il en fallait neuf pour dire six.
+	# Depuis que `CWBiome` classe le climat, une seconde matiere de plaine ne dit
+	# rien que le biome ne dise deja ; en jeu elle disait meme le contraire, une
+	# prairie annoncee « Greenlands » avec un sol kaki de steppe.
+	#
+	# **Les bandes d'altitude** — roche nue au-dessus d'un seuil, neige de sommet
+	# au-dessus d'un autre — sont tombees ensuite, et pour une raison qui n'est
+	# pas la meme : elles ne se contredisaient pas, elles ne **portaient rien**.
+	# `CWDecorRules.decor_allowed` refuse le decor sur la roche et sur la neige
+	# hors Snowlands, si bien que chaque relief un peu haut d'une Greenlands
+	# rendait une calotte nue, sans une plante, sans un arbre — un plateau gris
+	# ou l'on marchait sans rien rencontrer. Une matiere qui ne porte rien n'est
+	# pas un sous-biome, c'est un trou dans le monde.
+	#
+	# Ce qui les rendait defendables etait un raisonnement de vraisemblance :
+	# une montagne a de la roche et de la neige. Il tenait tant qu'on regardait
+	# une carte de hauteurs ; il ne tient plus des qu'on marche dessus.
+	#
+	# Restent donc : la matiere du biome, la plage, et le cas de Lava Lands qui
+	# a sa propre regle plus haut — la sienne decrit un volcan, pas une altitude.
 	match biome:
 		CWBiome.SNOWLANDS:
-			return SNOW if humidity > TUNDRA_H else TUNDRA
+			return SNOW
 		CWBiome.DESERTS:
 			return SAND
 		CWBiome.JUNGLES:
 			return SWAMP if humidity > SWAMP_H else GRASS_JUNGLE
 		_:
-			return GRASS_DRY if humidity < DRY_GRASS_H else GRASS
+			return GRASS
 
 
 ## Bloc de surface d'une colonne, biome compris. Raccourci pour les appelants

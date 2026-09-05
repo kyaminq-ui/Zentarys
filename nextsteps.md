@@ -58,9 +58,12 @@ C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path 
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/biome_stats.gd
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/biome_stats.gd -- 144 512
 
-# Regénération du lot de flore (43 .vox, ~2 min). Déterministe : une graine en
-# dur par fichier. `-- --seul <nom>` ne refait qu'un modèle.
-"C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" --background --factory-startup --python tools/blender/generer_flore.py
+# Regénération du lot de flore (38 .vox, deux grilles, ~1 s). **Python pur** depuis le
+# 2026-09-06 : à 4 voxels par bloc, Blender n'apporte rien de plus qu'aux arbres.
+# Déterministe, une graine en dur par fichier ; `-- --seul <nom>` ne refait qu'un
+# modèle. Les modules `flore_formes` / `flore_blender`, qui dessinaient à 40/3,
+# ne sont plus appelés par ce lot — ils restent pour les créatures du jalon 2.
+python tools/blender/generer_flore.py
 
 # Regénération du lot d'arbres (24 .vox, ~2 s). **Python pur** depuis le jalon
 # 1.12 : à 1 voxel = 1 bloc, Blender n'apporte rien. Mêmes garde-fous.
@@ -100,14 +103,31 @@ biome, **Échap** rend la souris puis quitte.
 
 ## 3. État
 
-> ⚠️ **Trois défauts sont à corriger avant toute autre chose** : la flèche des
-> conifères et les palmes du dattier flottent, et il reste deux modèles de
-> caillou à retirer. Diagnostics vérifiés et remèdes en **§6bis**.
+> ⚠️ **Une chose passe avant la suite** : la planche de validation des assets,
+> une capture par modèle, seul et de près, pour trancher lesquels sont corrects
+> et lesquels sont à regénérer. Détail et point de départ en **§6quater**.
 
 Jalon 1 (le monde) : 1.1 à 1.10 sont **portés, testés et vus en jeu** ; **1.11
 est aux trois quarts** — assets, dispersion et rendu faits, il manque le tronc
-écrit dans le terrain et la pose des filons ; **1.12 est fait**. Suite de
-validation : **312 vérifications, 0 échec**, ~20 s.
+écrit dans le terrain et la pose des filons ; **1.12 est fait**, et les trois
+défauts de pose vus en jeu après son commit sont corrigés (§6bis). Suite de
+validation : **315 vérifications, 0 échec**, ~20 s.
+
+**Trois remaniements de rendu, le 2026-09-06 au soir, tous décidés en regardant
+le jeu** — le détail est en §6ter :
+
+* **la flore est passée à 4 voxels par bloc**, puis ses **petits props —
+  herbes et fleurs — à 6**. C'est le seul de ces points qui touche une valeur
+  mesurée, et il s'en écarte délibérément : voir §8.1 ;
+* **les bandes d'altitude sont retirées** : plus de roche nue ni de calotte de
+  neige hors des biomes dont c'est la matière. Elles ne portaient aucun décor,
+  donc chaque sommet rendait un plateau nu ;
+* **le rôle `CAILLOU` est supprimé**, et les quatre blocs erratiques avec lui.
+  Le minéral posé du monde est le seul `rocher_geant`, qui passe par la couche
+  des arbres ;
+* **un biome n'a plus qu'une matière de plaine.** `GRASS_DRY` et `TUNDRA` sont
+  retirées : c'étaient les deux franges d'humidité héritées d'avant 1.12, et
+  elles faisaient dire au sol le contraire de ce que disait le nom du biome.
 
 **1.12 — les six biomes, fait** (2026-09-06). C'est le plus gros remaniement
 depuis 1.7, et il tient en une phrase : **un biome est une zone climatique, une
@@ -135,7 +155,8 @@ pour la même chose.**
 
 **Et les deux lots d'assets sont refaits** — c'était la tâche que §6 posait en
 premier, et elle tombait au bon moment : on ne regénère qu'une fois. **24
-arbres** à 1 voxel = 1 bloc, **43 modèles de flore** à 3/40 mais deux fois et
+arbres** à 1 voxel = 1 bloc, **42 modèles de flore** à 3/40 — ce lot-là a été
+refait depuis, à 4 voxels par bloc et à 38 modèles (§6ter) — mais deux fois et
 demie plus grands et deux fois moins denses. Détail en §6.
 
 **1.11 — arbres et grande végétation, aux trois quarts** (2026-09-05, lot refait
@@ -239,7 +260,8 @@ tools/blender/             générateurs des lots de modèles
   flore_vox.py               palette verbatim, écriture .vox, garde-fous
   flore_formes.py            brins, tiges, feuilles, corolles, cailloux
   flore_blender.py           courbes, métaballes, échantillonnage sur grille
-  generer_flore.py           le catalogue des 43 modèles de flore, à 3/40
+  flore_blocs.py             formes de flore a la maille de 4 voxels par bloc
+  generer_flore.py           le catalogue des 38 modèles de flore, à 4 vox/bloc
   arbres_formes.py           formes à la grille fine — plus employé par les arbres
   arbres_blocs.py            formes à la maille du bloc : disques, dômes, palmes
   generer_arbres.py          le catalogue des 24 arbres, à 1 voxel = 1 bloc
@@ -247,7 +269,7 @@ tools/blender/             générateurs des lots de modèles
 docs/prompt_generation_flore.md   la commande du lot de flore
 docs/prompt_generation_arbres.md  la commande du lot d'arbres
 assets/palette/            palette de projet + PALETTE.md
-assets/models/flore/<biome>/  43 modèles, un dossier par biome (six)
+assets/models/flore/<biome>/  38 modèles, un dossier par biome (six)
 assets/models/arbres/<biome>/ 24 modèles d'arbres, à la maille du bloc
 assets/models/filons/      9 filons, estampables (1 voxel = 1 bloc)
 assets/models/             MODELS.md (échelle, palette et conventions)
@@ -303,6 +325,12 @@ docs/images/               gabarit, carte et composition de flore, en jeu
     cube de **40 = 3 blocs**. Ce qui *peut* bouger au jalon 3.1, c'est la taille
     du personnage en blocs (2,4 aujourd'hui) — les modèles se remettent à
     l'échelle ensemble.
+
+    **Depuis le 2026-09-06, cette constante ne porte plus la flore** : elle porte
+    le personnage, les créatures, le mobilier et les objets. La flore est passée
+    à 4 voxels par bloc (§6ter.1, §8.1), et c'est le premier écart assumé entre
+    ce projet et une valeur relevée dans l'original. La constante reste la
+    référence mesurée et la valeur par défaut d'un modèle chargé sans grille.
 11. **`CWScatter.SUBBLOCK_STEPS` n'est pas `VOXELS_PER_BLOCK`.** La finesse de
     *position* d'une plante sous son bloc est une grille entière (16 pas) ; la
     grille de *dessin* vaut 40/3 et n'est plus entière. Les deux ont été
@@ -405,13 +433,29 @@ docs/images/               gabarit, carte et composition de flore, en jeu
     ont des modèles là où elle peut se produire. Confondre les deux ferait
     pousser des bleuets sur la roche nue d'une prairie de montagne — ce que
     `decor_allowed` empêche, et qu'aucun test de table ne verrait.
-28. **Il y a deux grilles de dessin, et `VOXELS_PER_BLOCK` n'est plus la seule.**
-    La flore est à 40/3 voxels par bloc, les arbres et les filons à **1**.
+28. **Il y a quatre grilles de dessin, et `VOXELS_PER_BLOCK` n'est plus la
+    seule.** Les arbres et les filons sont à **1** voxel par bloc, le personnage
+    et les créatures à **40/3**, et la flore à **4 ou 6** selon le modèle —
+    6 pour les herbes et les fleurs (`CWModelLibrary.GRILLE_FINE`), 4 pour tout
+    ce qui a du volume.
+
+    **La grille n'est donc plus décidée par la bibliothèque mais par le
+    modèle.** C'est `_grid_of` qui tranche, et il consulte une table de chemins.
+    Cette table et la colonne `FIN` du catalogue de `generer_flore.py` doivent
+    dire la même chose : le générateur dessine à la grille qu'il croit, le
+    moteur instancie à celle qu'il lit. S'ils divergent, la plante sort à une
+    taille fausse **d'un facteur un et demi** — assez pour se voir, pas assez
+    pour qu'on remonte à la cause. Deux vérifications de `tests/flora_test.gd`
+    tiennent les deux sens : aucun modèle chargé à une autre grille que la
+    sienne, et aucune entrée de `GRILLE_FINE` qui ne désigne rien.
     C'est un champ de `CWVoxelModel` (`voxels_per_block`), posé au chargement par
     la bibliothèque. Tout ce qui convertit des voxels en blocs doit lire **celui
-    du modèle**, jamais la constante : les deux ont la même valeur pour la
-    flore, ce qui rend l'erreur invisible sur les trois quarts du lot. Deux
-    vérifications de `tests/tree_test.gd` tiennent le contrat.
+    du modèle**, jamais la constante. Tant que la flore était à 40/3 — la valeur
+    de la constante —, l'erreur était invisible sur les trois quarts du lot ;
+    depuis que les trois grilles sont distinctes, plus aucun lot ne tombe sur la
+    constante par hasard, et c'est une amélioration silencieuse. Deux
+    vérifications de `tests/tree_test.gd` et une de `tests/flora_test.gd`
+    tiennent le contrat.
 29. **Aucune plante de Snowlands ne prend la rampe 140-147.** C'est la rampe
     « automne, herbe sèche », un orange chaud ; sur un sol de neige — un cyan
     très clair — chaque plante qui l'emploie ressort en tache orange, seul objet
@@ -422,11 +466,11 @@ docs/images/               gabarit, carte et composition de flore, en jeu
     Aucun test ne peut le voir : c'est une capture, ou rien.
 30. **Une palme est une paire de frondes opposées, et une paire est symétrique.**
     Le dessin par paires met l'attache sur l'ancre — qui est le centre du
-    gabarit, pas le point d'attache — et résout le décalage signalé à la
-    production du lot précédent. Mais tourner une paire d'un demi-tour rend
-    exactement la même image : `_couronne_de_palmes` n'avance donc son quart de
-    tour **qu'une pièce sur deux**, sinon la troisième palme se pose sur la
-    première et la couronne se lit comme une planche en travers du stipe.
+    gabarit, pas le point d'attache — dans le **plan horizontal**. Mais tourner
+    une paire d'un demi-tour rend exactement la même image :
+    `_couronne_de_palmes` n'avance donc son quart de tour **qu'une pièce sur
+    deux**, sinon la troisième palme se pose sur la première et la couronne se
+    lit comme une planche en travers du stipe.
 31. **La frontière `RANGE_TERRAIN_END` / `RANGE_CREATURES_BEGIN` a bougé une
     fois, le 2026-09-05, et ce sera la dernière fois gratuitement.** Elle est
     passée de 31/32 à 40/41 pour loger les neuf filons. C'était sans coût
@@ -434,6 +478,30 @@ docs/images/               gabarit, carte et composition de flore, en jeu
     modèle de créature existera, le même geste imposera de repasser tout un lot
     par `tools/repaint_models.gd`. Vérifier avec `inspect_model.gd` avant de
     toucher à une frontière, jamais après.
+32. **Une pièce dont le point d'attache n'est pas sa base doit être décalée en Z
+    par l'assembleur.** `_piece` pose un modèle par sa base, ce qui est juste
+    pour un tronc et pour un houppier. Une palme retombe : son attache est son
+    voxel le plus **haut**, et sans correction la couronne se pose `height - 1`
+    blocs au-dessus du stipe. Le décalage se calcule à l'échelle de l'instance
+    et à la grille du modèle (`* echelle / m.voxels_per_block`, invariant
+    n° 28), jamais en voxels bruts.
+
+    Ce qui rend le piège cher : le décalage avait été traité **dans le dessin**,
+    en centrant la paire sur son attache (invariant n° 30), et l'affaire passait
+    pour close. Elle ne l'était que sur deux axes sur trois. Une correction
+    partielle est plus dangereuse qu'une absence de correction, parce qu'elle
+    ferme la question.
+33. **Changer la taille d'un modèle, c'est changer sa densité — et rien dans le
+    code ne le rappelle.** `CWModelLibrary.DENSITY` et `CWTreeRules` se lisent en
+    *objets par cellule*, pas en surface couverte : multiplier un modèle par
+    quatre en volume sans toucher à sa densité multiplie par quatre ce qu'il
+    couvre. Le 2026-09-06, le caillou est passé de 8 à 30 voxels à densité
+    constante, et Greenlands s'est retrouvée avec des champs de rochers où l'on
+    ne passait plus — assez serrés pour qu'on croie à un élément de tuile. Le
+    rôle a fini supprimé (§6ter.2). L'espacement des arbres, lui, a été doublé
+    *en même temps* que le lot grandissait, et c'est pour cela qu'on ne l'a pas
+    vu venir de ce côté-là. Aucun test ne peut attraper ça : une densité trop
+    forte est une densité valide.
 
 ## 5. Pièges connus
 
@@ -465,7 +533,7 @@ docs/images/               gabarit, carte et composition de flore, en jeu
   échantillonnages : un pour décider la densité, un par plante posée). Ne pas
   revenir à un tirage à rejet : échantillonner un candidat pour le jeter ensuite
   triplait la facture.
-- **Les 43 modèles de flore sont générés, pas dessinés.** Les rouvrir dans
+- **Les 38 modèles de flore sont générés, pas dessinés.** Les rouvrir dans
   MagicaVoxel pour les retoucher est du travail perdu : la prochaine exécution
   de `tools/blender/generer_flore.py` les écrase. Corriger le générateur, puis
   regénérer. Le script recopie le bloc `RGBA` de la palette de projet tel quel
@@ -528,7 +596,7 @@ d'herbe au genou », là où les captures la montrent à l'épaule.
 | caillou | 8 voxels | **28 – 34** (un bloc erratique) |
 | plante haute | absente | **fougère, 40 – 46 voxels** |
 | fleur de champ | 13 voxels | **6 – 10** |
-| lot de flore | 39 modèles, 9 dossiers | **43 modèles, 6 dossiers** |
+| lot de flore | 39 modèles, 9 dossiers | **42 modèles, 6 dossiers** |
 | lot d'arbres | 14 modèles | **24 modèles** |
 
 **Les formes ont été repensées, pas réduites.** `reduced(2)` aurait donné des
@@ -574,7 +642,7 @@ Aucun n'aurait pu être trouvé autrement.
 ### 6.5 Ce qui reste ouvert du côté des assets
 
 > **Trois défauts sont apparus après coup, en jouant.** Ils ont leur propre
-> section, §6bis, parce qu'ils passent avant tout le reste.
+> section, §6bis ; ils sont **corrigés**.
 
 - **`CWVoxelModel.reduced(n)` n'a toujours aucun usage.** Un arbre de 22 blocs
   est le premier modèle assez gros pour la justifier, et la couche existe
@@ -587,20 +655,18 @@ Aucun n'aurait pu être trouvé autrement.
   restent à produire, et elles ne sont pas dispersées par biome : elles se
   posent en rangées par le système de champs du jalon 4.3.
 
-## 6bis. À CORRIGER EN PREMIER — trois défauts vus en jeu (2026-09-06 au soir)
+## 6bis. Les trois défauts vus en jeu — **corrigés le 2026-09-06 au soir**
 
-> **Avant toute autre chose à la prochaine session.** Ce sont trois défauts
-> constatés en jeu après le commit du jalon 1.12. Les deux premiers sont des
-> bugs de pose, le troisième est un choix d'assets. Les diagnostics ci-dessous
-> sont **vérifiés sur les données des modèles**, pas déduits du code : j'ai
-> dumpé les profils en Z.
+*Cette section était « à corriger en premier » ; c'est fait, et vérifié en
+capture. Elle est gardée pour les deux profils en Z qui ont servi de preuve, et
+pour la leçon du §6bis.1, qui est la plus utile des trois.*
 
-### 6bis.1 La flèche des conifères flotte — c'est le dernier étage, pas la flèche
+### 6bis.1 La flèche des conifères flottait — deux corrections en une
 
-Symptôme : le sommet de tous les conifères est détaché du reste de l'arbre.
+Symptôme : le sommet de tous les conifères détaché du reste de l'arbre.
 
-**Ce n'est pas la flèche qui est mal placée, c'est l'étage qui la porte.** Profil
-en Z de `arbres/greenlands/pin.vox` (22 blocs de haut) :
+**Ce n'était pas la flèche qui était mal placée, c'était l'étage qui la porte.**
+Profil en Z de `arbres/greenlands/pin.vox` (22 blocs de haut), avant :
 
 ```
   z= 15   21 voxels      <- avant-dernier etage
@@ -610,30 +676,38 @@ en Z de `arbres/greenlands/pin.vox` (22 blocs de haut) :
   z= 19-21               <- la fleche, contigue a l'etage 18
 ```
 
-La flèche est bien collée à son étage. Ce sont les **deux derniers étages** qui
-sont espacés de 2,8 blocs alors qu'un étage fait un bloc d'épaisseur, et **le fût
-ne comble pas l'écart** : il s'arrête à `hauteur * 0,82`, soit z = 15 pour le
-pin. Les trois quarts supérieurs de l'arbre flottent donc en un seul morceau.
+Les **deux derniers étages** sont espacés de 2,8 blocs alors qu'un étage fait un
+bloc d'épaisseur, et le fût ne comblait pas l'écart : il s'arrêtait à
+`hauteur * 0,82`, soit z = 15. Les trois quarts supérieurs de l'arbre flottaient
+en un seul morceau. `sapin_enneige` avait le même défaut, en plus court.
 
-`sapin_enneige` a le même défaut, en plus court : étages jusqu'à z = 13, vide en
-z = 14, flèche à partir de z = 15.
+**Le remède** (`tools/blender/arbres_blocs.py`, `conifere()`) : le fût monte
+**jusqu'au dernier étage posé** et non à une fraction de la hauteur nominale.
+C'est la seule des deux contraintes qui compte — un fût qui s'arrête *au* dernier
+étage ne dépasse pas et ne laisse pas de trou, quel que soit le pas. D'où les
+étages calculés d'abord, le fût ensuite, le dessin en dernier.
 
-**Où c'est** : `tools/blender/arbres_blocs.py`, `conifere()`. Le pas entre étages
-vaut `(hauteur - z0 - 2) / (etages - 1)` — 2,8 blocs pour le pin — et le fût a
-été raccourci à 0,82 le même jour, précisément pour qu'il ne dépasse pas du
-feuillage. Les deux corrections se sont télescopées.
+**Et la capture d'après a montré la moitié qui manquait au diagnostic.** Le fût
+comblait bien l'écart, mais **en écorce** : les deux à trois blocs entre étages
+laissaient voir une colonne brune, et l'arbre se lisait comme une pile
+d'assiettes enfilées sur un piquet. Le commentaire du code disait déjà la règle
+juste — « un conifère ne montre son tronc qu'entre le sol et son premier étage ;
+au-dessus, il est dans la masse » — mais le code ne la faisait pas. Il la fait
+maintenant : au-dessus du premier étage, le fût est repeint dans le sombre du
+feuillage, avant que les plateaux ne soient dessinés par-dessus.
 
-**Ce que je ferais** : faire monter le fût **jusqu'au dernier étage posé** plutôt
-qu'à une fraction de la hauteur nominale. C'est la seule des deux contraintes qui
-compte — un fût qui s'arrête *au* dernier étage ne dépasse pas et ne laisse pas
-de trou. Le nombre d'étages peut rester ce qu'il est.
+> **La leçon, et elle vaut au-delà de ce défaut : un profil en Z ne montre pas
+> une couleur.** Le dump disait « plus de trou » et il avait raison ; il ne
+> pouvait rien dire du fait que le trou était comblé avec la mauvaise matière.
+> Une mesure ne répond qu'à la question qu'on lui pose. C'est le même argument
+> que §6.4, d'un cran plus fin : la capture ne sert pas qu'à trouver ce qu'un
+> test headless ne voit pas, elle sert à vérifier **le remède** aussi.
 
-### 6bis.2 Les palmes du dattier flottent — l'ancre est en haut du modèle
+### 6bis.2 Les palmes du dattier flottaient — l'ancre est en haut du modèle
 
-Symptôme : la couronne du palmier de désert est posée trop haut, détachée du
-stipe.
+Symptôme : la couronne du palmier de désert posée trop haut, détachée du stipe.
 
-**Cause vérifiée.** Profil en Z de `arbres/deserts/palme.vox` (3 blocs de haut) :
+Profil en Z de `arbres/deserts/palme.vox` (3 blocs de haut) :
 
 ```
   z= 0    2 voxels   x 0 et 16    <- les deux pointes, qui retombent
@@ -642,55 +716,318 @@ stipe.
 ```
 
 Une paire de palmes retombe : son **point d'attache est le voxel le plus haut du
-modèle**, pas le plus bas. Or `CWTreeScatter._couronne_de_palmes` pose la pièce
-par sa base (`fy = haut`), donc l'attache se retrouve **`m.height - 1` blocs
-au-dessus** du sommet du stipe — trois blocs pour le dattier.
+modèle**, pas le plus bas. Or `_piece` pose une pièce par sa base, donc l'attache
+se retrouvait `m.height - 1` blocs au-dessus du sommet du stipe — trois blocs
+pour le dattier, quatre pour le palmier de jungle, dont la canopée le cachait
+mieux.
 
-C'est le décalage d'attache annoncé dans §7 : il avait été réglé *dans le dessin*
-(la paire met l'attache sur l'axe horizontal) mais **pas en Z**.
+C'était le décalage d'attache annoncé en §7 : il avait été réglé *dans le dessin*
+— une paire met l'attache sur l'ancre dans le plan horizontal, invariant n° 30 —
+mais **pas en Z**. Il était réglé sur deux axes sur trois, et c'est précisément
+ce qui a fait croire l'affaire close.
 
-**Où c'est** : `src/worldgen/cw_tree_scatter.gd`, `_couronne_de_palmes`, la ligne
-`var y: float = haut - float(k) * 0.35`.
+**Le remède** (`src/worldgen/cw_tree_scatter.gd`, `_couronne_de_palmes`) :
+retrancher la hauteur du modèle, à son échelle et à sa grille —
+`float(m.height - 1) * echelle / m.voxels_per_block`, la même formule que `haut`
+juste au-dessus. La conversion passe par `voxels_per_block` du modèle et non par
+la constante : c'est l'invariant n° 28.
 
-**Ce que je ferais** : retrancher la hauteur du modèle —
-`haut - float(m.height - 1) - float(k) * 0.35`. À vérifier ensuite sur le palmier
-de **jungle** aussi : son modèle fait 4 blocs de haut au lieu de 3, donc il est
-décalé d'autant, même si la canopée le cache mieux.
+### 6bis.3 Ne garder que les gros cailloux — et remplacer, pas retirer
 
-### 6bis.3 Ne garder que les gros cailloux
+`greenlands/caillou_02` (19 voxels, dalle plate) et `deserts/gres` (34 voxels,
+colonne à chapeau) sont supprimés. Restent les quatre blocs erratiques :
+`greenlands/caillou_01` (31), `snowlands/caillou_01` (29),
+`lavalands/caillou_basalte` (28), et le nouveau.
 
-Décision d'assets, demandée le 2026-09-06 : **supprimer les anciens cailloux et
-le grès du désert, et ne garder que les blocs erratiques qu'on vient de
-générer.**
+**`deserts/gres` était le seul modèle du rôle `CAILLOU` de Deserts**, et le
+supprimer sans plus aurait vidé un rôle que les deux crêtes atteignent encore —
+exactement ce que refuse `tests/decor_test.gd` (invariant n° 22). Le choix pris
+est de le **remplacer** : `deserts/caillou_gres` est un bloc erratique dessiné
+par le même `bloc_erratique` que les trois autres, dans la plage du grès
+(20 – 24). `FAMILIES` et `ROLES` gardent donc leur forme, et le désert sa
+composition.
 
-Les candidats, avec leur hauteur mesurée :
+Ce qui a décidé du remplacement plutôt que du retrait : **un lot n'est pas une
+collection de bonnes idées, c'est une famille.** Le grès sculpté par le vent
+était la meilleure silhouette des cinq, et c'est ce qui le condamnait — seul de
+son espèce, il ne se comparait à rien. Les quatre minéraux du monde ont
+maintenant la même masse basse et large, et quatre matières.
 
-| fichier | hauteur | sort |
-|---|---|---|
-| `flore/greenlands/caillou_01` | 31 voxels (2,3 blocs) | **gardé** |
-| `flore/greenlands/caillou_02` | 19 voxels, dalle plate | **à supprimer** |
-| `flore/snowlands/caillou_01` | 29 voxels | **gardé** |
-| `flore/lavalands/caillou_basalte` | 28 voxels | **gardé** |
-| `flore/deserts/gres` | 34 voxels, colonne à chapeau | **à supprimer** |
 
-> ⚠️ **Supprimer `deserts/gres` casse une vérification, et c'est voulu qu'elle
-> tombe.** C'est le seul modèle du rôle `CAILLOU` dans Deserts ; sans lui, le
-> rôle reste atteignable par les deux crêtes mais n'a plus rien à poser, et
-> `tests/decor_test.gd` refuse exactement ça (« chaque rôle atteignable a un
-> modèle dans son biome », invariant n° 22). Il faut donc **aussi retirer
-> `Role.CAILLOU` de la branche Deserts** de `CWDecorRules.FAMILIES` — et se
-> demander par quoi le remplacer, sinon la première crête de ce biome n'a plus
-> qu'une feuille sur deux.
->
-> `greenlands/caillou_02` n'a pas ce problème : il est le second d'une liste de
-> deux, le rôle garde un modèle.
+## 6ter. Les remaniements de rendu — **2026-09-06 au soir**
+
+*Tous les trois viennent de la même capture, et aucun n'aurait pu sortir d'un
+test. Le premier est le plus lourd et le plus intéressant.*
+
+### 6ter.1 La flore passe à 4 voxels par bloc
+
+**Le symptôme n'était pas celui qu'on croyait.** Le lot avait été regénéré le
+matin même « avec moins de détails » — deux fois et demie plus grand, deux fois
+moins dense, cinq brins au lieu de onze — et le résultat en jeu était
+*indiscernable* de l'avant. Vérifié avant de rien changer : les `.vox` sur le
+disque étaient octet pour octet ceux que produisait le générateur. Le lot avait
+bien été refait ; c'est le remède qui ne portait pas.
+
+**Parce que le remède agissait sur le nombre d'éléments, et le défaut est dans
+la maille.** À 40/3 voxels par bloc, un brin fait 0,08 bloc d'épaisseur : à côté
+d'un cube de terrain d'un bloc, ce n'est pas un cube, c'est un cheveu. Cinq
+cheveux au lieu de onze font une touffe plus claire, pas une touffe plus grosse.
+Aucun réglage d'un lot dessiné à cette finesse ne pouvait donner ce qu'on
+cherchait.
+
+Le lot est donc redessiné à **4 voxels par bloc**, avec un module de formes à
+part — `tools/blender/flore_blocs.py` — exactement comme le lot d'arbres avait
+eu `arbres_blocs.py` trois jours plus tôt, et pour la même raison : **les formes
+sont à repenser, pas à réduire.** Une touffe est cinq brins de sept voxels ; une
+fleur, une tige et une croix de trois ; une fougère, cinq arcs. Le générateur
+passe en **Python pur** : à cette résolution, `bpy` n'apporte plus rien.
+
+Ce qui **n'a pas bougé** : la taille des plantes en blocs. La touffe fait
+toujours 1,75 bloc. Et l'enveloppe de `tests/flora_test.gd` n'a pas eu à
+bouger non plus, parce qu'elle est dite **en blocs** — c'est le genre de détail
+qui ne se remarque que le jour où il paye.
+
+> **C'est le premier écart assumé entre ce projet et une valeur mesurée dans
+> l'original**, et il est signalé comme tel dans
+> `CWVoxelModel.VOXELS_PER_BLOCK_FLORE` et en §8.1. 3/40 n'est pas contesté :
+> c'est bien l'échelle du décor de l'alpha. C'est le rendu qui la refuse.
+
+### 6ter.2 Le rôle `CAILLOU` est supprimé
+
+Les quatre blocs erratiques — un par biome minéral, dont le `deserts/caillou_gres`
+produit le matin même — sont retirés du lot, et `Role.CAILLOU` de `FAMILIES` et
+de `ROLES`. Motif, vu en jeu : **dispersés à la densité de la flore, ils
+rendaient des champs de rochers** de plusieurs dizaines de blocs, serrés au point
+qu'un joueur n'y passait plus.
+
+La leçon est celle du 2026-09-06 au matin, prise par l'autre bout : on avait
+grossi les cailloux de 8 à 30 voxels *sans toucher à leur densité*, qui avait été
+réglée quand ils faisaient la taille d'un galet. Un objet qu'on multiplie par
+quatre en volume ne garde pas sa densité. **Changer une taille, c'est changer une
+densité**, et rien dans le code ne le rappelle.
+
+Le minéral posé du monde est désormais le seul `arbres/greenlands/rocher_geant`,
+qui passe par la couche des arbres : espacement de 14 blocs, poids 0,05 dans
+`CWTreeRules`. Un rocher de loin en loin, ce qui est ce qu'on voulait.
+
+Les branches où `CAILLOU` était une feuille se referment sur sa sœur —
+Greenlands `[[FLEUR, SOUS_BOIS], [COUVERT]]`, et de même pour Snowlands, Deserts
+et Lava Lands.
+
+### 6ter.3 Un biome n'a plus qu'une matière de plaine
+
+`CWPalette.GRASS_DRY` et `CWPalette.TUNDRA` sont retirées de `surface_of`.
+C'étaient les deux **franges d'humidité** héritées d'avant le jalon 1.12 : une
+prairie sous 0,46 d'humidité virait au kaki, une Snowlands sous 0,50 au
+gris-olive.
+
+Le défaut se voyait à l'ATH avant de se voir au sol : « Greenlands / herbe
+sèche » sur un sol kaki, c'est-à-dire un nom de biome et une couleur qui se
+contredisent. Depuis que `CWBiome` classe le climat, une seconde matière de
+plaine par biome ne dit **rien que le biome ne dise déjà**. Les trois bandes
+d'altitude — plage, roche nue, neige de sommet — restent : celles-là ne sont pas
+des franges de climat, elles disent l'altitude, et c'est une autre information.
+
+**Les deux index restent alloués**, et c'est délibéré : les libérer décalerait
+tout ce qui suit dans la réserve 1-13, donc les plages 14-19, 20-24 et 25-27 qui
+sont peintes dans les 62 `.vox` du dépôt. Deux entrées sur 256 contre un
+repassage complet par `tools/repaint_models.gd` : c'est l'arbitrage de
+l'invariant n° 31, tranché dans le même sens. Aucun modèle ne les employait —
+vérifié avant, pas après.
+
+Le retrait a emporté avec lui l'exception `FAMILIES_SURFACE[GRASS_DRY]`, et
+verdi les deux modèles de Greenlands qui puisaient dans la rampe « automne »
+(`herbe_seche`, `broussaille`) : une tache orange sur une prairie désormais
+toujours verte, c'était l'invariant n° 29 transposé de Snowlands à Greenlands.
+
+Un balayage de `tests/decor_test.gd` refuse maintenant que `surface_of` rende
+l'une des deux matières retirées, sur 4 096 climats × 6 biomes × 6 altitudes.
+Sans lui, remettre une frange ne lèverait rien.
+
+
+### 6ter.4 Et la flore prend une seconde grille : 6 pour les petits props
+
+**Quatre voxels par bloc était juste pour la moitié du lot.** Un buisson, un
+cactus, un champignon sont des *masses* : leur forme est leur volume, et un
+volume se lit à n'importe quelle résolution. Ce qui s'y perdait, ce sont les
+objets **dont toute la forme tient dans un trait** — une touffe d'herbe est cinq
+lignes, une fleur est une tige et une corolle. À quatre voxels par bloc, une
+corolle est une croix de cinq voxels et une touffe un paquet de bâtonnets : le
+grain était juste, la silhouette ne l'était plus.
+
+**Quinze modèles passent donc à six voxels par bloc** — les herbes, les fleurs,
+le ginseng, le roseau —, le reste garde quatre. Une touffe passe de sept à onze
+voxels de haut, sans revenir au cheveu : un brin fait un sixième de bloc, pas un
+treizième. C'est le rapport d'un et demi entre les deux grilles qui compte, pas
+les valeurs.
+
+**Conséquence d'architecture, et c'est la partie qui coûte.** La grille n'est
+plus décidée par la bibliothèque mais **par modèle** : `CWModelLibrary._grid_of`
+consulte `GRILLE_FINE`, une liste de chemins. Cette liste et la colonne `FIN` du
+catalogue de `generer_flore.py` sont **deux sources qui doivent dire la même
+chose** — le générateur dessine à la grille qu'il croit, le moteur instancie à
+celle qu'il lit. Une divergence sort la plante à une taille fausse d'un facteur
+un et demi : assez pour se voir, pas assez pour qu'on remonte à la cause. Deux
+vérifications tiennent les deux sens (invariant n° 28).
+
+Pourquoi une liste et non une règle sur le rôle : le partage passe par le rôle
+**à deux modèles près**, et ces deux-là suffisent à le disqualifier —
+`feuille_large` est un `COUVERT` de jungle mais c'est une grande feuille, et
+`herbe_de_lave` est rangée en `SOUS_BOIS` alors que c'en est. Une règle qui se
+trompe sur deux modèles sur trente-huit coûte plus qu'une liste, parce qu'on ne
+sait pas lesquels sans les regarder un par un.
+
+### 6ter.5 La flèche des conifères était une boule
+
+Symptôme, vu en jeu sur Snowlands : le sommet des conifères lit comme une
+**boule posée sur un cou**. Le profil en Z de `sapin_enneige` le disait mot pour
+mot :
+
+```
+  z= 12    9 voxels
+  z= 13    9 voxels
+  z= 14    1 voxel     <- le cou
+  z= 15    5 voxels
+  z= 16    9 voxels    <- la boule : la silhouette REGONFLE
+  z= 17    5 voxels
+  z= 18    1 voxel
+```
+
+**Deux causes, et il fallait les deux.** Le fût se réduisait à un fil entre les
+deux derniers étages : `colonne` reçoit `fut_r` comme rayon haut, et sous 1,0 un
+disque ne pose plus qu'**un** voxel. Et la flèche était **plus large que l'étage
+qui la portait** — son rayon était la constante 1,8, soit neuf voxels, quand le
+dernier étage d'un conifère fait 1,3 à 1,5, soit cinq à neuf. *Une pointe qui
+s'élargit avant de se fermer est une boule, par définition.*
+
+Remèdes : le rayon haut du fût est **planchéisé à 1,0** (cinq voxels), et la
+flèche part de l'**avant-dernier** étage en **remplaçant le dernier** au lieu de
+s'y ajouter. Ses rayons décroissent donc strictement, la silhouette est monotone
+du pied à la pointe, et l'arbre perd exactement **un bloc** — la pointe passe de
+`dernier + 3` à `dernier + 2`, ce qui était l'autre moitié de la demande.
+
+Profil après, sur le même modèle : `21, 9, 9, 5, 5, 1, 1`. Vérifié aussi sur
+`pin`, `pin_enneige` et `arbre_epineux`.
+
+> C'est la **troisième** fois que le sommet des conifères est repris en trois
+> jours — le fût qui dépassait, la flèche qui flottait, la flèche qui gonflait.
+> À chaque fois le diagnostic était juste et le remède partiel, parce qu'il
+> traitait le symptôme qu'on voyait sans regarder le **profil entier**. Un
+> `zprofile` de dix lignes aurait montré les trois d'un coup.
+
+### 6ter.6 Les bandes d'altitude sont retirées
+
+`surface_of` ne rend plus de roche nue ni de calotte de neige hors des biomes
+dont c'est la matière. Il ne reste que la matière du biome, la plage, et la
+règle propre à Lava Lands.
+
+**Ce n'est pas le même motif que le retrait des franges d'humidité** (§6ter.3),
+et c'est ce qui rend le cas intéressant. Les franges se *contredisaient* : une
+prairie annoncée « Greenlands » avec un sol kaki. Les bandes d'altitude, elles,
+ne se contredisaient pas — une montagne a de la roche et de la neige, le
+raisonnement de vraisemblance était bon. Elles ne **portaient rien** :
+`decor_allowed` refuse le décor sur la roche et sur la neige hors Snowlands,
+si bien que chaque relief un peu haut d'une Greenlands rendait un plateau nu,
+sans une plante ni un arbre, où l'on marchait sans rien rencontrer.
+
+*Une matière qui ne porte rien n'est pas un sous-biome, c'est un trou dans le
+monde.* Le raisonnement de vraisemblance tenait tant qu'on regardait une carte
+de hauteurs ; il ne tient plus dès qu'on marche dessus.
+
+Les trois constantes — `SNOW_LINE_BASE`, `ROCK_BAND`, `ROCK_MIN` — restent, et
+ne servent plus qu'à Lava Lands, dont la règle décrit un volcan et non une
+altitude. Elles serviront de point de départ le jour où la **falaise** aura sa
+règle : la source force le type 6 sur la falaise
+(`terrain_surfaceColor_blend`), et ce sera une **pente** à mesurer, pas une
+altitude — c'est probablement là que la roche nue doit revenir.
+
+Répartition mesurée après (`tools/biome_stats.gd`) : herbe 37,2 %, neige 27,0 %,
+gravier 23,9 %, marais 6,6 %, scorie 2,4 %, sable 2,0 %, jungle 0,5 %, magma
+0,5 %. **Plus une seule colonne de roche** hors Lava Lands.
+
+Un balayage de `tests/decor_test.gd` refuse maintenant qu'un biome autre
+qu'Oceans ou Lava Lands produise une matière que `decor_allowed` rejette — c'est
+la formulation générale du défaut, et elle attrape aussi le prochain.
+
+
+## 6quater. À FAIRE EN PREMIER — la planche de validation des assets
+
+> **Avant de passer à la suite (§7).** Demandé le 2026-09-06 au soir, après trois
+> sessions où chaque défaut d'asset a été trouvé par hasard, en jouant, une fois
+> le lot déjà commité.
+
+### Ce qu'il faut faire
+
+**Une capture par modèle, seul, sans rien autour.** Puis regarder chacune, et
+trancher : le modèle est correct, ou il est à regénérer proprement. Le critère
+est celui qu'on n'a jamais formulé jusqu'ici et qui a coûté trois reprises :
+**est-ce qu'on reconnaît l'objet, ou est-ce que c'est une bouillie de voxels ?**
+
+Les deux endroits où le risque est le plus élevé, et ce n'est pas un hasard :
+
+* **`buisson`** et les autres masses (`buisson_neige`, `snowberry`, `habanero`,
+  `fire_shrub`) : ce sont les seuls modèles **pleins** du lot. Une masse de 96
+  voxels dans une boîte de 7 × 7 × 6 n'a aucune silhouette propre — c'est un tas.
+  `masse()` les grène sur les bords pour éviter la boule lisse, mais personne
+  n'a encore regardé un buisson seul, de près ;
+* **les petits props** à 6 voxels par bloc. Ils viennent d'être redessinés et
+  n'ont été vus qu'à trente blocs de distance, en prairie. Une corolle de trois
+  voxels et une touffe de onze se jugent de près ou pas du tout.
+
+### Pourquoi de près et un par un, et pas en capture de biome
+
+Les captures de biome répondent à « est-ce que le paysage tient ? » — c'est une
+autre question, et elle a ses propres réponses. Un modèle raté s'y noie : à
+trente blocs, une plante de deux blocs fait dix pixels, et **dix pixels sont
+toujours plausibles**. Les huit défauts d'assets trouvés depuis le 2026-09-05
+l'ont tous été parce qu'ils se répétaient à des centaines d'exemplaires — le fût
+qui dépasse, la tache orange, le champ de rochers. Un modèle qui est simplement
+laid, et qui n'est ni répété ni aberrant, passe indéfiniment.
+
+### Ce qui existe déjà, et ce qui manque
+
+`src/demo/scale_board.gd` (`CWScaleBoard`) fait **les trois quarts du travail** :
+il maille les modèles, les pose côte à côte à leur taille réelle, avec des mires
+de hauteur connue en blocs et la silhouette du personnage. Il lit déjà
+`m.voxels_per_block`, donc il est juste depuis le passage aux deux grilles de
+flore — vérifié le 2026-09-06. Il s'allume avec `scale_board = true` sur le nœud
+racine de `scenes/terrain_demo.tscn`.
+
+Ce qui manque, et c'est peu :
+
+1. **une pose par modèle** au lieu d'une rangée de dix. `MODELS_PER_ROW` existe
+   et `models_center` / `models_span` cadrent déjà la caméra sur la zone des
+   modèles : il faut une boucle qui pose **un** modèle, cadre dessus, capture,
+   passe au suivant ;
+2. **un fond neutre**. Le gabarit se pose aujourd'hui sur le terrain généré, donc
+   sur de l'herbe, avec des plantes autour. « Sans rien autour » veut dire un
+   sol uni et pas de dispersion — `--sans-arbres --sans-flore` existe déjà pour
+   la moitié ;
+3. **deux angles**, au minimum : de face et de trois quarts au-dessus. Une
+   bouillie de voxels peut très bien se lire de face — c'est même comme ça
+   qu'une masse pleine trompe.
+
+Une session headless n'a pas de rastériseur (§2, §6.4) : ça se fait donc en
+**fenêtré**, comme `-- --biome N --shot S`, et le PNG sort dans `user://shots`.
+
+### Ce qu'on en fait ensuite
+
+Trancher modèle par modèle, et **regénérer proprement** ceux qui ne passent pas
+— corriger `tools/blender/flore_blocs.py` ou le catalogue, jamais le `.vox` :
+les modèles sont générés, pas dessinés, et une retouche à la main est écrasée à
+la génération suivante (§5).
+
+> **Et écrire le verdict quelque part.** Trente-huit modèles regardés un par un,
+> c'est une heure qu'on ne veut pas repayer à la prochaine reprise. Un tableau
+> « modèle → verdict → ce qui a été changé » dans cette section suffit.
 
 ---
 
+
 ## 7. Ensuite — 1.11 (le tronc en matière) ou 2.6 (apparition)
 
-> **Après §6bis.** Les deux portes sont ouvertes,
-> et elles ne demandent pas le même travail. Ma préférence va au **tronc en
+> **Après §6quater.** Les deux portes sont
+> ouvertes, et elles ne demandent pas le même travail. Ma préférence va au **tronc en
 > matière** : c'est le seul point du jalon 1 qui reste, il est court, et il
 > débloque la collision — un arbre de 20 blocs qu'on traverse se remarque
 > immédiatement, et il n'y en avait pas de si gros avant le 2026-09-06.
@@ -767,7 +1104,7 @@ niveau maximum des joueurs présents, §7 —, ce qui plaide pour la seconde voi
 
 ### Ce qui reste ouvert dans le jalon 1, sans bloquer
 
-- **Le nénuphar n'est pas porté** : le lot des 43 modèles n'en a pas, et
+- **Le nénuphar n'est pas porté** : le lot des 38 modèles n'en a pas, et
   `CWPalette.surface_index` ne rend jamais `WATER`. Le rôle est identifié, la
   branche de la source aussi (`docs/systems/02`, §8.6).
 - **Le lacet libre** de trois rôles — roseau, sous-bois humide, nénuphar. Noté
@@ -818,23 +1155,57 @@ d'objets** et `World_generateTreeRecursive` **ne génère pas d'arbres**.
 
 ### 8.1 L'échelle — fixée le 2026-09-04, alignée sur l'original le 2026-09-05
 
-**Il y a deux grilles, et depuis le jalon 1.12 les deux servent à dessiner.**
+**Il y a quatre grilles depuis le 2026-09-06, et les quatre servent à
+dessiner.**
 
 * **la grille fine, 40/3 voxels par bloc** — trois blocs valent exactement
   40 voxels, et le personnage de référence mesure 32 voxels, soit 2,4 blocs.
-  Elle porte le personnage, les créatures, **la flore basse**, le mobilier, les
-  objets ;
+  Elle porte le personnage, les créatures, le mobilier, les objets. C'est **la
+  valeur mesurée** : les échelles d'instanciation du décor de l'original sont
+  0,075 / 0,09 / 0,1, et 0,075 = 3/40 exactement ;
+* **les petits props de flore, 6 voxels par bloc** — herbes et fleurs. La liste
+  est `CWModelLibrary.GRILLE_FINE`, et elle doit dire la même chose que la
+  colonne `FIN` du catalogue de `generer_flore.py` ;
+* **le reste de la flore, 4 voxels par bloc** — buissons, cactus, champignons,
+  fougères, coraux : ce qui a du volume ;
 * **la grille du terrain, 1 voxel = 1 bloc.** Elle porte **les arbres et les
   filons**. C'est un champ de `CWVoxelModel` (`voxels_per_block`) et non une
   constante — voir l'invariant n° 28.
 
-C'est le premier rapport, et lui seul, qui sépare ce rendu de celui de
-Minecraft : de gros cubes de terrain, mais du détail sur ce qui pousse dessus.
-Une touffe d'herbe est faite de lames de deux voxels ; un personnage de 2,4
-blocs a des yeux d'un voxel. Un arbre, lui, est bâti des mêmes cubes que le
-monde — et c'est ce que montrent les captures du jeu d'origine. Le détail par
-catégorie d'objet est dans `assets/models/MODELS.md`, le fichier à donner à qui
-modélise.
+**Pourquoi la flore en a deux et pas une.** Quatre voxels par bloc va bien à ce
+qui est une *masse* : un buisson, un cactus, un champignon se lisent à n'importe
+quelle résolution parce que leur forme est leur volume. Ce qui s'y perd, ce sont
+les objets **dont toute la forme tient dans un trait** — une touffe d'herbe est
+cinq lignes, une fleur est une tige et une corolle. À quatre voxels par bloc,
+une corolle est une croix de cinq voxels et une touffe un paquet de bâtonnets :
+le grain est juste, la silhouette ne l'est plus. Six voxels par bloc rend à ces
+objets de quoi dire leur forme — une touffe passe de sept à onze voxels de haut
+— **sans revenir au cheveu**, un brin faisant un sixième de bloc et non un
+treizième.
+
+**Pourquoi la flore a quitté la valeur mesurée, et il faut le dire dans ce
+sens-là.** 3/40 n'est pas contesté : c'est bien l'échelle du décor de
+l'original, et elle implique qu'une touffe d'herbe y est dessinée treize fois
+plus fin qu'un bloc de terrain. Ce projet l'a portée fidèlement jusqu'au lot du
+2026-09-06 au matin. C'est **le rendu qui l'a refusée** : vu en jeu, un brin de
+0,08 bloc à côté d'un cube de terrain d'un bloc ne lit pas comme un cube, il lit
+comme un cheveu, et une prairie entière comme une fourrure. Le lot d'arbres
+avait montré l'autre moitié de l'argument trois jours plus tôt — ce qui lit
+juste, c'est ce qui partage le grain du terrain.
+
+Quatre voxels par bloc est le compromis : assez gros pour que le grain se voie,
+assez fin pour qu'une fleur reste une fleur à deux ou trois voxels. **La taille
+des plantes en blocs n'a pas bougé** — une touffe fait toujours 1,75 bloc, avec
+sept voxels au lieu de vingt-trois. C'est une résolution de dessin qu'on change,
+pas une enveloppe, et c'est pour ça que le plafond de `tests/flora_test.gd`, qui
+est dit **en blocs**, a survécu au changement sans qu'on y touche.
+
+Cette entrée relève donc de l'expression et non de l'algorithme, au sens de la
+note de périmètre du `README` — elle est signalée comme telle dans
+`CWVoxelModel.VOXELS_PER_BLOCK_FLORE`, qui porte la note complète.
+
+Le détail par catégorie d'objet est dans `assets/models/MODELS.md`, le fichier à
+donner à qui modélise.
 
 **D'où sort le nombre.** D'une mesure au pixel sur une capture du jeu d'origine,
 pas d'un jugement à l'œil : brin d'herbe 7 px de large, pupille du personnage
@@ -946,14 +1317,14 @@ Ce sont les biomes de l'alpha 2013, décidés par `CWBiome.at`. Touches **1** à
 
 | biome | flore | arbres |
 |---|---|---|
-| **greenlands** | `herbe_01` `herbe_02` `herbe_03` `herbe_seche` `fleur_bleuet` `fleur_tournesol` `fleur_coeur` `ginseng` `buisson` `scrub` `broussaille` `fougere` `caillou_01` `caillou_02` | `chene_tronc` + 2 houppiers, `bouleau_tronc` + houppier, `pin`, `rocher_geant`, `arbre_geant_tronc` + houppier |
-| **snowlands** | `herbe_gelee` `fleur_de_glace` `buisson_neige` `snowberry` `cotonnier` `caillou_01` | `pin_enneige`, `sapin_enneige`, `bouleau_givre_tronc` + houppier |
-| **deserts** | `cactus_01` `cactus_02` `broussaille_seche` `cotonnier` `habanero` `gres` | `cactus_geant`, `palmier_tronc` + `palme` + `palme_diagonale` |
+| **greenlands** | `herbe_01` `herbe_02` `herbe_03` `herbe_seche` `fleur_bleuet` `fleur_tournesol` `fleur_coeur` `ginseng` `buisson` `scrub` `broussaille` `fougere` | `chene_tronc` + 2 houppiers, `bouleau_tronc` + houppier, `pin`, `rocher_geant`, `arbre_geant_tronc` + houppier |
+| **snowlands** | `herbe_gelee` `fleur_de_glace` `buisson_neige` `snowberry` `cotonnier` | `pin_enneige`, `sapin_enneige`, `bouleau_givre_tronc` + houppier |
+| **deserts** | `cactus_01` `cactus_02` `broussaille_seche` `cotonnier` `habanero` | `cactus_geant`, `palmier_tronc` + `palme` + `palme_diagonale` |
 | **jungles** | `feuille_large` `fougere_geante` `liane` `vrille` `lierre` `fleur_coeur` `fleur_ame` `roseau` `champignon` | `tropical_tronc` + 2 houppiers, `palmier_tronc` + 2 palmes |
-| **lavalands** | `fire_shrub` `herbe_de_lave` `fleur_de_lave` `caillou_basalte` `champignon_luisant` | `arbre_epineux` |
+| **lavalands** | `fire_shrub` `herbe_de_lave` `fleur_de_lave` `champignon_luisant` | `arbre_epineux` |
 | **oceans** | `algue` `corail` `etoile_de_mer` | — |
 
-**43 modèles de flore, 24 d'arbres, 9 filons.** Oceans n'a pas d'arbre : une île
+**38 modèles de flore, 24 d'arbres, 9 filons.** Oceans n'a pas d'arbre : une île
 émergée n'est pas Oceans, c'est son climat qui la nomme, et elle porte les
 arbres qui vont avec.
 

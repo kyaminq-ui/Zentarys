@@ -48,6 +48,12 @@ const ROTATIONS: int = 4
 ## A ne pas confondre avec `CWScatter.SUBBLOCK_STEPS`, qui est la finesse de
 ## *position* d'une plante sous son bloc : une grille entiere, sans rapport avec
 ## celle du dessin.
+##
+## **Depuis le 2026-09-06, elle ne porte plus la flore** : le personnage, les
+## creatures, le mobilier et les objets restent dessus ; la flore basse est
+## passee a `VOXELS_PER_BLOCK_FLORE`. Elle reste la valeur de reference du
+## projet — c'est elle qui est mesuree — et la valeur par defaut d'un modele
+## charge sans grille explicite.
 const VOXELS_PER_BLOCK: float = 40.0 / 3.0
 
 ## La **seconde** grille de dessin : un voxel vaut un bloc.
@@ -65,8 +71,61 @@ const VOXELS_PER_BLOCK: float = 40.0 / 3.0
 ## brins d'herbe sont treize fois plus fins (`nextsteps.md`, §6.1 a §6.3).
 ##
 ## **L'echelle 3/40, elle, reste mesuree** — 0,075 est relevee dans la voie du
-## decor du binaire (`docs/systems/02`, §8.3) — et la flore ne bouge pas.
+## decor du binaire (`docs/systems/02`, §8.3).
 const VOXELS_PER_BLOCK_TERRAIN: float = 1.0
+
+## La **troisieme** grille : quatre voxels par bloc, celle de la flore basse
+## depuis le 2026-09-06.
+##
+## -- C'est une decision de rendu, et elle s'ecarte de la mesure --------------
+##
+## Il faut le dire dans ce sens-la, parce que tout le reste de ce fichier va
+## dans l'autre : 0,075 = 3/40 **est** l'echelle du decor de l'original, elle
+## est relevee dans le binaire, et elle implique qu'une touffe d'herbe y est
+## dessinee treize fois plus fin qu'un bloc de terrain. Une touffe a l'epaule
+## (~2,4 blocs) y fait donc une trentaine de voxels de haut, et ses brins un
+## treizieme de bloc d'epaisseur. Ce projet a porte cette valeur fidelement, et
+## le lot du 2026-09-06 au matin la respectait encore.
+##
+## **Elle est ecartee ici pour une raison de lisibilite, pas de fidelite.** Vu
+## en jeu, un brin de 0,08 bloc a cote d'un cube de terrain d'un bloc ne lit pas
+## comme un cube : il lit comme un cheveu, et une prairie entiere comme une
+## fourrure. Le lot d'arbres etait passe a la maille du bloc pour une raison
+## structurelle (le tronc ecrit dans le terrain, §6.1 de `nextsteps.md`) et le
+## resultat a montre l'autre moitie de l'argument : ce qui lit juste, c'est ce
+## qui partage le grain du terrain. Quatre voxels par bloc est le compromis —
+## assez gros pour que le grain se voie, assez fin pour qu'une fleur reste une
+## fleur a deux ou trois voxels.
+##
+## Ce qui **ne bouge pas** : la taille des plantes en blocs. Une touffe fait
+## toujours 2,2 blocs de haut ; elle est dessinee avec 9 voxels au lieu de 30.
+## C'est une resolution de dessin qu'on change, pas une enveloppe.
+##
+## Cette entree releve donc de l'expression et non de l'algorithme, au sens de
+## la note de perimetre du `README` : elle est signalee comme telle.
+const VOXELS_PER_BLOCK_FLORE: float = 4.0
+
+## La grille des **petits props** de flore : herbes et fleurs, a six voxels par
+## bloc (2026-09-06, au soir).
+##
+## -- Pourquoi le lot de flore a deux grilles et non une ----------------------
+##
+## Quatre voxels par bloc va bien a ce qui a du volume — un buisson, un cactus,
+## un champignon sont des masses, et une masse se lit a n'importe quelle
+## resolution. Ce qui s'y perd, ce sont les objets **dont toute la forme tient
+## dans un trait** : une touffe d'herbe est cinq lignes, une fleur est une tige
+## et une corolle. A quatre voxels par bloc une corolle fait une croix de cinq
+## voxels et une touffe des batonnets — le grain est juste, la silhouette ne
+## l'est plus.
+##
+## Six voxels par bloc rend a ces objets de quoi dire leur forme (une touffe
+## passe de 7 a 11 voxels de haut) **sans revenir au cheveu** : un brin fait un
+## sixieme de bloc, pas un treizieme. C'est le rapport de un et demi entre les
+## deux grilles qui compte, pas les valeurs absolues.
+##
+## Consequence : `voxels_per_block` n'est plus decide par la bibliotheque mais
+## **par modele**, via `CWModelLibrary.GRILLE_FINE`. Voir l'invariant n° 28.
+const VOXELS_PER_BLOCK_FLORE_FINE: float = 6.0
 
 ## La grille de *ce* modele. C'est un champ et non plus une constante depuis le
 ## jalon 1.12 : le lot de flore et le lot d'arbres ne sont pas dessines a la

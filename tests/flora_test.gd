@@ -115,17 +115,50 @@ func _test_models() -> void:
 			is_equal_approx(3.0 * CWVoxelModel.VOXELS_PER_BLOCK, 40.0),
 			"%f" % (3.0 * CWVoxelModel.VOXELS_PER_BLOCK))
 	_ok("mesures en blocs coherentes avec les mesures en voxels",
-			m.height_blocks == ceili(float(m.height) / (40.0 / 3.0))
-			and m.radius_blocks == ceili(float(m.radius) / (40.0 / 3.0)),
+			m.height_blocks == ceili(float(m.height) / m.voxels_per_block)
+			and m.radius_blocks == ceili(float(m.radius) / m.voxels_per_block),
 			"%d voxels -> %d blocs" % [m.height, m.height_blocks])
+	# -- Le lot de flore a deux grilles depuis le 2026-09-06 -----------------
+	#
+	# Les petits props — herbes et fleurs — sont a 6 voxels par bloc, le reste a
+	# 4. Chaque modele doit tomber sur **l'une des deux**, et sur celle que
+	# `GRILLE_FINE` lui donne : une grille prise par defaut faute d'entree se
+	# verrait comme une plante une fois et demie trop petite, ce qui est
+	# exactement le genre d'erreur qu'on ne rattache pas a sa cause.
+	var mauvaise_grille: Array = []
+	for k in _distinct_models(lib):
+		var attendue: float = CWVoxelModel.VOXELS_PER_BLOCK_FLORE
+		if CWModelLibrary.GRILLE_FINE.has(k.name):
+			attendue = CWVoxelModel.VOXELS_PER_BLOCK_FLORE_FINE
+		if not is_equal_approx(k.voxels_per_block, attendue):
+			mauvaise_grille.append("%s: %f" % [k.name, k.voxels_per_block])
+	_ok("chaque modele de flore est charge a la grille de sa table",
+			mauvaise_grille.is_empty(), str(mauvaise_grille))
 
-	# Enveloppe de la flore : le personnage de reference fait 2 blocs, une
-	# plante ne le depasse pas de plus du double. Un modele dessine a l'ancienne
-	# regle (1 voxel = 1 bloc) sortirait ici a huit fois sa taille.
+	# Et l'inverse, qui est le piege discret : une entree de `GRILLE_FINE` qui ne
+	# designe aucun modele charge. Elle ne leve rien — le modele vise garde la
+	# grille par defaut et sort une fois et demie trop grand. C'est la seule chose
+	# qui attrape une faute de frappe dans cette table.
+	var noms: Dictionary = {}
+	for k in _distinct_models(lib):
+		noms[k.name] = true
+	var fantomes: Array = []
+	for chemin in CWModelLibrary.GRILLE_FINE:
+		if not noms.has(chemin):
+			fantomes.append(chemin)
+	_ok("chaque entree de GRILLE_FINE designe un modele charge",
+			fantomes.is_empty(), str(fantomes))
+
+	# Enveloppe de la flore : le personnage de reference fait 2,4 blocs, une
+	# plante ne le depasse pas de plus du double. L'enveloppe est dite **en
+	# blocs** et convertie a la grille **de chaque modele** : c'est ce qui la
+	# rend independante de la resolution de dessin, et c'est ce qui a permis de
+	# faire passer le lot de 40/3 a 4, puis ses petits props a 6, sans jamais y
+	# toucher.
 	var oversize: Array = []
 	for k in _distinct_models(lib):
-		if k.height > 4 * CWVoxelModel.VOXELS_PER_BLOCK \
-				or k.radius > 2 * CWVoxelModel.VOXELS_PER_BLOCK:
+		if k.height > 4 * k.voxels_per_block \
+				or k.radius > 2 * k.voxels_per_block:
 			oversize.append(str(k))
 	_ok("aucun modele de flore hors de l'enveloppe (4 blocs de haut, 2 de rayon)",
 			oversize.is_empty(), str(oversize))
@@ -550,7 +583,7 @@ func _test_rendering() -> void:
 	# gabarit a chaque quart de tour reste plausible a l'oeil : on la mesure.
 	var model: CWVoxelModel = sample.model
 	var mesh: ArrayMesh = model.mesh()
-	var voxel: float = 1.0 / CWVoxelModel.VOXELS_PER_BLOCK
+	var voxel: float = 1.0 / model.voxels_per_block
 	var base_ok: bool = true
 	var tall_ok: bool = true
 	var centred_ok: bool = true

@@ -23,9 +23,10 @@ avec ses noms et sa découverte.
 **Le monde a six biomes** — Greenlands, Snowlands, Deserts, Jungles, Lava Lands,
 Oceans. Un biome est une zone *climatique* : il décide ce qui pousse, tandis que
 la matière du sol — herbe, sable, neige, roche nue, magma — est une conséquence
-du biome et de l'altitude. Chacun porte son propre lot de modèles : **43 pour la
-flore basse**, dessinés à 3/40 de bloc par voxel, et **24 pour les arbres**,
-dessinés à la maille du bloc comme le terrain lui-même.
+du biome et de l'altitude. Chacun porte son propre lot de modèles : **38 pour la
+flore basse** — quatre voxels par bloc pour ce qui a du volume, six pour les
+herbes et les fleurs, dont toute la forme tient dans un trait — et **24 pour les
+arbres**, dessinés à la maille du bloc comme le terrain lui-même.
 
 Deux chantiers suivent : la fin du **jalon 1.11**, le tronc d'arbre écrit dans le
 terrain — donc la collision —, et le **jalon 2**, créatures et comportements, en
@@ -45,7 +46,7 @@ commençant par les points d'apparition, dont les constantes sont déjà relevé
 ## Démarrer
 
 ```
-godot --headless --path . -s tests/worldgen_test.gd   # 312 vérifications
+godot --headless --path . -s tests/worldgen_test.gd   # 315 vérifications
 ```
 
 Scène de démonstration : `scenes/terrain_demo.tscn`. Clic pour capturer la

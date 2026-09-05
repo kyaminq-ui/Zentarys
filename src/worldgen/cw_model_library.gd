@@ -96,19 +96,16 @@ const ROLES: Dictionary = {
 				"greenlands/ginseng"],
 		CWDecorRules.Role.SOUS_BOIS: ["greenlands/buisson", "greenlands/scrub",
 				"greenlands/broussaille", "greenlands/fougere"],
-		CWDecorRules.Role.CAILLOU: ["greenlands/caillou_01", "greenlands/caillou_02"],
 	},
 	CWBiome.SNOWLANDS: {
 		CWDecorRules.Role.COUVERT: ["snowlands/herbe_gelee"],
 		CWDecorRules.Role.FLEUR: ["snowlands/fleur_de_glace"],
 		CWDecorRules.Role.SOUS_BOIS: ["snowlands/buisson_neige",
 				"snowlands/snowberry", "snowlands/cotonnier"],
-		CWDecorRules.Role.CAILLOU: ["snowlands/caillou_01"],
 	},
 	CWBiome.DESERTS: {
 		CWDecorRules.Role.SOUS_BOIS: ["deserts/cactus_01", "deserts/cactus_02",
 				"deserts/broussaille_seche", "deserts/cotonnier"],
-		CWDecorRules.Role.CAILLOU: ["deserts/gres"],
 		CWDecorRules.Role.RARE: ["deserts/habanero"],
 	},
 	CWBiome.JUNGLES: {
@@ -123,7 +120,6 @@ const ROLES: Dictionary = {
 		CWDecorRules.Role.SOUS_BOIS: ["lavalands/fire_shrub",
 				"lavalands/herbe_de_lave"],
 		CWDecorRules.Role.FLEUR: ["lavalands/fleur_de_lave"],
-		CWDecorRules.Role.CAILLOU: ["lavalands/caillou_basalte"],
 		CWDecorRules.Role.RARE: ["lavalands/champignon_luisant"],
 	},
 	CWBiome.OCEANS: {
@@ -132,6 +128,36 @@ const ROLES: Dictionary = {
 		CWDecorRules.Role.FOND: ["oceans/etoile_de_mer"],
 	},
 }
+
+
+## Les **petits props** : herbes et fleurs, dessines a six voxels par bloc au
+## lieu de quatre. Tout ce qui n'est pas ici prend `VOXELS_PER_BLOCK_FLORE`.
+##
+## -- Pourquoi une liste et non une regle -------------------------------------
+##
+## Le partage passe par le *role* a un cheveu pres, et ce cheveu suffit a le
+## disqualifier : `feuille_large` est un `COUVERT` de jungle mais c'est une
+## grande feuille, pas de l'herbe, et `herbe_de_lave` est range en `SOUS_BOIS`
+## alors que c'en est. Une regle qui se trompe sur deux modeles sur trente-huit
+## est plus couteuse qu'une liste, parce qu'on ne sait pas lesquels sans les
+## regarder un par un — ce qu'il faut faire de toute facon.
+##
+## **Cette table et le catalogue de `tools/blender/generer_flore.py` doivent
+## dire la meme chose.** Le generateur dessine a la grille qu'il croit ; le
+## moteur instancie a la grille qu'il lit ici. S'ils divergent, le modele sort
+## a une taille fausse d'un facteur un et demi — assez pour se voir, pas assez
+## pour qu'on sache pourquoi. `tests/flora_test.gd` verifie qu'aucune entree de
+## cette table ne designe un modele absent, ce qui attrape la faute de frappe ;
+## l'accord des tailles, lui, se verifie en regardant.
+const GRILLE_FINE: Array[String] = [
+	"greenlands/herbe_01", "greenlands/herbe_02", "greenlands/herbe_03",
+	"greenlands/herbe_seche", "greenlands/fleur_bleuet",
+	"greenlands/fleur_tournesol", "greenlands/fleur_coeur",
+	"greenlands/ginseng",
+	"snowlands/herbe_gelee", "snowlands/fleur_de_glace",
+	"jungles/fleur_coeur", "jungles/fleur_ame", "jungles/roseau",
+	"lavalands/herbe_de_lave", "lavalands/fleur_de_lave",
+]
 
 
 ## Tous les chemins d'un biome, roles confondus. Deduit de `ROLES` : la liste
@@ -164,9 +190,14 @@ static var _shared_mutex: Mutex = Mutex.new()
 
 ## Dossier racine des chemins de cette bibliotheque.
 var _dir: String = FLORA_DIR
-## Grille de dessin du lot : 40/3 voxels par bloc pour la flore, 1 pour les
-## arbres. Une bibliotheque, une grille — c'est l'autre raison d'etre de la
-## separation des deux, celle que l'invariant n° 24 ne disait pas encore.
+## Grille de dessin du lot : **4** voxels par bloc pour la flore, **1** pour les
+## arbres et les filons. Une bibliotheque, une grille — c'est l'autre raison
+## d'etre de la separation des deux, celle que l'invariant n° 24 ne disait pas
+## encore.
+##
+## La valeur par defaut reste la grille fine (40/3), celle du personnage : une
+## bibliotheque qui ne dit rien tombe sur la reference du projet, et c'est celle
+## que prendront les creatures au jalon 2.
 var _voxels_per_block: float = CWVoxelModel.VOXELS_PER_BLOCK
 var _models: Dictionary = {}
 ## Par biome : les modeles reellement disponibles sur le disque.
@@ -189,6 +220,7 @@ static func shared() -> CWModelLibrary:
 	_shared_mutex.lock()
 	if _shared == null:
 		var lib := CWModelLibrary.new()
+		lib._voxels_per_block = CWVoxelModel.VOXELS_PER_BLOCK_FLORE
 		lib._load_all()
 		_shared = lib
 	var out: CWModelLibrary = _shared
@@ -291,7 +323,8 @@ func _get_or_load(model_name: String, palette: Resource) -> CWVoxelModel:
 	if _models.has(model_name):
 		return _models[model_name]
 	var m: CWVoxelModel = CWVoxelModel.load_from(
-			_dir + model_name + ".vox", palette, model_name, _voxels_per_block)
+			_dir + model_name + ".vox", palette, model_name,
+			_grid_of(model_name))
 	# Meme absent, on retient la reponse : sans cela chaque biome qui reference
 	# un modele manquant retente un acces disque a chaque construction.
 	_models[model_name] = m
@@ -301,6 +334,19 @@ func _get_or_load(model_name: String, palette: Resource) -> CWVoxelModel:
 		max_radius_blocks = maxi(max_radius_blocks, m.radius_blocks)
 		max_height_blocks = maxi(max_height_blocks, m.height_blocks)
 	return m
+
+
+## La grille de dessin d'un modele. C'est la grille de la bibliotheque, sauf
+## pour les petits props de flore, qui ont la leur (`GRILLE_FINE`).
+##
+## Le lot d'arbres ne passe pas par cette exception : `GRILLE_FINE` ne contient
+## que des chemins de flore, et un chemin d'arbre n'y tombe jamais. C'est vrai
+## par construction et non par hasard — les deux lots ont des dossiers
+## disjoints.
+func _grid_of(model_name: String) -> float:
+	if GRILLE_FINE.has(model_name):
+		return CWVoxelModel.VOXELS_PER_BLOCK_FLORE_FINE
+	return _voxels_per_block
 
 
 ## Modeles disponibles dans un biome, roles confondus, ou un tableau vide.
