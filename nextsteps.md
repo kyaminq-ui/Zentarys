@@ -47,12 +47,19 @@ C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path 
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/repaint_models.gd
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path .     -s tools/repaint_models.gd -- --write
 
+# Apercu de la carte du monde, hors du jeu : la vue vierge et la meme apres une
+# diagonale parcourue (zone x, zone z, nombre de zones, graine)
+C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/preview_map.gd
+C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/preview_map.gd -- 512 512 5 2024
+
 # Regénération du lot de flore (39 .vox, ~2 min). Déterministe : une graine en
 # dur par fichier. `-- --seul <nom>` ne refait qu'un modèle.
 "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" --background --factory-startup --python tools/blender/generer_flore.py
 
 # Gabarit d'échelle en jeu : mettre scale_board = true sur le nœud racine de
 # scenes/terrain_demo.tscn, puis lancer. Deux captures dans user://shots.
+# Carte ouverte au démarrage, pour une capture sans piloter la fenêtre :
+# auto_open_map = true, auto_shot_delay = 30.
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --path . scenes/terrain_demo.tscn
 ```
 
@@ -64,28 +71,48 @@ Démo : `res://scenes/terrain_demo.tscn`. Clic pour capturer la souris,
 ZQSD/WASD, Maj = rapide, Espace/Ctrl = monter/descendre, **F1** détails,
 **clic gauche** creuser, **clic droit** poser,
 **F12** capture d'écran dans `user://shots`, **Page haut/bas** distance de vue,
-**1-9** téléportation vers un biome, **Échap** rend la souris puis quitte.
+**M** carte du monde (`+`/`−` pour l'élargir), **1-9** téléportation vers un
+biome, **Échap** rend la souris puis quitte.
 
 ## 3. État
 
-Jalon 1 (le monde) : 1.1 à 1.6 faits ; **1.7 à moitié** — la mécanique de
-dispersion est en place, **conforme aux deux fréquences de l'original** depuis
-le 2026-09-05, testée, l'échelle est fixée, et depuis le 2026-09-05
-**les 28 modèles du lot de flore sont livrés, intégrés et visibles en jeu** (39
-fichiers : plusieurs rôles ont un modèle par biome). Le lot a été **redessiné le
-même jour à l'échelle 40/3**, et il est maintenant **produit par script**
-(`tools/blender/generer_flore.py`) et non plus à la main. Il reste la lecture du
-binaire, qui dira *quoi* poser *où* et à quelle densité. **La table des entités
-est lue** (2026-09-05) : elle est dans le `switch` de
-`creature_generateAppearance`, et non dans les deux fonctions au nom prometteur,
-qui ne dispersent de la flore ni l'une ni l'autre. Reste la seconde voie de pose,
-celle de la flore basse. **Le jalon 1.8 est fait** (2026-09-05) : édition du
-terrain, requête ponctuelle et persistance du diff. Restent 1.9 et 1.10. Détail et sources
-analysées dans `docs/ROADMAP.md`. Analyses : `docs/systems/01_generation_terrain.md` (terrain),
+Jalon 1 (le monde) : **1.1 à 1.6, 1.8, 1.9 et 1.10 faits ; seul 1.7 reste à
+moitié.**
+
+**1.7 — contenu de biome, à moitié.** La mécanique de dispersion est en place,
+conforme aux deux fréquences de l'original, testée, l'échelle est fixée, et les
+28 modèles du lot de flore sont livrés, intégrés et visibles en jeu (39 fichiers,
+plusieurs rôles ayant un modèle par biome). Le lot est **produit par script**
+(`tools/blender/generer_flore.py`), plus dessiné à la main. **La table des
+entités est lue** : elle est dans le `switch` de `creature_generateAppearance`.
+Reste la table type de décor → modèle de la seconde voie de pose, celle de la
+flore basse — §6.
+
+**1.8 — édition et persistance, fait.** Creuser, poser, interroger, et le seul
+diff sur le disque.
+
+**1.9 — éclairage voxel, fait** (2026-09-05). `CWLight` porte les deux passes, et
+le rendu est passé en **`COLOR_RAW`** : un voxel porte son type dans
+`CHANNEL_TYPE` et sa couleur dans `CHANNEL_COLOR`, comme dans l'original. Le
+terrain généré n'appelle pas l'éclairage — un champ de hauteurs est éclairé
+partout où on le voit — donc il ne sert que là où le joueur a creusé. Un coup de
+pioche isolé coûte 30 ms. Le même jour, le **chargement a doublé de vitesse**
+(vue de 384 blocs : 39 s → 16,4 s) : l'index de clés du flux SQLite, et le pool
+ramené des quatorze fils logiques à la moitié — voir « la falaise des fils » dans
+`docs/ROADMAP.md`.
+
+**1.10 — carte du monde, fait** (2026-09-05). `CWWorldMap` et `CWRegionName` :
+pièces de Voronoï dans le domaine déformé, une case par chunk de 256 unités,
+trois clartés `200 / 220 / 255`, découverte persistée par graine, marqueurs pris
+aux éléments de tuile, noms de région à deux syllabes. Touche **M** en jeu,
+`tools/preview_map.gd` hors du jeu. Analyse : `docs/systems/05`.
+
+Détail et sources analysées dans `docs/ROADMAP.md`. Analyses :
+`docs/systems/01_generation_terrain.md` (terrain),
 `docs/systems/02_contenu_de_biome.md` (contenu de biome, éléments de tuile,
 apparitions), `docs/systems/03_colonnes_et_edition.md` (colonnes, blocs,
-édition, persistance), `docs/systems/04_eclairage.md` (éclairage voxel :
-algorithme établi, portage suspendu à une décision de rendu).
+édition, persistance), `docs/systems/04_eclairage.md` (éclairage voxel),
+`docs/systems/05_carte_du_monde.md` (carte, découverte, noms).
 
 ```
 src/worldgen/
@@ -103,16 +130,23 @@ src/worldgen/
   cw_scatter.gd            grille de dispersion 16², cellules en cache
   cw_flora_renderer.gd     instanciation de la flore (MultiMesh par cellule)
   cw_world_edits.gd        creuser, poser, interroger un bloc (jalon 1.8)
+  cw_light.gd              éclairage voxel : deux passes, cases à repeindre (1.9)
+  cw_world_map.gd          carte : dalles de Voronoï, découverte, teintes (1.10)
+  cw_region_name.gd        noms de région : deux tables de vingt syllabes (1.10)
 src/demo/terrain_demo.gd   scène de démonstration (arbre voxel construit en code)
 src/demo/scale_board.gd    gabarit d'échelle : mires, silhouette, modèles
-tests/worldgen_test.gd     suite headless, 162 vérifications
+src/demo/map_overlay.gd    affichage de la carte (touche M)
+tests/worldgen_test.gd     suite headless, 256 vérifications
 tests/tile_features_test.gd  la moitié qui concerne les éléments de tuile
 tests/flora_test.gd        modèles, dispersion, maillage et pose (jalon 1.7)
 tests/edit_test.gd         règles d'édition, requête ponctuelle, persistance (1.8)
+tests/light_test.gd        les deux passes, l'atténuation, les cases à repeindre (1.9)
+tests/map_test.gd          échelle, découverte, puzzle, rendu, noms (1.10)
 tools/export_palette.gd    régénère assets/palette/*.png depuis CWPalette
 tools/preview_features.gd  gros plan ombré, avec et sans la couche d'éléments
 tools/inspect_model.gd     inventaire d'un .vox : gabarit, index, plages
 tools/repaint_models.gd    remet un .vox dans la palette de projet
+tools/preview_map.gd       aperçu de la carte, vierge et après une diagonale
 tools/blender/             générateur du lot de flore (Python + bpy)
   flore_vox.py               palette verbatim, écriture .vox, garde-fous
   flore_formes.py            brins, tiges, feuilles, corolles, cailloux
@@ -121,7 +155,7 @@ tools/blender/             générateur du lot de flore (Python + bpy)
 assets/palette/            palette de projet + PALETTE.md
 assets/models/flore/<biome>/  39 modèles, un dossier par biome
 assets/models/             MODELS.md (échelle, palette et conventions)
-docs/images/               gabarit d'échelle photographié en jeu
+docs/images/               gabarit d'échelle et carte photographiés en jeu
 ```
 
 ## 4. Invariants à ne pas casser
@@ -270,12 +304,30 @@ docs/images/               gabarit d'échelle photographié en jeu
   regénérer. Le script recopie le bloc `RGBA` de la palette de projet tel quel
   et refuse à l'écriture tout index hors plage — c'est ce qui rend impossible
   la faute de palette du premier lot.
+- **Un `Control` sous un `CanvasLayer` n'a pas de taille si on ne pose que ses
+  ancres.** `set_anchors_preset(PRESET_FULL_RECT)` laisse les marges telles
+  quelles, donc `size` reste nul : le dessin part d'une origine négative et sort
+  par le coin supérieur gauche. C'est `set_anchors_and_offsets_preset` qu'il
+  faut, plus un raccord sur `size_changed`. Aucun test ne peut le voir — un nœud
+  invisible calcule juste ; c'est la capture en jeu qui l'a montré (2026-09-05,
+  la carte du monde).
 - **Ne pas mettre d'appel de liaison moteur sur le chemin chaud.**
   `OS.get_thread_caller_id()` dans `CWTileFeatureGrid.get_zone` coûtait ~15 µs
   par colonne avant d'être déplacé sur le chemin froid. Mesurer avant de
   supposer que c'est le verrou qui coûte.
 
 ## 6. Prochaine tâche — jalon 1.7, contenu de biome
+
+**Où on en est, au 2026-09-05 au soir.** 1.9 et 1.10 sont faits ; le jalon 1 est
+complet **à l'exception de 1.7**, qui attend une seule chose : la table type de
+décor → modèle (§ « Ce qui reste »). C'est donc la tâche suivante, et elle est
+d'analyse, pas de code — trois pistes sont déjà éliminées, la cible est le
+consommateur du champ `type` de l'enregistrement de décor.
+
+Si cette table résiste encore, l'autre porte ouverte est le **jalon 2.6, les
+points d'apparition** : `WorldInfo_scatterObjectsInArea` est lue et ses
+constantes sont dans `docs/systems/02`, la couche d'éléments de tuile qui les
+porte existe depuis 1.6, et la carte du jalon 1.10 sait déjà les afficher.
 
 ### Ce qui est fait (2026-09-04)
 

@@ -29,6 +29,7 @@ func _initialize() -> void:
 	_test_flora()
 	_test_edits()
 	_test_light()
+	_test_map()
 	_test_palette()
 	_bench()
 	_write_previews()
@@ -306,6 +307,10 @@ func _test_edits() -> void:
 
 func _test_light() -> void:
 	CWLightTest.new().run(self)
+
+
+func _test_map() -> void:
+	CWMapTest.new().run(self)
 
 
 # -- 5. Generateur voxel : cache de colonnes et arret -------------------------

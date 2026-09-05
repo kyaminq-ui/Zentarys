@@ -34,6 +34,11 @@ const SHOT_DIR: String = "user://shots"
 ## partagent pas leurs editions.
 const SAVE_DIR: String = "user://saves"
 
+## Nombre de zones affichees par la carte du monde, et ses bornes. Une vue de
+## cinq zones fait 320 cases de cote, soit 81 920 unites monde.
+const MAP_ZONES_MIN: int = 3
+const MAP_ZONES_MAX: int = 9
+
 ## Attente maximale, en millisecondes, de la fin de la sauvegarde a la
 ## fermeture. Borne : mieux vaut perdre les dernieres editions que la fenetre.
 const SAVE_WAIT_MAX_MS: int = 3000
@@ -90,6 +95,13 @@ const BIOME_KEYS: Dictionary = {
 ## deja son propre enchainement de captures, celui-ci est pour le reste.
 @export var auto_shot_delay: float = -1.0
 
+## Ouvre la carte du monde des le demarrage.
+##
+## Meme role que `scale_board` : valider en jeu ce qu'un test ne montre pas,
+## sans piloter la fenetre. Avec `auto_shot_delay`, la capture sort avec la
+## carte ouverte.
+@export var auto_open_map: bool = false
+
 ## Bascule VoxelTerrain (detail unique) <-> VoxelLodTerrain (pyramide de LOD).
 ##
 ## RESULTAT MESURE (2026-09-03) : inutilisable en l'etat avec un rendu en cubes.
@@ -112,6 +124,8 @@ var terrain: VoxelNode
 var edits: CWWorldEdits
 var stream: VoxelStream
 var flora: CWFloraRenderer
+var world_map: CWWorldMap
+var map_overlay: CWMapOverlay
 var camera: Camera3D
 var hud: Label
 
@@ -151,6 +165,19 @@ var _search_status: String = ""
 ## l'origine du monde au lieu de la camera.
 var _search_from: Vector2i = Vector2i.ZERO
 
+# -- Carte du monde (jalon 1.10) ----------------------------------------------
+var _map_open: bool = false
+## Rendu de la carte : une vue de 4 096 cases par zone a ~43 ms la dalle, donc
+## hors du fil principal comme la recherche de biome.
+var _map_task: int = -1
+var _map_zones: int = 5
+var _map_origin: Vector2i = Vector2i.ZERO
+var _map_image: Image = null
+var _map_markers: Array = []
+var _map_last_chunk: Vector2i = Vector2i(-1, -1)
+var _map_flushed: bool = false
+
+
 ## Compte a rebours de la capture automatique. Negatif = pas de capture prevue.
 var _shot_countdown: float = -1.0
 ## Capture du gabarit : 0 = vue d'ensemble, 1 = gros plan sur les modeles.
@@ -177,7 +204,10 @@ func _ready() -> void:
 	_build_terrain()
 	_build_camera()
 	_build_flora()
+	_build_map()
 	_build_hud()
+	if auto_open_map:
+		toggle_map()
 	if scale_board:
 		_build_scale_board()
 		_shot_countdown = BOARD_SHOT_DELAY
@@ -394,6 +424,22 @@ func _build_environment() -> void:
 	add_child(we)
 
 
+## Carte du monde et suivi de la decouverte.
+##
+## La carte partage le champ de terrain du generateur : ses dalles se calculent
+## a partir des memes sites de region que le relief, donc les frontieres du
+## puzzle sont exactement celles du climat.
+func _build_map() -> void:
+	world_map = CWWorldMap.new(generator.field())
+	if save_edits:
+		DirAccess.make_dir_recursive_absolute(SAVE_DIR)
+		world_map.load_discovery(_map_save_path())
+
+
+func _map_save_path() -> String:
+	return "%s/carte_%d.dat" % [SAVE_DIR, params.world_seed]
+
+
 func _build_hud() -> void:
 	var layer := CanvasLayer.new()
 	layer.name = "HUD"
@@ -406,6 +452,11 @@ func _build_hud() -> void:
 	hud.add_theme_constant_override("outline_size", 4)
 	hud.add_theme_constant_override("line_spacing", 1)
 	layer.add_child(hud)
+
+	map_overlay = CWMapOverlay.new()
+	map_overlay.name = "MapOverlay"
+	map_overlay.visible = false
+	layer.add_child(map_overlay)
 
 
 ## Applique une distance de vue au terrain, a l'observateur et a la flore.
@@ -426,6 +477,90 @@ func set_view_distance(blocks: int) -> void:
 	if flora != null:
 		flora.view_distance = view_distance
 	_hud_timer = 0.0
+
+
+# -- Carte du monde -----------------------------------------------------------
+
+## Ouvre ou ferme la carte.
+func toggle_map() -> void:
+	_map_open = not _map_open
+	map_overlay.visible = _map_open
+	if _map_open:
+		_request_map()
+	_hud_timer = 0.0
+
+
+## Change le nombre de zones affichees, et redemande la vue.
+func set_map_zones(zones: int) -> void:
+	var want: int = clampi(zones, MAP_ZONES_MIN, MAP_ZONES_MAX)
+	if want == _map_zones:
+		return
+	_map_zones = want
+	if _map_open:
+		_request_map()
+
+
+## Met une vue en chantier, centree sur la zone du joueur.
+##
+## Toujours un rendu complet, jamais une simple repose de l'image : la clarte
+## d'une case change avec la decouverte, et elle est cuite dans l'image. Ce
+## n'est pas cher — les **dalles** sont memoisees dans `CWWorldMap`, donc un
+## rendu qui suit ne paie que la boucle de pixels, et la premiere ouverture est
+## la seule a payer les vingt-cinq dalles.
+func _request_map() -> void:
+	if _map_task != -1:
+		return
+	var w: Vector2i = _world_position()
+	@warning_ignore("integer_division")
+	var half: int = _map_zones / 2
+	_map_origin = Vector2i(
+			CWWorldParams.zone_of(w.x) - half,
+			CWWorldParams.zone_of(w.y) - half)
+	_map_task = WorkerThreadPool.add_task(_run_map_build)
+
+
+func _run_map_build() -> void:
+	_map_image = world_map.render(_map_origin.x, _map_origin.y,
+			_map_zones, _map_zones)
+	_map_markers = world_map.render_markers(_map_origin.x, _map_origin.y,
+			_map_zones, _map_zones)
+
+
+func _finish_map_build() -> void:
+	WorkerThreadPool.wait_for_task_completion(_map_task)
+	_map_task = -1
+	_show_map_view()
+
+
+## Depose la vue calculee et replace le curseur du joueur.
+func _show_map_view() -> void:
+	if _map_image == null or not _map_open:
+		return
+	var w: Vector2i = _world_position()
+	var base: Vector2i = _map_origin * CWWorldMap.CHUNKS_PER_ZONE
+	var player := Vector2(
+			float(w.x) / float(CWWorldMap.CHUNK_SIZE) - float(base.x),
+			float(w.y) / float(CWWorldMap.CHUNK_SIZE) - float(base.y))
+	var zone := Vector2i(CWWorldParams.zone_of(w.x), CWWorldParams.zone_of(w.y))
+	var head: String = world_map.names().at(w.x, w.y)
+	var sub: String = ("%d x %d zones   zone %d,%d   %d case(s) decouverte(s)"
+			+ "   M fermer, +/- agrandir") % [
+			_map_zones, _map_zones, zone.x, zone.y, world_map.discovered_count]
+	map_overlay.show_view(_map_image, _map_markers, player, head, sub)
+
+
+## Marque la carte au passage du joueur : decouverte sous ses pieds, connue dans
+## ce qu'il voit. Appele quand la case change, pas a chaque image — et c'est
+## aussi la seule chose qui redemande une vue quand la carte est ouverte.
+func _mark_visited() -> void:
+	var w: Vector2i = _world_position()
+	var c := Vector2i(CWWorldMap.chunk_of(w.x), CWWorldMap.chunk_of(w.y))
+	if c == _map_last_chunk:
+		return
+	_map_last_chunk = c
+	world_map.visit(w.x, w.y, view_distance)
+	if _map_open:
+		_request_map()
 
 
 # -- Recherche de biome -------------------------------------------------------
@@ -531,6 +666,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		_hud_detailed = not _hud_detailed
 		_hud_timer = 0.0
 		_update_hud()
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_M:
+		toggle_map()
+	elif event is InputEventKey and event.pressed and _map_open and (
+			event.keycode == KEY_EQUAL or event.keycode == KEY_KP_ADD):
+		set_map_zones(_map_zones + 2)
+	elif event is InputEventKey and event.pressed and _map_open and (
+			event.keycode == KEY_MINUS or event.keycode == KEY_KP_SUBTRACT):
+		set_map_zones(_map_zones - 2)
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_PAGEUP:
 		set_view_distance(view_distance + VIEW_STEP)
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_PAGEDOWN:
@@ -589,6 +732,11 @@ func _process(delta: float) -> void:
 
 	if _search_task != -1 and WorkerThreadPool.is_task_completed(_search_task):
 		_finish_biome_search()
+
+	if _map_task != -1 and WorkerThreadPool.is_task_completed(_map_task):
+		_finish_map_build()
+	if world_map != null:
+		_mark_visited()
 
 	# Reeclairage des editions de la frame, en un seul passage. Le terrain genere
 	# n'a pas besoin de lumiere — un champ de hauteurs est eclaire partout ou on
@@ -668,8 +816,12 @@ func _update_hud() -> void:
 		busy = "   flux %d / gen %d / maillage %d" % [
 				_pending_stream, _pending_gen, _pending_mesh]
 
+	var region: String = ""
+	if world_map != null:
+		region = "   " + world_map.names().at(wx, wz)
+
 	var lines: Array[String] = [
-		"%d, %d   y %d  (sol %d)" % [wx, wz, roundi(p.y), roundi(c.x)],
+		"%d, %d   y %d  (sol %d)%s" % [wx, wz, roundi(p.y), roundi(c.x), region],
 		"%s   T %.2f  H %.2f   %d ips%s" % [
 			CWPalette.name_of(surface), c.y, c.z,
 			Engine.get_frames_per_second(), busy],
@@ -706,9 +858,12 @@ func _update_hud() -> void:
 				"" if stream != null else "   (non sauvegardees)",
 				CWPalette.name_of(build_block),
 				float(edits.last_relight_usec) / 1000.0])
+		if world_map != null:
+			lines.append("carte : %d case(s) decouverte(s), %d dalle(s) en cache" % [
+				world_map.discovered_count, world_map.slab_count()])
 		lines.append("ZQSD/WASD + souris · Maj vite · Espace/Ctrl · Echap souris puis quitter")
 		lines.append("Clic gauche : creuser · clic droit : poser")
-		lines.append("Page haut/bas : distance de vue")
+		lines.append("Page haut/bas : distance de vue · M : carte du monde")
 		lines.append("1 herbe · 2 herbe seche · 3 jungle · 4 marais · 5 sable")
 		lines.append("6 neige · 7 toundra · 8 roche · 9 fond marin")
 	else:
@@ -745,6 +900,7 @@ func _notification(what: int) -> void:
 		# silence — constate le 2026-09-05, 647 editions appliquees et zero
 		# ecrite. `_flush_edits` se garde lui-meme contre le double appel.
 		_flush_edits()
+		_flush_map()
 
 
 ## Rend la main tout de suite au lieu d'attendre la file de streaming.
@@ -766,6 +922,7 @@ func _shutdown() -> void:
 	_shutting_down = true
 
 	_flush_edits()
+	_flush_map()
 
 	if generator != null:
 		generator.request_shutdown()
@@ -774,6 +931,9 @@ func _shutdown() -> void:
 	if _search_task != -1:
 		WorkerThreadPool.wait_for_task_completion(_search_task)
 		_search_task = -1
+	if _map_task != -1:
+		WorkerThreadPool.wait_for_task_completion(_map_task)
+		_map_task = -1
 	if is_instance_valid(camera):
 		var viewer := camera.get_node_or_null("VoxelViewer")
 		if viewer != null:
@@ -812,3 +972,16 @@ func _flush_edits() -> void:
 		waited += 4
 	stream.flush()
 	print("[demo] %d edition(s) sauvegardees en %d ms" % [edits.edit_count, waited])
+
+
+## Ecrit les cases decouvertes. Meme filet que les editions : une fermeture par
+## `--quit-after` n'envoie pas WM_CLOSE_REQUEST, donc l'ecriture doit aussi
+## partir depuis NOTIFICATION_EXIT_TREE.
+func _flush_map() -> void:
+	if _map_flushed or world_map == null or not save_edits:
+		return
+	if world_map.discovered_count == 0:
+		return
+	_map_flushed = true
+	world_map.save_discovery(_map_save_path())
+	print("[demo] carte : %d case(s) decouverte(s) sauvegardees" % world_map.discovered_count)

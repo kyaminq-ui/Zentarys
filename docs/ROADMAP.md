@@ -37,8 +37,8 @@ et des structures.
 | 1.6 | Éléments de tuile | `World_generateRegionFeatures` @0050e080 | ✅ | `docs/systems/01`, §2.7 |
 | 1.7 | **Contenu de biome, dispersion** | `creature_generateAppearance` + @005e4850 + @005d8750 | 🔶 | mécanique faite, 28 modèles livrés, table des entités lue ; `docs/systems/02` |
 | 1.8 | Colonnes persistantes, édition | `Chunk_getColumnAt` @00406100 + `VoxelTool` | ✅ | `docs/systems/03` |
-| 1.9 | Éclairage voxel | `VoxelChunk_propagateSunlight` @0059a0e0 | 🔶 | algorithme entièrement établi, portage suspendu au mode de rendu ; flore réagissant aux éditions faite ; `docs/systems/04` |
-| 1.10 | Carte du monde | `WorldMap.cpp`, `NameGen_generateRegionName` | ⬜ | |
+| 1.9 | Éclairage voxel | `VoxelChunk_propagateSunlight` @0059a0e0 | ✅ | porté, rendu passé en `COLOR_RAW` ; `docs/systems/04` |
+| 1.10 | Carte du monde | `WorldMap.cpp`, `loadLandscapeTile` @006024d0, `NameGen_generateRegionName` | ✅ | pièces de Voronoï, découverte, noms ; `docs/systems/05` |
 
 ### 1.6 — Éléments de tuile (fait)
 
@@ -200,7 +200,9 @@ passe de 1,07 à 1,29 ms, toujours hors du fil principal.
 éliminées (`docs/systems/02`, §8.5) ; la cible est le consommateur du champ
 `type` de l'enregistrement.
 
-**Correction de sources.** Sept noms du dépôt d'analyse sont trompeurs :
+**Correction de sources.** Onze noms du dépôt d'analyse sont trompeurs — les
+quatre derniers sont venus avec la carte, et sont détaillés en
+`docs/systems/05`, §8 :
 
 - `WorldInfo_scatterObjectsInArea` (@005f56c0), listée ici comme seconde source
   de 1.7, **ne disperse pas d'objets** : elle choisit la liste d'espèces d'un
@@ -221,6 +223,15 @@ passe de 1,07 à 1,29 ms, toujours hors du fil principal.
 - `creature_generateAppearance` (`game_misc.cpp:3197`) **n'est pas propre aux
   créatures** : son `switch` couvre aussi les plantes, les filons et les
   poissons. C'est la table code d'entité → modèle. `docs/systems/02`, §5.
+- `hash_or_index_compute` (@00602440) **ne calcule pas de hachage** : c'est
+  `WorldMap::getTile`, l'indexation de la grille de cases de carte.
+- `GameController_tryLockAndProcess` (@005fc160) **n'est pas un enrobage de
+  verrou** : c'est `WorldMap::markDiscovered`, le seul point d'écriture de la
+  découverte.
+- `locked_pair_update` (@00601cc0) **ne met rien à jour** : c'est la recherche du
+  site de région le plus proche, déjà portée en `CWTerrainField.nearest_site`.
+- `Terrain_sampleHeightNoise` (@0059fc90) **n'échantillonne pas une altitude** :
+  c'est la déformation du domaine à ±500, rendue en unités de zone.
 
 ### Assets à produire
 
@@ -354,7 +365,7 @@ contrôleur du jalon 3.1.
 
 ---
 
-### 1.9 — Éclairage voxel (analysé ; une décision de rendu à prendre)
+### 1.9 — Éclairage voxel (fait)
 
 **L'algorithme est entièrement établi**, `docs/systems/04`. Deux passes : une
 descente du soleil par colonne, puis **seize itérations** de diffusion
@@ -375,15 +386,29 @@ qui bloque `docs/systems/02`, §9.
 > que dans ce que le joueur a creusé — c'est-à-dire ce que le jalon 1.8 vient
 > d'ouvrir.
 
-**Ce qui bloque n'est pas le calcul, c'est le rendu.** `VoxelMesherCubes` n'a
-pas de canal de lumière : en mode palette il cuit la couleur du nuancier dans
-les sommets, et il n'y a nulle part où loger une luminosité par voxel. Porter
-l'éclairage suppose de passer le canal en **`COLOR_RAW`** — une couleur par
-voxel au lieu d'un index — ce qui est **exactement ce que fait l'original**. Le
-coût, le gain (dont l'hypothèse sur la dalle d'eau du LOD 1) et les deux voies
-possibles sont pesés en `docs/systems/04`, §6 et §7. La palette resterait la
-source des couleurs et le contrat d'authoring : **les 39 modèles de flore ne
-seraient pas à repeindre.**
+**Ce qui bloquait n'était pas le calcul, c'était le rendu — et la décision est
+prise.** `VoxelMesherCubes` n'a pas de canal de lumière : en mode palette il cuit
+la couleur du nuancier dans les sommets, et il n'y a nulle part où loger une
+luminosité par voxel. Le rendu est donc **passé en `COLOR_RAW`** — une couleur
+par voxel au lieu d'un index — ce qui est **exactement ce que fait l'original**.
+Un voxel porte maintenant deux choses : son **type** dans `CHANNEL_TYPE`, qui
+reste ce que lit tout le code raisonnant en blocs, et sa **couleur** dans
+`CHANNEL_COLOR`, que seul le mailleur lit. La palette reste la source des
+couleurs et le contrat d'authoring : **les 39 modèles de flore n'ont pas été
+repeints.**
+
+**`CWLight` porte les deux passes**, et le terrain généré ne l'appelle pas : un
+champ de hauteurs est éclairé partout où on le voit, donc la lumière ne sert que
+là où le joueur a creusé. Deux choix d'implémentation ont porté tout le gain :
+
+- les deux passes sont indexées dans **l'ordre natif de `VoxelBuffer`** (Y
+  d'abord), ce qui permet de leur passer le canal de types tel quel — trente-six
+  mille `get_voxel` de moins par coup de pioche ;
+- `shaded_cells` **pousse la lumière depuis l'air vers ses voisins pleins** au
+  lieu de sonder chaque bloc, si bien que la roche enterrée ne coûte rien.
+
+Un coup de pioche isolé passe ainsi de 71 à **30 ms**, à profil de lumière
+inchangé.
 
 **Fait dans ce jalon :** la flore suit désormais le terrain édité. Creuser sous
 une touffe la laissait en l'air — conséquence connue de la sortie de la flore
@@ -399,6 +424,85 @@ et pas de `VoxelTool` lu depuis un fil du pool.
 > continuait de flotter, **sans qu'aucune vérification ne bronche** — les deux
 > côtés du test employaient le même repère. C'est la capture en jeu qui l'a
 > montré. Le test traverse maintenant la conversion.
+
+---
+
+### 1.10 — Carte du monde (fait)
+
+Analyse complète en **`docs/systems/05`**. Onze fonctions, dont quatre dont le
+nom du dépôt d'analyse dit autre chose que ce qu'elles font.
+
+**Une pièce de carte est une cellule de Voronoï.** C'est le résultat qui n'était
+pas prévisible depuis l'apparence du jeu : `loadLandscapeTile` (@006024d0) balaie
+la zone plus une zone de marge, déforme chaque point de la grille de chunks et ne
+garde que ceux dont le **site de région le plus proche** est celui de la zone.
+La carte n'est donc pas un quadrillage : c'est un puzzle aux frontières
+ondulées — et ces frontières sont **exactement celles du climat**, puisque le
+mélange de sites du jalon 1.3 travaille sur le même point déformé.
+
+Conséquence pratique : **le jalon 1.10 n'apporte aucune constante numérique
+nouvelle.** `World_getColumnDataAt2` est mot pour mot `CWTerrainField.warped_point`,
+et la recherche du plus proche site est `nearest_site`, portée au jalon 1.6. La
+carte assemble ce que le terrain avait déjà.
+
+**L'échelle du monde est confirmée une troisième fois.** `WorldMap::getTile`
+(@00602440, nommée `hash_or_index_compute` dans le dépôt) borne ses coordonnées à
+`[0, 0x10000)` et indexe en deux temps, `>> 6` puis `& 63` : une case de carte
+vaut **256 unités**, c'est-à-dire le chunk retrouvé au jalon 1.8, et il y en a
+64 × 64 par zone.
+
+**L'image stockée ne porte pas de couleur.** Le remplissage n'écrit que trois
+valeurs, et elles sont grises : `200` là où aucune case n'existe, `220` pour une
+case connue, `255` pour une case découverte. La teinte vient du dessin. Le
+portage garde cette séparation — la clarté est une propriété du chunk, la teinte
+une propriété de la région, et elles ne se rencontrent qu'au rendu.
+
+**La découverte** tient en une fonction de dix lignes (`WorldMap::markDiscovered`,
+@005fc160) : un bit par chunk, et un compteur — le seul état que l'original
+persiste, en quatre octets sous la clé `discovered`.
+
+**Les marqueurs sont les éléments de tuile du jalon 1.6**, relevés une troisième
+fois par le couple stride `0x68` / base `+0x14018`. Rien de neuf à générer : la
+couche existait, il fallait savoir qu'elle alimentait la carte.
+
+**Les noms de région** sont deux syllabes tirées de deux tables de vingt,
+indexées en croix par le point déformé ramené en unités de zone :
+`tableA[(a*3 + graineA + b) % 20] + tableB[(b*3 + graineB + a) % 20]`. Le
+mécanisme est porté à la lettre ; **les syllabes, elles, ne le sont pas** — ce
+sont des créations artistiques du jeu d'origine, et `CWRegionName` porte deux
+tables écrites pour ce projet.
+
+> **Septième nom trompeur.** `Terrain_sampleHeightNoise` (@0059fc90)
+> n'échantillonne pas une altitude : c'est la déformation du domaine à ±500,
+> rendue en unités de zone. C'est `CWTerrainField.edge_warped_point`, portée au
+> jalon 1.4. Trois autres noms sont corrigés en `docs/systems/05`, §8.
+
+**Porté :** `CWWorldMap` (dalles, découverte, teintes, marqueurs, rendu),
+`CWRegionName`, l'affichage `CWMapOverlay` (touche **M**, `+`/`−` pour élargir),
+la persistance de la découverte par graine, et `tools/preview_map.gd` pour
+regarder une carte sans lancer le jeu. 56 vérifications dans `tests/map_test.gd`.
+
+**Trois écarts délibérés**, pesés en `docs/systems/05`, §7 : une dalle de 64 × 64
+par zone plutôt qu'une pièce à sa boîte englobante (même géométrie, cache qui se
+juxtapose sans recouvrement) ; une teinte de région échantillonnée à son site ;
+la mer peinte en eau, parce que `surface_index` rend du sable sous le niveau de
+la mer — juste pour le terrain, illisible sur une carte.
+
+**Coût :** une dalle de 4 096 cases en **43 ms**, une vue de 5 × 5 zones en
+1,4 s à froid, sur un fil du pool ; se recentrer ne recalcule que les zones qui
+entrent dans le cadre. Un nom coûte 14 µs.
+
+> **Un défaut de dessin que seul le jeu a montré.** Poser les seules ancres d'un
+> `Control` sous un `CanvasLayer` le laisse de taille nulle : tout le dessin
+> partait d'une origine négative et la carte sortait par le coin supérieur
+> gauche. Aucune vérification ne pouvait broncher — un nœud invisible calcule
+> juste. Ce sont les ancres **et les marges** qu'il faut poser.
+
+**Ce que 1.10 laisse ouvert :** les six modèles de marqueurs
+(`map-tile-{plains,village,forest,mountains,hills}.cub`, `skull.cub`) sont des
+assets à produire ; l'affichage dessine des glyphes en attendant. Le type 14
+reste sans identité — la carte l'a montré autrement : le compter comme village
+en met dix-huit par région.
 
 ---
 
@@ -472,12 +576,14 @@ sans valeur tant que les jalons 2 et 3 ne sont pas là.
 
 | Sujet | Statut | Détail |
 |---|---|---|
-| Suite de tests headless | ✅ | 116 vérifications, `tests/worldgen_test.gd` |
+| Suite de tests headless | ✅ | 256 vérifications, `tests/worldgen_test.gd` |
 | Gabarit d'échelle en jeu | ✅ | `src/demo/scale_board.gd`, capture automatique ; mires en blocs et modèles à la grille fine |
 | Capture différée de la démo | ✅ | `TerrainDemo.auto_shot_delay` + `--quit-after` : regarder une couche sans piloter la fenêtre |
 | Flore instanciée (MultiMesh par cellule) | ✅ | `src/worldgen/cw_flora_renderer.gd`, 1,1 ms/cellule hors fil principal |
 | Groupement de la flore en grappes | ✅ | il n'y avait pas de mécanisme à écrire : la crête de bruit à 0,05 le produit seule (variance/moyenne 14,3 contre ~1) |
-| Éclairage et LOD des modèles instanciés | ⬜ | ils ne profitent ni de l'éclairage voxel (1.9) ni d'une réduction en distance ; `CWVoxelModel.reduced(n)` est prêt |
+| Éclairage et LOD des modèles instanciés | ⬜ | la flore ne profite ni de l'éclairage voxel (1.9) ni d'une réduction en distance ; `CWVoxelModel.reduced(n)` est prêt |
+| Aperçu de la carte hors du jeu | ✅ | `tools/preview_map.gd`, vierge et parcourue |
+| Cache disque des dalles de carte | ⬜ | 43 ms la dalle, recalculée à chaque session ; l'original la compresse en base |
 | Inventaire des modèles `.vox` | ✅ | `tools/inspect_model.gd`, contrôle des plages de palette |
 | Aperçu rapproché des éléments | ✅ | `tools/preview_features.gd`, avec et sans la couche |
 | Aperçus PNG (altitude, climat, chenaux) | ✅ | `user://worldgen_preview/` |
@@ -687,6 +793,8 @@ de le résoudre.
 
 | Date | Fait |
 |---|---|
+| 2026-09-05 | Jalon 1.10 : la carte du monde. Analyse dans `docs/systems/05` — onze fonctions, dont quatre au nom trompeur. **Une piece de carte est une cellule de Voronoi** : `loadLandscapeTile` balaie la zone plus une zone de marge, deforme chaque point de la grille de chunks et ne garde que ceux dont le site de region le plus proche est celui de la zone. La carte n'est donc pas un quadrillage, et ses frontieres sont **exactement celles du climat** — meme point deforme que le melange de sites du jalon 1.3. Consequence : **aucune constante numerique nouvelle**, `World_getColumnDataAt2` est mot pour mot `warped_point` et la recherche est `nearest_site`. **Troisieme confirmation de l'echelle** : `WorldMap::getTile` borne a `[0, 0x10000)` et indexe `>> 6` puis `& 63`, soit une case de 256 unites — le chunk du jalon 1.8 — et 64 x 64 par zone. **L'image stockee ne porte pas de couleur** : trois clartes, 200 / 220 / 255, et rien d'autre ; la teinte vient du dessin, et le portage garde cette separation. Decouverte : un bit par chunk et un compteur, seul etat persiste par l'original (4 octets, cle `discovered`). Marqueurs : ce sont les elements de tuile du jalon 1.6, releves une troisieme fois par le couple `0x68` / `+0x14018`. Noms de region : deux syllabes tirees de deux tables de vingt, indexees en croix par le point deforme en unites de zone ; le mecanisme est porte, les syllabes sont des creations originales. **Septieme nom trompeur** : `Terrain_sampleHeightNoise` n'echantillonne pas une altitude, c'est la deformation a ±500 en unites de zone — `edge_warped_point`, portee au 1.4. Defaut vu en jeu et par aucun test : poser les seules ancres d'un `Control` sous un `CanvasLayer` le laisse de taille nulle, et la carte sortait par le coin superieur gauche. Cout : dalle de 4 096 cases en 43 ms, vue de 5 x 5 zones en 1,4 s a froid, nom en 14 us. 256 verifications. |
+| 2026-09-05 | Jalon 1.9, seconde moitie : **l'eclairage est porte**, et le chargement double de vitesse. Le rendu passe en `COLOR_RAW` — un voxel porte son type dans `CHANNEL_TYPE` et sa couleur dans `CHANNEL_COLOR`, ce qui est exactement ce que fait l'original, et les 39 modeles de flore n'ont pas ete repeints. `CWLight` porte les deux passes ; le terrain genere ne l'appelle pas, un champ de hauteurs etant eclaire partout ou on le voit. Deux choix portent tout le gain : les passes sont indexees dans l'ordre natif de `VoxelBuffer` (Y d'abord), donc le canal de types leur est passe tel quel — trente-six mille `get_voxel` de moins par coup de pioche — et `shaded_cells` pousse la lumiere depuis l'air vers ses voisins pleins au lieu de sonder chaque bloc, si bien que la roche enterree ne coute rien : 71 ms -> **30 ms** par coup de pioche, profil inchange. Chargement, deux defauts mesures : le **flux SQLite etait passe devant la generation** sans que rien ne le montre (l'ATH n'affichait que `gen` et `maillage`), chaque bloc attendant une requete disque avant d'etre mis en file — `set_key_cache_enabled` repond « absent » sans toucher la base ; et le pool tournait a quatorze fils, **au-dela des coeurs physiques le travail ne ralentit pas, il s'effondre** (14 fils plus lents qu'un seul). Vue de 384 blocs : 39 s -> **16,4 s**, et 433 s de temps CPU cumule ramenes a 127 s. La flore suit desormais la distance de vue du joueur et attend que le sol soit charge sous ses plantes. |
 | 2026-09-05 | Jalon 1.9, premiere moitie. **L'algorithme d'eclairage est entierement etabli** (`docs/systems/04`) : descente du soleil par colonne, puis seize iterations de diffusion **purement horizontale**, attenuation **multiplicative x 0,85** par bloc et non le -1 de Minecraft, plancher de 5/255 qui interdit le noir absolu, type 13 = source a 255. Le double tampon explique la disposition d'octets du jalon 1.8 : pour un voxel transparent, les trois premiers octets sont suivant/courant/publie, pas une couleur. Trois types de blocs nommes au passage — 0 air, 2 eau, 13 lampe — les premiers points d'ancrage vers la correspondance de numerotation. **Le portage est suspendu a une decision de rendu** : `VoxelMesherCubes` n'a pas de canal de lumiere, il faudrait passer en `COLOR_RAW`, ce qui est exactement ce que fait l'original ; cout et gain peses en `docs/systems/04` §6-7. Sur un monde intact l'eclairage ne change rien de toute facon — le terrain est un champ de hauteurs pur, la lumiere ne se voit que dans ce qu'on a creuse. **Fait** : la flore suit le terrain edite, les touffes ne flottent plus au-dessus des crateres. Piege releve : `CWWorldEdits` est en coordonnees de scene, `CWScatter` en coordonnees monde ; la premiere version rangeait la table dans le mauvais repere et **aucun test ne bronchait**, les deux cotes employant le meme repere — c'est la capture en jeu qui l'a montre. 162 verifications. |
 | 2026-09-05 | Jalon 1.8 : edition du terrain et persistance. Analyse dans `docs/systems/03` — sept fonctions courtes, le systeme le mieux determine jusqu'ici. **L'echelle du monde est confirmee par un second chemin** : `Chunk_getColumnAt` borne a `[0, 0x1000000)`, soit exactement WORLD_SIZE, obtenu jusqu'ici en multipliant 1024 zones par 16 384 ; `Grid_lookup1024` borne a 0..0x3ff (la grille de zones) et `Region_getChunkCell` a 0..0xffff. **Un echelon manquait** : le chunk de 256 x 256 colonnes, 8 x 8 par tuile — c'est la cellule de `WorldInfo_generateBiomeContent`, dont on ne savait pas ou la ranger. **L'eau n'est pas de la matiere** : `World_getBlockAt` ne lit jamais un bloc d'eau, il rend un temoin selon que z <= 0 ou non, le niveau de la mer d'origine etant 0 — la valeur que `sea_level` avait deja. Creuser sous la mer laisse donc de l'eau. Releve au passage : un bloc d'origine fait 4 octets, trois de couleur **RVB** et un d'attributs (type 5 bits, 0x40, protection 0x80) — ce qui donne une piste sur la dalle d'eau du LOD 1, une couleur survivant a une moyenne la ou un index de palette non. La structure d'origine n'est **pas** portee : `VoxelTerrain` tient deja ce role en natif, la reecrire serait porter une implementation. Persistance par `VoxelStreamSQLite`, `save_generator_output = false` : 647 editions = 20 Ko. Regression attrapee en jeu et non par les tests : `--quit-after` n'envoie pas `WM_CLOSE_REQUEST`, donc rien n'etait sauve — `NOTIFICATION_EXIT_TREE` est le second filet. 155 verifications. |
 | 2026-09-05 | Les deux frequences de bruit portees dans `CWScatter`, et la gigue d'echelle par instance. **La crete a 0,05 est le mecanisme de groupement** : la dette « semer par grappes », ouverte le 2026-09-04, se ferme sans code de groupement — `|bruit(x*0,05)| > 0,5` passe 29,2 % de la surface en plaques de 19,1 blocs, et la variance/moyenne par cellule monte a 14,3 contre ~1 pour un tirage uniforme (195 cellules vides sur 576). La **rarete entiere n'est pas portee, deliberement** : l'original la tire par colonne, soit 256 echantillonnages par cellule (~19 ms, hors budget) ; le budget de candidats a la meme moyenne, et le calcul le confirme — 256 x 0,2917 x 1/8 = 9,3 plantes par cellule contre les 9,8 de la densite posee au juge, deux chemins independants sur le meme nombre. Le **test de signe se generalise par la parite de l'indice** et non en deux moities contigues : celles-ci donnaient une region a 40 % de cailloux, propriete de l'ordre de la table et non du mecanisme — defaut vu en jeu, pas dans un test. Corrige au passage : `PLACEMENT_PASS_RATE` mesure sur 250 000 colonnes autour du point de depart donnait 0,3012, trois points de trop ; la vraie valeur sur un million de colonnes reparties est 0,2917. `MAX_PER_CELL` 32 -> 64, sans quoi il rabotait au lieu de garder. 124 verifications. |
