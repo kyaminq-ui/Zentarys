@@ -889,6 +889,25 @@ Cinq défauts, tous trouvés en jeu, aucun détectable en headless :
    la production du lot précédent — mais une paire tournée d'un demi-tour est
    identique à elle-même. Le quart de tour n'avance donc qu'une pièce sur deux.
 
+#### Trois défauts vus après coup, à corriger en premier
+
+Constatés en jouant, après le commit du jalon. Diagnostics vérifiés sur les
+profils en Z des modèles ; détail et remèdes dans `nextsteps.md`, §6bis.
+
+1. **La flèche des conifères flotte** — et ce n'est pas elle qui est mal placée,
+   c'est son étage. Les deux derniers étages du `pin` sont espacés de 2,8 blocs
+   pour un bloc d'épaisseur, et le fût, raccourci à 0,82 de la hauteur le même
+   jour pour ne pas dépasser du feuillage, ne comble plus l'écart. Deux
+   corrections qui se télescopent.
+2. **Les palmes du dattier flottent** — le décalage d'attache avait été réglé
+   *dans le dessin* (une paire met l'attache sur l'axe horizontal) mais **pas en
+   Z** : une paire retombe, donc son attache est le voxel le plus haut du modèle,
+   et l'assembleur la pose par sa base.
+3. **Ne garder que les gros cailloux** : supprimer `greenlands/caillou_02` et
+   `deserts/gres`. La seconde suppression vide le rôle `CAILLOU` de Deserts et
+   fera tomber la vérification de l'invariant n° 22 — c'est exactement ce qu'elle
+   existe pour dire, et il faudra retirer le rôle de la branche du biome.
+
 **Dépend de :** 1.3 (le climat), 1.7 (les rôles et la bibliothèque), 1.11 (la
 couche des arbres). **Débloque :** six biomes qu'on peut nommer, et un contenu
 par biome qui n'est plus une liste de matières de sol.

@@ -100,6 +100,10 @@ biome, **Échap** rend la souris puis quitte.
 
 ## 3. État
 
+> ⚠️ **Trois défauts sont à corriger avant toute autre chose** : la flèche des
+> conifères et les palmes du dattier flottent, et il reste deux modèles de
+> caillou à retirer. Diagnostics vérifiés et remèdes en **§6bis**.
+
 Jalon 1 (le monde) : 1.1 à 1.10 sont **portés, testés et vus en jeu** ; **1.11
 est aux trois quarts** — assets, dispersion et rendu faits, il manque le tronc
 écrit dans le terrain et la pose des filons ; **1.12 est fait**. Suite de
@@ -569,6 +573,9 @@ Aucun n'aurait pu être trouvé autrement.
 
 ### 6.5 Ce qui reste ouvert du côté des assets
 
+> **Trois défauts sont apparus après coup, en jouant.** Ils ont leur propre
+> section, §6bis, parce qu'ils passent avant tout le reste.
+
 - **`CWVoxelModel.reduced(n)` n'a toujours aucun usage.** Un arbre de 22 blocs
   est le premier modèle assez gros pour la justifier, et la couche existe
   maintenant pour l'accrocher.
@@ -580,9 +587,109 @@ Aucun n'aurait pu être trouvé autrement.
   restent à produire, et elles ne sont pas dispersées par biome : elles se
   posent en rangées par le système de champs du jalon 4.3.
 
+## 6bis. À CORRIGER EN PREMIER — trois défauts vus en jeu (2026-09-06 au soir)
+
+> **Avant toute autre chose à la prochaine session.** Ce sont trois défauts
+> constatés en jeu après le commit du jalon 1.12. Les deux premiers sont des
+> bugs de pose, le troisième est un choix d'assets. Les diagnostics ci-dessous
+> sont **vérifiés sur les données des modèles**, pas déduits du code : j'ai
+> dumpé les profils en Z.
+
+### 6bis.1 La flèche des conifères flotte — c'est le dernier étage, pas la flèche
+
+Symptôme : le sommet de tous les conifères est détaché du reste de l'arbre.
+
+**Ce n'est pas la flèche qui est mal placée, c'est l'étage qui la porte.** Profil
+en Z de `arbres/greenlands/pin.vox` (22 blocs de haut) :
+
+```
+  z= 15   21 voxels      <- avant-dernier etage
+  z= 16    —  VIDE
+  z= 17    —  VIDE
+  z= 18    5 voxels      <- dernier etage, deja detache
+  z= 19-21               <- la fleche, contigue a l'etage 18
+```
+
+La flèche est bien collée à son étage. Ce sont les **deux derniers étages** qui
+sont espacés de 2,8 blocs alors qu'un étage fait un bloc d'épaisseur, et **le fût
+ne comble pas l'écart** : il s'arrête à `hauteur * 0,82`, soit z = 15 pour le
+pin. Les trois quarts supérieurs de l'arbre flottent donc en un seul morceau.
+
+`sapin_enneige` a le même défaut, en plus court : étages jusqu'à z = 13, vide en
+z = 14, flèche à partir de z = 15.
+
+**Où c'est** : `tools/blender/arbres_blocs.py`, `conifere()`. Le pas entre étages
+vaut `(hauteur - z0 - 2) / (etages - 1)` — 2,8 blocs pour le pin — et le fût a
+été raccourci à 0,82 le même jour, précisément pour qu'il ne dépasse pas du
+feuillage. Les deux corrections se sont télescopées.
+
+**Ce que je ferais** : faire monter le fût **jusqu'au dernier étage posé** plutôt
+qu'à une fraction de la hauteur nominale. C'est la seule des deux contraintes qui
+compte — un fût qui s'arrête *au* dernier étage ne dépasse pas et ne laisse pas
+de trou. Le nombre d'étages peut rester ce qu'il est.
+
+### 6bis.2 Les palmes du dattier flottent — l'ancre est en haut du modèle
+
+Symptôme : la couronne du palmier de désert est posée trop haut, détachée du
+stipe.
+
+**Cause vérifiée.** Profil en Z de `arbres/deserts/palme.vox` (3 blocs de haut) :
+
+```
+  z= 0    2 voxels   x 0 et 16    <- les deux pointes, qui retombent
+  z= 1    2 voxels   x 1 et 15
+  z= 2   28 voxels   x 2..14      <- le rachis et son attache, au CENTRE
+```
+
+Une paire de palmes retombe : son **point d'attache est le voxel le plus haut du
+modèle**, pas le plus bas. Or `CWTreeScatter._couronne_de_palmes` pose la pièce
+par sa base (`fy = haut`), donc l'attache se retrouve **`m.height - 1` blocs
+au-dessus** du sommet du stipe — trois blocs pour le dattier.
+
+C'est le décalage d'attache annoncé dans §7 : il avait été réglé *dans le dessin*
+(la paire met l'attache sur l'axe horizontal) mais **pas en Z**.
+
+**Où c'est** : `src/worldgen/cw_tree_scatter.gd`, `_couronne_de_palmes`, la ligne
+`var y: float = haut - float(k) * 0.35`.
+
+**Ce que je ferais** : retrancher la hauteur du modèle —
+`haut - float(m.height - 1) - float(k) * 0.35`. À vérifier ensuite sur le palmier
+de **jungle** aussi : son modèle fait 4 blocs de haut au lieu de 3, donc il est
+décalé d'autant, même si la canopée le cache mieux.
+
+### 6bis.3 Ne garder que les gros cailloux
+
+Décision d'assets, demandée le 2026-09-06 : **supprimer les anciens cailloux et
+le grès du désert, et ne garder que les blocs erratiques qu'on vient de
+générer.**
+
+Les candidats, avec leur hauteur mesurée :
+
+| fichier | hauteur | sort |
+|---|---|---|
+| `flore/greenlands/caillou_01` | 31 voxels (2,3 blocs) | **gardé** |
+| `flore/greenlands/caillou_02` | 19 voxels, dalle plate | **à supprimer** |
+| `flore/snowlands/caillou_01` | 29 voxels | **gardé** |
+| `flore/lavalands/caillou_basalte` | 28 voxels | **gardé** |
+| `flore/deserts/gres` | 34 voxels, colonne à chapeau | **à supprimer** |
+
+> ⚠️ **Supprimer `deserts/gres` casse une vérification, et c'est voulu qu'elle
+> tombe.** C'est le seul modèle du rôle `CAILLOU` dans Deserts ; sans lui, le
+> rôle reste atteignable par les deux crêtes mais n'a plus rien à poser, et
+> `tests/decor_test.gd` refuse exactement ça (« chaque rôle atteignable a un
+> modèle dans son biome », invariant n° 22). Il faut donc **aussi retirer
+> `Role.CAILLOU` de la branche Deserts** de `CWDecorRules.FAMILIES` — et se
+> demander par quoi le remplacer, sinon la première crête de ce biome n'a plus
+> qu'une feuille sur deux.
+>
+> `greenlands/caillou_02` n'a pas ce problème : il est le second d'une liste de
+> deux, le rôle garde un modèle.
+
+---
+
 ## 7. Ensuite — 1.11 (le tronc en matière) ou 2.6 (apparition)
 
-> **À trancher en premier, prochaine session.** Les deux portes sont ouvertes,
+> **Après §6bis.** Les deux portes sont ouvertes,
 > et elles ne demandent pas le même travail. Ma préférence va au **tronc en
 > matière** : c'est le seul point du jalon 1 qui reste, il est court, et il
 > débloque la collision — un arbre de 20 blocs qu'on traverse se remarque
