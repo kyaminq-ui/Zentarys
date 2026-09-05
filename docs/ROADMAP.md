@@ -37,7 +37,7 @@ et des structures.
 | 1.6 | Éléments de tuile | `World_generateRegionFeatures` @0050e080 | ✅ | `docs/systems/01`, §2.7 |
 | 1.7 | **Contenu de biome, dispersion** | `creature_generateAppearance` + @005e4850 + @005d8750 | 🔶 | mécanique faite, 28 modèles livrés, table des entités lue ; `docs/systems/02` |
 | 1.8 | Colonnes persistantes, édition | `Chunk_getColumnAt` @00406100 + `VoxelTool` | ✅ | `docs/systems/03` |
-| 1.9 | Éclairage voxel | `VoxelChunk_propagateSunlight` | ⬜ | |
+| 1.9 | Éclairage voxel | `VoxelChunk_propagateSunlight` @0059a0e0 | 🔶 | algorithme entièrement établi, portage suspendu au mode de rendu ; flore réagissant aux éditions faite ; `docs/systems/04` |
 | 1.10 | Carte du monde | `WorldMap.cpp`, `NameGen_generateRegionName` | ⬜ | |
 
 ### 1.6 — Éléments de tuile (fait)
@@ -354,6 +354,54 @@ contrôleur du jalon 3.1.
 
 ---
 
+### 1.9 — Éclairage voxel (analysé ; une décision de rendu à prendre)
+
+**L'algorithme est entièrement établi**, `docs/systems/04`. Deux passes : une
+descente du soleil par colonne, puis **seize itérations** de diffusion
+**purement horizontale**, atténuation **multiplicative `× 0,85`** par bloc (et
+non le `− 1` de Minecraft), avec un **plancher de 5/255** qui empêche tout recoin
+de tomber au noir. Le type 13 est une **source de lumière** à 255. Le double
+tampon explique la disposition d'octets relevée au jalon 1.8 : pour un voxel
+transparent, les trois premiers octets ne sont pas une couleur mais
+suivant / courant / publié.
+
+Trois types de blocs sont nommés au passage — **0 air, 2 eau, 13 lampe**. Ce
+sont les trois premiers points d'ancrage vers la correspondance de numérotation
+qui bloque `docs/systems/02`, §9.
+
+> **Sur un monde intact, l'éclairage ne change rien.** Le terrain porté est un
+> champ de hauteurs pur : la passe A répond « éclairé au-dessus, noir en
+> dessous », et le dessous n'est jamais visible. La lumière ne devient visible
+> que dans ce que le joueur a creusé — c'est-à-dire ce que le jalon 1.8 vient
+> d'ouvrir.
+
+**Ce qui bloque n'est pas le calcul, c'est le rendu.** `VoxelMesherCubes` n'a
+pas de canal de lumière : en mode palette il cuit la couleur du nuancier dans
+les sommets, et il n'y a nulle part où loger une luminosité par voxel. Porter
+l'éclairage suppose de passer le canal en **`COLOR_RAW`** — une couleur par
+voxel au lieu d'un index — ce qui est **exactement ce que fait l'original**. Le
+coût, le gain (dont l'hypothèse sur la dalle d'eau du LOD 1) et les deux voies
+possibles sont pesés en `docs/systems/04`, §6 et §7. La palette resterait la
+source des couleurs et le contrat d'authoring : **les 39 modèles de flore ne
+seraient pas à repeindre.**
+
+**Fait dans ce jalon :** la flore suit désormais le terrain édité. Creuser sous
+une touffe la laissait en l'air — conséquence connue de la sortie de la flore
+des données voxels (2026-09-04), devenue visible avec 1.8. `CWWorldEdits` tient
+le sommet plein des colonnes éditées, calculé sur le fil principal au moment de
+l'édition, et `CWScatter` y consulte un dictionnaire — rien sur le chemin chaud,
+et pas de `VoxelTool` lu depuis un fil du pool.
+
+> **Un piège de repère, et un test qui passait au vert pour rien.**
+> `CWWorldEdits` travaille en coordonnées de scène, comme `VoxelTool` ;
+> `CWScatter` en coordonnées monde. La première version rangeait la table dans
+> le mauvais repère : la recherche ne tombait jamais juste et la flore
+> continuait de flotter, **sans qu'aucune vérification ne bronche** — les deux
+> côtés du test employaient le même repère. C'est la capture en jeu qui l'a
+> montré. Le test traverse maintenant la conversion.
+
+---
+
 ## Jalon 2 — Créatures et combat
 
 | # | Système | Source | Taille | Statut |
@@ -544,6 +592,7 @@ de le résoudre.
 
 | Date | Fait |
 |---|---|
+| 2026-09-05 | Jalon 1.9, premiere moitie. **L'algorithme d'eclairage est entierement etabli** (`docs/systems/04`) : descente du soleil par colonne, puis seize iterations de diffusion **purement horizontale**, attenuation **multiplicative x 0,85** par bloc et non le -1 de Minecraft, plancher de 5/255 qui interdit le noir absolu, type 13 = source a 255. Le double tampon explique la disposition d'octets du jalon 1.8 : pour un voxel transparent, les trois premiers octets sont suivant/courant/publie, pas une couleur. Trois types de blocs nommes au passage — 0 air, 2 eau, 13 lampe — les premiers points d'ancrage vers la correspondance de numerotation. **Le portage est suspendu a une decision de rendu** : `VoxelMesherCubes` n'a pas de canal de lumiere, il faudrait passer en `COLOR_RAW`, ce qui est exactement ce que fait l'original ; cout et gain peses en `docs/systems/04` §6-7. Sur un monde intact l'eclairage ne change rien de toute facon — le terrain est un champ de hauteurs pur, la lumiere ne se voit que dans ce qu'on a creuse. **Fait** : la flore suit le terrain edite, les touffes ne flottent plus au-dessus des crateres. Piege releve : `CWWorldEdits` est en coordonnees de scene, `CWScatter` en coordonnees monde ; la premiere version rangeait la table dans le mauvais repere et **aucun test ne bronchait**, les deux cotes employant le meme repere — c'est la capture en jeu qui l'a montre. 162 verifications. |
 | 2026-09-05 | Jalon 1.8 : edition du terrain et persistance. Analyse dans `docs/systems/03` — sept fonctions courtes, le systeme le mieux determine jusqu'ici. **L'echelle du monde est confirmee par un second chemin** : `Chunk_getColumnAt` borne a `[0, 0x1000000)`, soit exactement WORLD_SIZE, obtenu jusqu'ici en multipliant 1024 zones par 16 384 ; `Grid_lookup1024` borne a 0..0x3ff (la grille de zones) et `Region_getChunkCell` a 0..0xffff. **Un echelon manquait** : le chunk de 256 x 256 colonnes, 8 x 8 par tuile — c'est la cellule de `WorldInfo_generateBiomeContent`, dont on ne savait pas ou la ranger. **L'eau n'est pas de la matiere** : `World_getBlockAt` ne lit jamais un bloc d'eau, il rend un temoin selon que z <= 0 ou non, le niveau de la mer d'origine etant 0 — la valeur que `sea_level` avait deja. Creuser sous la mer laisse donc de l'eau. Releve au passage : un bloc d'origine fait 4 octets, trois de couleur **RVB** et un d'attributs (type 5 bits, 0x40, protection 0x80) — ce qui donne une piste sur la dalle d'eau du LOD 1, une couleur survivant a une moyenne la ou un index de palette non. La structure d'origine n'est **pas** portee : `VoxelTerrain` tient deja ce role en natif, la reecrire serait porter une implementation. Persistance par `VoxelStreamSQLite`, `save_generator_output = false` : 647 editions = 20 Ko. Regression attrapee en jeu et non par les tests : `--quit-after` n'envoie pas `WM_CLOSE_REQUEST`, donc rien n'etait sauve — `NOTIFICATION_EXIT_TREE` est le second filet. 155 verifications. |
 | 2026-09-05 | Les deux frequences de bruit portees dans `CWScatter`, et la gigue d'echelle par instance. **La crete a 0,05 est le mecanisme de groupement** : la dette « semer par grappes », ouverte le 2026-09-04, se ferme sans code de groupement — `|bruit(x*0,05)| > 0,5` passe 29,2 % de la surface en plaques de 19,1 blocs, et la variance/moyenne par cellule monte a 14,3 contre ~1 pour un tirage uniforme (195 cellules vides sur 576). La **rarete entiere n'est pas portee, deliberement** : l'original la tire par colonne, soit 256 echantillonnages par cellule (~19 ms, hors budget) ; le budget de candidats a la meme moyenne, et le calcul le confirme — 256 x 0,2917 x 1/8 = 9,3 plantes par cellule contre les 9,8 de la densite posee au juge, deux chemins independants sur le meme nombre. Le **test de signe se generalise par la parite de l'indice** et non en deux moities contigues : celles-ci donnaient une region a 40 % de cailloux, propriete de l'ordre de la table et non du mecanisme — defaut vu en jeu, pas dans un test. Corrige au passage : `PLACEMENT_PASS_RATE` mesure sur 250 000 colonnes autour du point de depart donnait 0,3012, trois points de trop ; la vraie valeur sur un million de colonnes reparties est 0,2917. `MAX_PER_CELL` 32 -> 64, sans quoi il rabotait au lieu de garder. 124 verifications. |
 | 2026-09-05 | `VOXELS_PER_BLOCK` passe de 16 a **40/3**, la valeur de l'original : ses echelles d'instanciation du decor sont 0,075 / 0,09 / 0,1, et 0,075 = 3/40 exactement. Ecrit en fraction, pas en 13.333 qui derive. Un cube de reference d'un bloc n'etant plus entier, la reference d'authoring devient **3 blocs = 40 voxels**. Le personnage de 32 voxels passe de 2,0 a 2,4 blocs, ce qui recoupe les 2,3 blocs mesures au pixel : le changement rapproche du terrain mesure. Piege regle au passage : `CWScatter` utilisait le rapport comme modulo entier pour la position sous le bloc — les deux notions sont independantes et sont separees, `CWScatter.SUBBLOCK_STEPS = 16` d'un cote, la grille de dessin de l'autre. Deux tests verrouillent la fraction. 117 verifications. Ajoute : `docs/prompt_generation_flore.md`, prompt autoportant pour regenerer le lot sous Blender/bpy, avec un ecrivain .vox valide de bout en bout par le chargeur du projet. |

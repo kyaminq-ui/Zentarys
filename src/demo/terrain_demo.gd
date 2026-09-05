@@ -254,6 +254,9 @@ func _build_terrain() -> void:
 	# etre montee apres lui, et refaite si le terrain est reconstruit.
 	edits = CWWorldEdits.new()
 	edits.setup(terrain, generator, WORLD_Y_MIN)
+	# La dispersion doit savoir quelles colonnes ont ete creusees, sans quoi la
+	# flore reste en l'air au-dessus d'un cratere.
+	generator.scatter_grid().set_edits(edits)
 
 
 func _build_camera() -> void:

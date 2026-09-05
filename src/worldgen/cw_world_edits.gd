@@ -50,6 +50,14 @@ extends RefCounted
 ## Rayon maximal, en blocs, d'un coup de pioche ou de pose.
 const REACH: float = 8.0
 
+## Rendu par `edited_top` pour une colonne que personne n'a touchee.
+const NOT_EDITED: int = 0x7FFFFFFF
+
+## Profondeur maximale du balayage qui cherche le nouveau sol apres un coup de
+## pioche. Borne : creuser le fond d'un puits ne doit pas couter un parcours de
+## toute la colonne. Au-dela, la colonne est declaree sans sol et sa flore tombe.
+const TOP_SCAN_MAX: int = 96
+
 
 var _tool: VoxelTool = null
 var _generator: CWVoxelGenerator = null
@@ -58,6 +66,32 @@ var _params: CWWorldParams = null
 var _floor_y: int = -2147483648
 ## Nombre d'editions appliquees depuis le demarrage. Pour l'ATH et les tests.
 var edit_count: int = 0
+
+## Sommet plein de chaque colonne editee. Vide au demarrage : une colonne absente
+## d'ici est intacte, et la flore s'y pose sur le relief genere comme avant.
+##
+## -- Attention : cette table est en coordonnees **monde** ---------------------
+## Tout le reste de cette classe est en coordonnees de scene, comme `VoxelTool`.
+## La table, elle, est lue par `CWScatter`, qui travaille en coordonnees monde —
+## `Placement.x` est un point du monde d'origine, pas de la scene. La conversion
+## se fait donc a l'ecriture, dans `_set_top`, et nulle part ailleurs.
+##
+## Ce n'est pas une precaution theorique : la premiere version gardait la table
+## en coordonnees de scene, la recherche ne tombait jamais juste, et la flore
+## continuait de flotter au-dessus des crateres sans qu'aucun test ne bronche —
+## les deux cotes du test employaient le meme repere, donc il passait au vert.
+##
+## -- Pourquoi une table, et pas une requete ------------------------------------
+## La flore est construite sur des fils du pool (`CWFloraRenderer`), et un
+## `VoxelTool` ne se lit pas depuis un autre fil pendant que le fil principal
+## edite. Le sommet est donc calcule **au moment de l'edition**, sur le fil
+## principal, et range ici ; la dispersion n'a plus qu'a consulter un
+## dictionnaire, ce qui ne coute rien et ne touche pas au terrain.
+var _tops: Dictionary = {}
+var _tops_mutex: Mutex = Mutex.new()
+
+## Cellules de dispersion dont la flore est a refaire. Vidangees par le rendu.
+var _dirty_cells: Dictionary = {}
 
 
 func setup(terrain: Node, generator: CWVoxelGenerator, floor_y: int) -> void:
@@ -138,6 +172,11 @@ func dig(at: Vector3i) -> int:
 	_tool.value = left
 	_tool.do_point(at)
 	edit_count += 1
+	# Le sol de la colonne a pu descendre : si c'est lui qu'on vient d'oter, on
+	# cherche le suivant sous lui. Sinon on a creuse une galerie sous un toit
+	# intact, et le sommet ne bouge pas.
+	if at.y >= _top_of(at.x, at.z):
+		_set_top(at.x, at.z, _scan_top_below(at.x, at.y - 1, at.z))
 	return left
 
 
@@ -156,6 +195,8 @@ func place(at: Vector3i, index: int) -> bool:
 	_tool.value = index
 	_tool.do_point(at)
 	edit_count += 1
+	if not is_open(index) and at.y > _top_of(at.x, at.z):
+		_set_top(at.x, at.z, at.y)
 	return true
 
 
@@ -166,3 +207,75 @@ func raycast(origin: Vector3, direction: Vector3,
 	if _tool == null:
 		return null
 	return _tool.raycast(origin, direction, reach)
+
+
+# -- Le sol des colonnes editees ----------------------------------------------
+#
+# Creuser sous une touffe d'herbe la laisse en l'air : la flore est instanciee a
+# partir du relief *genere*, que l'edition ne change pas. C'est la consequence
+# connue de la sortie de la flore des donnees voxels (2026-09-04), et elle se
+# voit des qu'on creuse. Ce qui suit est ce qu'il faut pour que la dispersion
+# s'en apercoive sans rien payer sur son chemin chaud.
+
+
+## Sommet plein d'une colonne editee, ou `NOT_EDITED` si personne n'y a touche.
+##
+## **Coordonnees monde**, pas coordonnees de scene : l'appelant est `CWScatter`.
+##
+## Sur pour plusieurs fils : c'est `CWScatter._build_cell` qui appelle, depuis un
+## fil du pool, pendant que le fil principal edite.
+func edited_top(wx: int, wz: int) -> int:
+	if _tops.is_empty():
+		return NOT_EDITED
+	_tops_mutex.lock()
+	var v: Variant = _tops.get(Vector2i(wx, wz))
+	_tops_mutex.unlock()
+	return NOT_EDITED if v == null else int(v)
+
+
+## Cellules de dispersion touchees depuis le dernier appel. Le rendu les vide et
+## reconstruit ce qu'il faut ; passer par un lot evite de refaire une cellule
+## entiere a chacun des centaines de blocs d'un meme coup de pioche.
+func take_dirty_cells() -> Array:
+	if _dirty_cells.is_empty():
+		return []
+	var out: Array = _dirty_cells.keys()
+	_dirty_cells.clear()
+	return out
+
+
+## Sommet courant d'une colonne : la valeur editee si elle existe, sinon celle du
+## relief genere. Le resultat est memorise, donc une colonne creusee de haut en
+## bas ne repaie pas l'echantillonnage a chaque bloc.
+func _top_of(x: int, z: int) -> int:
+	var known: int = edited_top(
+			_params.world_origin.x + x, _params.world_origin.y + z)
+	if known != NOT_EDITED:
+		return known
+	var f: CWTerrainField = _generator.field()
+	var c: Vector3 = f.sample_column(
+			_params.world_origin.x + x, _params.world_origin.y + z)
+	return floori(c.x)
+
+
+## `x` et `z` sont en coordonnees de scene ; la table et les cellules sales sont
+## en coordonnees monde. C'est ici, et seulement ici, que la conversion a lieu.
+func _set_top(x: int, z: int, y: int) -> void:
+	var wx: int = _params.world_origin.x + x
+	var wz: int = _params.world_origin.y + z
+	_tops_mutex.lock()
+	_tops[Vector2i(wx, wz)] = y
+	_tops_mutex.unlock()
+	_dirty_cells[Vector2i(CWScatter.cell_of(wx), CWScatter.cell_of(wz))] = true
+
+
+## Premier bloc plein a `y_from` ou en dessous. Rend `_floor_y` si le balayage
+## n'en trouve pas : une colonne sans sol ne porte plus rien.
+func _scan_top_below(x: int, y_from: int, z: int) -> int:
+	var y: int = y_from
+	var limit: int = maxi(_floor_y, y_from - TOP_SCAN_MAX)
+	while y > limit:
+		if not is_open(voxel_at(x, y, z)):
+			return y
+		y -= 1
+	return _floor_y

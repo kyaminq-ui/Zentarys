@@ -25,7 +25,7 @@ ne s'ouvre pas proprement (il est déclaré dans `project.godot`).
 ## 2. Commandes
 
 ```
-# Suite de validation (155 vérifications, ~70 s)
+# Suite de validation (162 vérifications, ~70 s)
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd
 
 # Réimport après ajout d'un class_name (sinon l'éditeur ne le voit pas)
@@ -84,7 +84,8 @@ terrain, requête ponctuelle et persistance du diff. Restent 1.9 et 1.10. Détai
 analysées dans `docs/ROADMAP.md`. Analyses : `docs/systems/01_generation_terrain.md` (terrain),
 `docs/systems/02_contenu_de_biome.md` (contenu de biome, éléments de tuile,
 apparitions), `docs/systems/03_colonnes_et_edition.md` (colonnes, blocs,
-édition, persistance).
+édition, persistance), `docs/systems/04_eclairage.md` (éclairage voxel :
+algorithme établi, portage suspendu à une décision de rendu).
 
 ```
 src/worldgen/
@@ -104,7 +105,7 @@ src/worldgen/
   cw_world_edits.gd        creuser, poser, interroger un bloc (jalon 1.8)
 src/demo/terrain_demo.gd   scène de démonstration (arbre voxel construit en code)
 src/demo/scale_board.gd    gabarit d'échelle : mires, silhouette, modèles
-tests/worldgen_test.gd     suite headless, 155 vérifications
+tests/worldgen_test.gd     suite headless, 162 vérifications
 tests/tile_features_test.gd  la moitié qui concerne les éléments de tuile
 tests/flora_test.gd        modèles, dispersion, maillage et pose (jalon 1.7)
 tests/edit_test.gd         règles d'édition, requête ponctuelle, persistance (1.8)
@@ -221,7 +222,14 @@ docs/images/               gabarit d'échelle photographié en jeu
     `SceneTree.quit()` direct n'envoient rien : d'où la seconde branche sur
     `NOTIFICATION_EXIT_TREE`. Sans elle, une session lancée pour une capture
     perd ses éditions sans un mot — constaté, 647 appliquées et zéro écrite.
-20. **`save_generator_output` doit rester à faux.** À vrai, chaque bloc visité
+20. **`CWWorldEdits` est en coordonnées de scène, `CWScatter` en coordonnées
+    monde.** La table des sommets édités est lue par la dispersion : elle est
+    donc rangée en coordonnées **monde**, et la conversion se fait dans
+    `_set_top`, nulle part ailleurs. La première version s'est trompée de
+    repère ; la recherche ne tombait jamais juste, la flore continuait de
+    flotter, et **aucun test ne bronchait** parce que les deux côtés employaient
+    le même repère. Un test qui ne traverse pas la conversion ne teste rien.
+21. **`save_generator_output` doit rester à faux.** À vrai, chaque bloc visité
     part sur le disque et la sauvegarde grossit comme le monde exploré au lieu
     de grossir comme ce qu'on a touché. C'est aussi le modèle de l'original, qui
     ne sérialise que les colonnes modifiées.

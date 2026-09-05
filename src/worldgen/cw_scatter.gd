@@ -181,6 +181,9 @@ class Placement extends RefCounted:
 
 var _field: CWTerrainField
 var _lib: CWModelLibrary
+## Couche d'edition, si le monde en a une. Sert a savoir quelles colonnes ne
+## portent plus leur relief genere — voir `_supported`.
+var _edits: CWWorldEdits = null
 var _cells: Dictionary = {}
 var _cells_prev: Dictionary = {}
 var _mutex: Mutex = Mutex.new()
@@ -193,6 +196,42 @@ func _init(terrain_field: CWTerrainField, models: CWModelLibrary = null) -> void
 
 func library() -> CWModelLibrary:
 	return _lib
+
+
+## Branche la couche d'edition. Sans elle, la dispersion se comporte comme avant :
+## le monde n'est pas editable, donc le relief genere est le relief tout court.
+func set_edits(edits: CWWorldEdits) -> void:
+	_edits = edits
+
+
+## Vrai si la colonne porte encore une plante posee sur `y`.
+##
+## Une plante se tient sur le bloc `y - 1`. Tant que la colonne est intacte, le
+## relief genere fait foi et il n'y a rien a verifier — c'est le cas de la quasi
+## totalite du monde, et le test se resume a un dictionnaire vide. Une colonne
+## creusee, elle, a un sommet connu : si la plante ne repose plus dessus, elle
+## flotte ou elle est enterree, et dans les deux cas elle n'a plus lieu d'etre.
+func _supported(x: int, z: int, y: int) -> bool:
+	if _edits == null:
+		return true
+	var top: int = _edits.edited_top(x, z)
+	return top == CWWorldEdits.NOT_EDITED or top == y - 1
+
+
+## Cellules dont le terrain a bouge depuis le dernier appel. Passe-plat vers la
+## couche d'edition : le rendu ne connait que la dispersion, et n'a pas a savoir
+## si le monde est editable.
+func take_dirty_cells() -> Array:
+	return [] if _edits == null else _edits.take_dirty_cells()
+
+
+## Oublie une cellule : sa flore sera retiree au prochain passage.
+func invalidate_cell(cx: int, cz: int) -> void:
+	var key: int = (cz << 24) ^ cx
+	_mutex.lock()
+	_cells.erase(key)
+	_cells_prev.erase(key)
+	_mutex.unlock()
 
 
 func clear_cache() -> void:
@@ -332,10 +371,14 @@ func _build_cell(cx: int, cz: int) -> Array:
 		if c.x < float(sea) and surface != CWPalette.GRAVEL:
 			continue
 
+		var ground: int = floori(c.x) + 1
+		if not _supported(x, z, ground):
+			continue
+
 		var p := Placement.new()
 		p.x = x
 		p.z = z
-		p.y = floori(c.x) + 1
+		p.y = ground
 		p.fx = float(sub_x) / float(SUBBLOCK_STEPS)
 		p.fz = float(sub_z) / float(SUBBLOCK_STEPS)
 		p.model = choices[_choose(choices.size(), x, z, pick)]

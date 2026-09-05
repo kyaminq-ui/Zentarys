@@ -26,6 +26,7 @@ func run(runner: Object) -> void:
 	_test_generated_voxel()
 	_test_bounds()
 	_test_persistence()
+	_test_flora_follows_edits()
 
 
 func _ok(label: String, condition: bool, detail: String = "") -> void:
@@ -264,3 +265,101 @@ func _test_persistence() -> void:
 
 	back.flush()
 	DirAccess.remove_absolute(path)
+
+
+# -- 5. La flore suit le terrain edite ----------------------------------------
+
+func _test_flora_follows_edits() -> void:
+	print("[edition : la flore suit le terrain]")
+
+	# Creuser sous une touffe la laissait en l'air : la flore est instanciee a
+	# partir du relief *genere*, que l'edition ne change pas. La dispersion
+	# consulte donc maintenant le sommet des colonnes editees.
+	#
+	# Sans terrain il n'y a pas de `VoxelTool`, donc pas de vrai coup de pioche :
+	# on pose directement le sommet, ce qui est exactement ce que verrait la
+	# dispersion apres un creusage. C'est la regle qui est testee, pas la
+	# plomberie de `VoxelTool` — celle-la se voit en jeu.
+	var p := CWWorldParams.new()
+	p.world_seed = 2024
+	var g := CWVoxelGenerator.new()
+	g.params = p
+	var sc: CWScatter = g.scatter_grid()
+	if not sc.library().has_any():
+		print("  [saute] la flore suit le terrain  (aucun modele charge)")
+		return
+
+	var cx0: int = CWScatter.cell_of(p.world_origin.x)
+	var cz0: int = CWScatter.cell_of(p.world_origin.y)
+
+	# Une cellule garnie, pour avoir de la matiere a retirer.
+	var cell := Vector2i(0, 0)
+	var before: Array = []
+	for dz in 24:
+		for dx in 24:
+			var got: Array = sc.cell(cx0 + dx, cz0 + dz)
+			if got.size() > before.size():
+				before = got
+				cell = Vector2i(cx0 + dx, cz0 + dz)
+	if before.is_empty():
+		print("  [saute] la flore suit le terrain  (aucune plante autour du depart)")
+		return
+
+	var e := CWWorldEdits.new()
+	e.setup(null, g, -160)
+	sc.set_edits(e)
+	_ok("une colonne intacte n'est pas signalee comme editee",
+			e.edited_top(before[0].x, before[0].z) == CWWorldEdits.NOT_EDITED)
+
+	# On abaisse le sol sous la premiere plante de dix blocs, comme le ferait un
+	# cratere, et on redemande la cellule.
+	#
+	# **Le piege de repere, et pourquoi ce test le traverse.** `CWWorldEdits`
+	# travaille en coordonnees de scene, comme `VoxelTool` ; `CWScatter` travaille
+	# en coordonnees monde. On ecrit donc ici avec des coordonnees de scene — ce
+	# que fait `dig` — et on relit avec des coordonnees monde — ce que fait la
+	# dispersion. Une premiere version de ce test employait le meme repere des
+	# deux cotes : il passait au vert alors que la flore continuait de flotter
+	# au-dessus des crateres en jeu.
+	var victim: CWScatter.Placement = before[0]
+	var scene_x: int = victim.x - p.world_origin.x
+	var scene_z: int = victim.z - p.world_origin.y
+	e._set_top(scene_x, scene_z, victim.y - 11)
+	_ok("la colonne creusee porte son nouveau sommet, lue en coordonnees monde",
+			e.edited_top(victim.x, victim.z) == victim.y - 11,
+			"scene (%d, %d) -> monde (%d, %d)" % [scene_x, scene_z, victim.x, victim.z])
+	_ok("et elle n'est pas rangee sous ses coordonnees de scene",
+			e.edited_top(scene_x, scene_z) == CWWorldEdits.NOT_EDITED)
+
+	var dirty: Array = sc.take_dirty_cells()
+	_ok("la cellule de la colonne creusee est signalee a refaire",
+			dirty.has(Vector2i(CWScatter.cell_of(victim.x),
+					CWScatter.cell_of(victim.z))), str(dirty))
+
+	sc.invalidate_cell(cell.x, cell.y)
+	var after: Array = sc.cell(cell.x, cell.y)
+	var still_there: bool = false
+	for pl in after:
+		if pl.x == victim.x and pl.z == victim.z and pl.y == victim.y:
+			still_there = true
+	_ok("la plante dont le sol a disparu n'est plus posee", not still_there,
+			"%d plantes avant, %d apres" % [before.size(), after.size()])
+	# Et seulement celle-la : creuser une colonne ne doit pas raser la cellule.
+	_ok("les plantes des colonnes intactes restent",
+			after.size() >= before.size() - 4 and not after.is_empty(),
+			"%d -> %d" % [before.size(), after.size()])
+
+	# Une plante qui repose encore sur son sol edite doit rester : batir un
+	# muret sous une touffe ne la fait pas disparaitre.
+	var keeper: CWScatter.Placement = after[0]
+	e._set_top(keeper.x - p.world_origin.x, keeper.z - p.world_origin.y,
+			keeper.y - 1)
+	sc.invalidate_cell(cell.x, cell.y)
+	var kept: bool = false
+	for pl in sc.cell(cell.x, cell.y):
+		if pl.x == keeper.x and pl.z == keeper.z and pl.y == keeper.y:
+			kept = true
+	_ok("une plante dont le sol est intact survit a l'edition de sa colonne", kept)
+
+	sc.set_edits(null)
+	sc.clear_cache()

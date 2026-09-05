@@ -125,8 +125,29 @@ func _process(_delta: float) -> void:
 		return
 	if not _scatter.library().has_any():
 		return
+	_drop_edited()
 	_refresh_wanted()
 	_pump()
+
+
+## Refait les cellules ou le terrain a bouge.
+##
+## Le lot vient de `CWWorldEdits`, qui accumule au lieu de signaler bloc par
+## bloc : un cratere de six cents coups de pioche touche une poignee de cellules,
+## et les reconstruire a chaque coup couterait cent fois le travail utile.
+##
+## Reconstruire est ici la seule option honnete : la dispersion d'une cellule est
+## un tirage d'un bloc, sans etat par plante, donc on ne peut pas en retirer une
+## sans rejouer le tirage. C'est aussi ce qui garde la cellule reproductible —
+## une cellule editee puis rechargee doit donner le meme resultat.
+func _drop_edited() -> void:
+	var dirty: Array = _scatter.take_dirty_cells()
+	for c in dirty:
+		_scatter.invalidate_cell(c.x, c.y)
+		if _live.has(c):
+			_live[c].queue_free()
+			_live.erase(c)
+			_wanted.clear()
 
 
 ## Recalcule l'ensemble des cellules a poser. Tant que l'observateur reste dans
