@@ -341,10 +341,15 @@ taille de chaque instance.
 > voxels fait désormais 2,4 blocs, ce qui recoupe les 2,3 blocs mesurés sur la
 > capture. Le lot de flore a été redessiné à cette échelle le même jour.
 
-Ce qui **manque encore au projet** et que l'original fait : la **gigue
-d'échelle de 1× à 2× par instance**. `CWFloraRenderer` pose aujourd'hui toutes
-les instances d'un modèle à la même taille. C'est une ligne à ajouter, et c'est
-sans doute ce qui sépare le plus un champ d'herbe répétitif d'un champ vivant.
+**Porté le 2026-09-05.** `CWScatter.Placement.scale` tire `1 + rand()/32767` et
+`CWFloraRenderer.instance_transform` l'applique dans la base, donc l'instance
+grandit depuis son ancre — au sol, au centre de l'empreinte — et non depuis le
+coin de son gabarit ; sinon une touffe à 2× s'enterrerait de sa demi-hauteur.
+
+Deux conséquences à porter avec, sous peine de plantes tronquées à l'écran : la
+marge de `CWScatter.placements_in` et la boîte de visibilité de chaque
+`MultiMesh` se calculent désormais sur le rayon de l'**instance**
+(`Placement.radius_blocks()`), pas sur celui du modèle nu.
 
 Le **lacet** a deux régimes selon la branche : par quarts de tour
 (`(rand()%4) · 90`) pour la flore posée au sol, libre (`rand() · 360 / 32767`)
@@ -368,10 +373,45 @@ Deux régularités qui valent d'être portées telles quelles :
 
 - **la fréquence de bruit sépare deux échelles de décision.** 0,05 décide *où
   il y a de la flore* (des plaques de quelques dizaines de blocs), 0,01 décide
-  *laquelle* (des régions bien plus larges). `CWScatter` ne fait aujourd'hui
-  qu'un tirage par cellule, sans cette structure à deux niveaux ;
+  *laquelle* (des régions bien plus larges) ;
 - **la rareté est un tirage entier**, `rand()%8 == 0` ou `%10 == 0`, appliqué
   *après* le seuil de bruit — pas une densité continue.
+
+**Portées le 2026-09-05**, avec trois constats qui n'étaient pas prévus.
+
+> **La crête à 0,05 *est* le mécanisme de groupement.** La feuille de route
+> portait depuis le 2026-09-04 une dette technique « groupement de la flore en
+> grappes », ouverte sur le constat que l'original sème par paquets de trois à
+> six pieds et qu'un tirage uniforme ne sait pas le faire. Il n'y avait rien à
+> inventer : `|bruit(x·0,05 …)| > 0,5` passe **29,2 %** de la surface, en
+> plaques de **19,1 blocs** de long — la longueur d'onde 1/0,05. Mesuré après
+> portage : variance/moyenne = **14,3** par cellule, contre ~1 pour un tirage
+> uniforme, et 195 cellules vides sur 576. Les grappes et les vides sortent de
+> la crête seule. La dette se ferme sans code de groupement.
+
+> **La rareté entière ne se porte pas telle quelle, et c'est délibéré.**
+> L'original visite *chaque colonne* et garde `rand()%8 == 0` de celles qui sont
+> dans une plaque : 256 échantillonnages de colonne par cellule, soit ~19 ms —
+> précisément ce que le projet ne peut pas payer. `CWScatter` tire donc un
+> budget de candidats et n'échantillonne la colonne que pour ceux qui passent la
+> crête. Les deux schémas ont la même moyenne, et le calcul le vérifie :
+> 256 × 0,2917 × 1/8 = **9,3 plantes par cellule**, là où la densité posée au
+> jugé dans `CWModelLibrary` en donnait **9,8** sur l'herbe. Deux chemins
+> indépendants, le même nombre — la densité devinée était la bonne.
+>
+> Ajouter malgré tout un `%8` par candidat serait décoratif : filtrer au hasard
+> des positions déjà tirées au hasard rend des positions au hasard.
+
+> **Le test de signe se généralise par la parité de l'indice, pas en deux
+> moitiés contiguës.** L'original tranche entre `alga` et `coral` — deux
+> variantes de même nature. Sur une liste de dix modèles, couper en deux blocs
+> contigus donne une région à 40 % de cailloux et une sans aucun, parce que la
+> table de `CWModelLibrary` groupe les modèles par nature et que les deux
+> cailloux de l'herbe se suivent en fin de liste. C'était une propriété de
+> l'*ordre de la table*, qui est provisoire, pas du mécanisme — et ça se voyait
+> en jeu avant de se voir dans un test. La parité entrelace les natures et ne
+> dépend pas de cet ordre ; pour n = 2, elle reste mot pour mot le test de signe
+> d'origine.
 
 ### 8.5 Ce qui reste à trouver
 

@@ -254,6 +254,7 @@ func _test_scatter() -> void:
 			for i in a.size():
 				if a[i].x != b[i].x or a[i].z != b[i].z or a[i].y != b[i].y \
 						or a[i].rotation != b[i].rotation \
+						or not is_equal_approx(a[i].scale, b[i].scale) \
 						or a[i].model.name != b[i].model.name:
 					identical = false
 	_ok("deterministe entre deux instances", identical)
@@ -278,11 +279,14 @@ func _test_scatter() -> void:
 	var got: Array = sc.placements_in(wx, wz, 16, 16)
 	var want: Array = []
 	# Rayons en blocs : l'empreinte est une requete de terrain, pas de modele.
-	var margin: int = sc.library().max_radius_blocks + CWScatter.CELL_SIZE
+	# Le rayon est celui de l'*instance*, gigue comprise : une marge calculee
+	# sur le modele nu laisserait passer les grandes touffes de la frontiere.
+	var margin: int = ceili(float(sc.library().max_radius_blocks) * CWScatter.SCALE_MAX) \
+			+ CWScatter.CELL_SIZE
 	for cz in range(CWScatter.cell_of(wz - margin), CWScatter.cell_of(wz + 16 + margin) + 1):
 		for cx in range(CWScatter.cell_of(wx - margin), CWScatter.cell_of(wx + 16 + margin) + 1):
 			for pl in sc.cell(cx, cz):
-				var r: int = pl.model.radius_blocks
+				var r: int = pl.radius_blocks()
 				if pl.x + r < wx or pl.x - r >= wx + 16:
 					continue
 				if pl.z + r < wz or pl.z - r >= wz + 16:
@@ -316,6 +320,137 @@ func _test_scatter() -> void:
 		if results[t] != reference:
 			concurrent_ok = false
 	_ok("meme dispersion depuis huit fils concurrents", concurrent_ok)
+
+	_test_two_frequencies(sc, cx0, cz0)
+
+
+## Les deux frequences de bruit, portees le 2026-09-05 de `docs/systems/02` §8.4.
+##
+## Ces verifications sont statistiques par nature : le fait teste n'est pas la
+## valeur d'une plante, c'est la *forme de la distribution*. Un test qui
+## regarderait plante par plante ne verrait aucune des deux regressions qui
+## comptent ici — une crete desactivee rendrait un semis parfaitement legal,
+## simplement mort a l'oeil.
+func _test_two_frequencies(sc: CWScatter, cx0: int, cz0: int) -> void:
+	print("[dispersion : les deux frequences]")
+
+	# -- La part passante de la crete ----------------------------------------
+	# `PLACEMENT_PASS_RATE` divise le budget de candidats : elle est ce qui
+	# conserve la densite moyenne des biomes. Si `CWValueNoise` ou les
+	# constantes de la crete bougent, la densite de tout le monde derive sans
+	# que rien ne le signale — d'ou cette mesure directe.
+	var passed: int = 0
+	var probed: int = 0
+	for dz in 200:
+		for dx in 200:
+			var wx: float = float(cx0 << CWScatter.CELL_SHIFT) + float(dx)
+			var wz: float = float(cz0 << CWScatter.CELL_SHIFT) + float(dz)
+			probed += 1
+			var ridge: float = absf(CWValueNoise.sample(
+					wx * CWScatter.PLACEMENT_FREQ + CWScatter.PLACEMENT_OFFSET_X,
+					wz * CWScatter.PLACEMENT_FREQ + CWScatter.PLACEMENT_OFFSET_Z))
+			if ridge > CWScatter.PLACEMENT_RIDGE:
+				passed += 1
+	var rate: float = float(passed) / float(probed)
+	print("     crete de placement : %.1f %% de la surface passe (constante %.1f %%)"
+			% [rate * 100.0, CWScatter.PLACEMENT_PASS_RATE * 100.0])
+	_ok("la part passante de la crete vaut la constante qui compense le budget",
+			absf(rate - CWScatter.PLACEMENT_PASS_RATE) < 0.02,
+			"mesure %.4f, constante %.4f" % [rate, CWScatter.PLACEMENT_PASS_RATE])
+
+	# -- Des plaques, et des vides -------------------------------------------
+	# C'est le point de tout l'exercice. Un tirage uniforme par cellule donne un
+	# nombre de plantes par cellule proche de Poisson, donc une variance egale a
+	# la moyenne. La crete a 0,05 a une longueur d'onde de ~20 blocs, soit plus
+	# qu'une cellule de 16 : des cellules entieres sont dans une plaque ou dans
+	# un vide, et la variance monte tres au-dessus de la moyenne. On mesure ce
+	# rapport plutot que la variance seule, qui depend du biome tire.
+	var counts: Array[int] = []
+	var empty: int = 0
+	for dz in 24:
+		for dx in 24:
+			var n: int = sc.cell(cx0 + dx, cz0 + dz).size()
+			counts.append(n)
+			if n == 0:
+				empty += 1
+	var mean: float = 0.0
+	for n in counts:
+		mean += float(n)
+	mean /= float(counts.size())
+	var variance: float = 0.0
+	for n in counts:
+		variance += (float(n) - mean) * (float(n) - mean)
+	variance /= float(counts.size())
+	var dispersion: float = variance / maxf(mean, 0.001)
+	print("     %d cellules : %.1f plantes en moyenne, variance %.1f (rapport %.1f), %d vides"
+			% [counts.size(), mean, variance, dispersion, empty])
+	_ok("la flore vient par plaques, pas en saupoudrage regulier",
+			dispersion > 2.0,
+			"variance/moyenne = %.2f (un tirage uniforme donnerait ~1)" % dispersion)
+
+	# -- La densite moyenne est conservee ------------------------------------
+	# La compensation du budget doit rendre `DENSITY` lisible comme avant : la
+	# crete change la variance, pas la moyenne. Sans cette verification, diviser
+	# par la part passante pourrait etre oublie et la flore se ferait rare de
+	# deux tiers sans qu'aucun test ne bouge.
+	print("     densite moyenne %.1f plante(s) par cellule" % mean)
+	_ok("la crete change la variance, pas la densite moyenne",
+			mean > 3.0 and mean < 20.0, "%.1f par cellule" % mean)
+
+	# -- La gigue d'echelle ---------------------------------------------------
+	var out_of_range: int = 0
+	var seen: int = 0
+	var lo: float = 99.0
+	var hi: float = 0.0
+	for dz in 24:
+		for dx in 24:
+			for pl in sc.cell(cx0 + dx, cz0 + dz):
+				seen += 1
+				var under: bool = pl.scale < CWScatter.SCALE_MIN - 0.001
+				var over: bool = pl.scale > CWScatter.SCALE_MAX + 0.001
+				if under or over:
+					out_of_range += 1
+				lo = minf(lo, pl.scale)
+				hi = maxf(hi, pl.scale)
+	if seen == 0:
+		_skip("gigue d'echelle", "aucune plante autour du point de depart")
+		return
+	print("     gigue d'echelle sur %d instances : %.3f a %.3f" % [seen, lo, hi])
+	_ok("la gigue d'echelle reste dans [1, 2]", out_of_range == 0,
+			"%d hors bornes" % out_of_range)
+	# Deux touffes du meme modele a la meme taille, c'est le motif repete que la
+	# gigue existe pour casser : on verifie qu'elle couvre reellement sa plage.
+	_ok("la gigue couvre sa plage, elle n'est pas figee",
+			hi - lo > 0.8, "etendue %.3f" % (hi - lo))
+
+	# -- La frequence de selection --------------------------------------------
+	# 0,01 decide *laquelle* : deux regions distantes de plusieurs centaines de
+	# blocs ne doivent pas tirer la meme composition. Le test compare la moitie
+	# de liste designee par le signe du bruit — un indice sur deux — ce qui est
+	# la decision portee ; comparer des noms melangerait la selection et le biome.
+	var halves: Dictionary = {}
+	for step in 40:
+		var wx: int = (cx0 << CWScatter.CELL_SHIFT) + step * 137
+		var region: float = CWValueNoise.sample(
+				float(wx) * CWScatter.SELECTION_FREQ + CWScatter.SELECTION_OFFSET_X,
+				float(cz0 << CWScatter.CELL_SHIFT) * CWScatter.SELECTION_FREQ
+						+ CWScatter.SELECTION_OFFSET_Z)
+		halves[region < 0.0] = true
+	_ok("la frequence de selection designe les deux moities selon la region",
+			halves.size() == 2, str(halves.keys()))
+	# Et elle doit etre stable *dans* une region : une selection qui rebondirait
+	# d'une colonne a l'autre serait un second tirage uniforme, pas une composition.
+	var flips: int = 0
+	var prev: int = CWScatter._choose(4, cx0 << CWScatter.CELL_SHIFT,
+			cz0 << CWScatter.CELL_SHIFT, 0.1) % 2
+	for step in range(1, 60):
+		var here: int = CWScatter._choose(4,
+				(cx0 << CWScatter.CELL_SHIFT) + step, cz0 << CWScatter.CELL_SHIFT, 0.1) % 2
+		if here != prev:
+			flips += 1
+		prev = here
+	_ok("la composition est stable sur une region, pas d'une colonne a l'autre",
+			flips <= 2, "%d basculements sur 60 blocs" % flips)
 
 
 

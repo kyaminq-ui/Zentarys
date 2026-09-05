@@ -25,7 +25,7 @@ ne s'ouvre pas proprement (il est déclaré dans `project.godot`).
 ## 2. Commandes
 
 ```
-# Suite de validation (117 vérifications, ~70 s)
+# Suite de validation (124 vérifications, ~70 s)
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd
 
 # Réimport après ajout d'un class_name (sinon l'éditeur ne le voit pas)
@@ -68,7 +68,8 @@ ZQSD/WASD, Maj = rapide, Espace/Ctrl = monter/descendre, **F1** détails,
 ## 3. État
 
 Jalon 1 (le monde) : 1.1 à 1.6 faits ; **1.7 à moitié** — la mécanique de
-dispersion est en place et testée, l'échelle est fixée, et depuis le 2026-09-05
+dispersion est en place, **conforme aux deux fréquences de l'original** depuis
+le 2026-09-05, testée, l'échelle est fixée, et depuis le 2026-09-05
 **les 28 modèles du lot de flore sont livrés, intégrés et visibles en jeu** (39
 fichiers : plusieurs rôles ont un modèle par biome). Le lot a été **redessiné le
 même jour à l'échelle 40/3**, et il est maintenant **produit par script**
@@ -99,7 +100,7 @@ src/worldgen/
   cw_flora_renderer.gd     instanciation de la flore (MultiMesh par cellule)
 src/demo/terrain_demo.gd   scène de démonstration (arbre voxel construit en code)
 src/demo/scale_board.gd    gabarit d'échelle : mires, silhouette, modèles
-tests/worldgen_test.gd     suite headless, 117 vérifications
+tests/worldgen_test.gd     suite headless, 124 vérifications
 tests/tile_features_test.gd  la moitié qui concerne les éléments de tuile
 tests/flora_test.gd        modèles, dispersion, maillage et pose (jalon 1.7)
 tools/export_palette.gd    régénère assets/palette/*.png depuis CWPalette
@@ -184,6 +185,23 @@ docs/images/               gabarit d'échelle photographié en jeu
 14. **L'ancre d'un modèle est au centre de son empreinte et à sa base.** Le
     déplacer décale toute la flore déjà produite, et un modèle dessiné avec un
     socle vide sous lui flotte de la hauteur du socle.
+15. **La crête de placement s'évalue avant l'échantillonnage de colonne.**
+    Un candidat hors plaque doit coûter un bruit (~1 µs), pas une colonne
+    (~75 µs). Inverser les deux lignes de `CWScatter._build_cell` triple le coût
+    d'une cellule *sans rien changer au résultat* — c'est le piège du tirage à
+    rejet, déjà payé une fois le 2026-09-04.
+16. **`PLACEMENT_PASS_RATE` compense le budget de candidats.** C'est elle qui
+    fait que `CWModelLibrary.DENSITY` se lit encore en plantes par cellule. Si
+    `CWValueNoise`, la fréquence ou le seuil bougent sans qu'elle suive, la
+    densité de tous les biomes dérive en silence. Un test la mesure. Et elle se
+    mesure sur **plusieurs régions éloignées** : autour du seul point de départ
+    elle sort à 0,3012 au lieu de 0,2917.
+17. **La gigue d'échelle doit atteindre l'empreinte, pas seulement le dessin.**
+    Une instance va jusqu'à 2× son modèle : la marge de
+    `CWScatter.placements_in` et la boîte de visibilité de chaque `MultiMesh` se
+    calculent sur `Placement.radius_blocks()`, jamais sur `model.radius_blocks`.
+    L'oublier fait disparaître les grandes touffes de la bordure du champ — et
+    seulement celles-là, donc ça se voit tard.
 
 ## 5. Pièges connus
 
@@ -367,17 +385,9 @@ drapeaux à +56. Détail complet en `docs/systems/02`, §8.
 > plus fins que l'original à bloc égal ; `VOXELS_PER_BLOCK = 16` reste
 > délibéré, mais l'écart est maintenant chiffré au lieu d'être supposé.
 
-**Deux améliorations concrètes repérées par comparaison**, à faire quand on
-reprendra `CWFloraRenderer` :
-
-1. **gigue d'échelle par instance**, `rand()/32767 + 1`, soit 1× à 2×. Nos
-   instances d'un même modèle sont toutes à la même taille ; c'est sans doute
-   ce qui sépare le plus un champ d'herbe répétitif d'un champ vivant ;
-2. **deux fréquences de bruit** dans la sélection : 0,05 décide *où* il y a de la
-   flore, 0,01 décide *laquelle*. `CWScatter` ne fait qu'un tirage par cellule.
-
-La rarete de l'original est un **tirage entier** (`rand()%8 == 0`, `%10 == 0`)
-appliqué après le seuil de bruit, pas une densité continue.
+**Les deux améliorations repérées ici ont été faites le même jour** — voir la
+cinquième passe ci-dessous : gigue d'échelle par instance, et les deux
+fréquences de bruit.
 
 ### Fait (2026-09-05, quatrième passe) — le lot de flore redessiné à 40/3
 
@@ -416,6 +426,56 @@ en jeu), les deux `lierre` (même générateur, seules les teintes changent),
 `gravier_fond_marin/algue` (le mélange turquoise/vert imposé par la table peut
 lire comme du bruit) et `toundra/broussaille` (la table ne lui laisse que
 139-145, donc ses branches sont vertes faute de rampe d'écorce).
+
+### Fait (2026-09-05, cinquième passe) — les deux fréquences sont portées
+
+`CWScatter` disperse désormais selon les deux lois lues en §8.4 de
+`docs/systems/02`, et `CWFloraRenderer` applique la gigue d'échelle. Trois
+choses ont été apprises en le faisant, et aucune n'était dans le plan.
+
+**La crête à 0,05 est le mécanisme de groupement — il n'y en a pas d'autre.**
+La dette « la flore vient par grappes, un tirage uniforme ne sait pas le faire »
+était ouverte depuis le 2026-09-04. Elle se ferme sans une ligne de code de
+groupement : `|bruit(x·0,05 + 9843, z·0,05 + 8437)| > 0,5` passe **29,2 %** de
+la surface, en plaques de **19,1 blocs** — la longueur d'onde 1/0,05, soit plus
+qu'une cellule de dispersion de 16. Des cellules entières sont donc dans une
+plaque ou dans un vide. Mesuré après portage : **variance/moyenne = 14,3** par
+cellule contre ~1 pour un tirage uniforme, et 195 cellules vides sur 576.
+
+**La rareté entière n'est pas portée, et ce n'est pas un oubli.** L'original
+visite chaque colonne et garde `rand()%8 == 0` de celles qui sont dans une
+plaque : 256 échantillonnages de colonne par cellule, ~19 ms — hors budget.
+`CWScatter` tire un budget de candidats et ne paie la colonne qu'après la crête.
+Même moyenne, et le calcul le vérifie : 256 × 0,2917 × 1/8 = **9,3 plantes par
+cellule**, contre les **9,8** que donnait la densité posée au jugé dans
+`CWModelLibrary`. Deux chemins entièrement indépendants sur le même nombre.
+Ajouter quand même un `%8` par candidat ne ferait rien : filtrer au hasard des
+positions déjà tirées au hasard rend des positions au hasard.
+
+**Le test de signe se généralise par la parité de l'indice.** Couper la liste en
+deux moitiés contiguës — le réflexe — donne une région à 40 % de cailloux et une
+sans aucun, parce que la table groupe les modèles par nature et que les deux
+cailloux de l'herbe se suivent en fin de liste. C'est une propriété de l'*ordre
+de la table*, qui est provisoire, pas du mécanisme. **Le défaut s'est vu sur une
+capture en jeu, pas dans un test** — aucune des 124 vérifications ne l'attrapait,
+et aucune ne l'attraperait aujourd'hui : c'est du ressort de l'œil.
+
+Deux corrections faites en chemin :
+
+- **`PLACEMENT_PASS_RATE` mesuré trop près.** 250 000 colonnes autour du point de
+  départ donnent 0,3012 ; un million réparties sur quatre régions éloignées
+  donnent **0,2917**, et la part varie de 0,274 à 0,304 selon la région. Trois
+  points d'erreur sur la constante qui compense le budget, c'est 10 % de flore en
+  moins partout. Une constante mesurée sur une seule région ne vaut rien.
+- **`MAX_PER_CELL` porté de 32 à 64.** Avec le budget divisé par la part
+  passante, la jungle tire jusqu'à 50 candidats : à 32, le plafond ne gardait
+  plus, il rabotait — une cellule entièrement dans une plaque perdait un tiers de
+  sa flore en silence.
+
+Coût : la cellule de flore passe de 1,07 à **1,29 ms**, toujours hors du fil
+principal. 124 vérifications, dont 7 nouvelles sur la forme de la distribution —
+ce sont des vérifications statistiques, parce que le fait à tenir n'est la
+valeur d'aucune plante mais la variance de l'ensemble.
 
 ### Ce qui reste — la table type de décor → modèle
 

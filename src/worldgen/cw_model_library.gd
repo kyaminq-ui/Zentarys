@@ -39,10 +39,12 @@ const FLORA_DIR: String = "res://assets/models/flore/"
 ## paraissait nu. Douze par cellule, c'est une plante tous les quatre blocs
 ## environ — un couvert herbace clairsseme, pas une prairie fournie.
 ##
-## Ce qui manque encore, et qui se voit sur les captures de l'original : la
-## flore y vient par **grappes**, trois a six pieds serres puis de larges vides.
-## Un tirage uniforme par cellule ne sait pas produire ca. A reprendre avec la
-## lecture de `WorldInfo_generateBiomeContent`.
+## Depuis le 2026-09-05, c'est une moyenne et non plus une regularite : la crete
+## de placement de `CWScatter` (bruit a 0,05) decoupe le sol en plaques de ~19
+## blocs, et c'est de la que viennent les grappes des captures de l'original —
+## trois a six pieds serres puis de larges vides. Il n'y avait pas de mecanisme
+## de groupement a ecrire, seulement la crete a porter. Le nombre ci-dessous
+## reste le nombre attendu par cellule, plaques et vides confondus.
 const DENSITY: Dictionary = {
 	CWPalette.GRASS: 12.0,
 	CWPalette.GRASS_DRY: 6.0,

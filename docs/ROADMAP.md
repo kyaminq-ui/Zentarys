@@ -173,15 +173,28 @@ type à +0, échelle à +32, lacet à +36, drapeaux à +56.
 > puissance de deux vaut mieux qu'un rapport bâtard — mais l'écart est
 > désormais chiffré.
 
-**Deux manques concrets de `CWFloraRenderer`, repérés par comparaison :**
+**Les deux manques de `CWFloraRenderer` sont comblés** (2026-09-05) : la gigue
+d'échelle de 1× à 2× par instance, et les deux fréquences de bruit. Ce que le
+portage a appris, au-delà de ce qui était prévu :
 
-- l'original applique une **gigue d'échelle de 1× à 2× par instance**
-  (`rand()/32767 + 1`) ; toutes nos instances d'un même modèle sont à la même
-  taille. C'est probablement ce qui sépare le plus un champ d'herbe répétitif
-  d'un champ vivant ;
-- la sélection emploie **deux fréquences de bruit** : 0,05 décide *où* il y a de
-  la flore, 0,01 décide *laquelle*. `CWScatter` ne fait qu'un tirage par
-  cellule, sans cette structure à deux niveaux.
+- **la crête à 0,05 est le mécanisme de groupement**, et il n'y en a pas
+  d'autre. La dette « semer par grappes » n'était pas du code à écrire : la
+  crête passe 29,2 % de la surface en plaques de 19,1 blocs, ce qui donne des
+  paquets serrés et de larges vides. Mesuré après portage : variance/moyenne de
+  **14,3** par cellule contre ~1 pour un tirage uniforme, 195 cellules vides
+  sur 576 ;
+- **la rareté entière (`rand()%8 == 0`) n'est pas portée, délibérément.**
+  L'original la tire par colonne, ce qui suppose 256 échantillonnages par
+  cellule — ~19 ms, hors budget. `CWScatter` tire un budget de candidats et ne
+  paie la colonne qu'après la crête. Même moyenne : 256 × 0,2917 × 1/8 = 9,3
+  plantes par cellule, contre les 9,8 que donnait la densité posée au jugé.
+  Deux chemins indépendants, le même nombre ;
+- **le test de signe se généralise par la parité de l'indice**, pas en deux
+  moitiés contiguës — sans quoi une région sort à 40 % de cailloux, la table
+  groupant les modèles par nature. Le défaut s'est vu en jeu, pas dans un test.
+
+Détail et mesures en `docs/systems/02`, §8.3 et §8.4. Coût : la cellule de flore
+passe de 1,07 à 1,29 ms, toujours hors du fil principal.
 
 **Ce qui reste :** la table type de décor → modèle. Trois pistes sont déjà
 éliminées (`docs/systems/02`, §8.5) ; la cible est le consommateur du champ
@@ -351,7 +364,7 @@ sans valeur tant que les jalons 2 et 3 ne sont pas là.
 | Gabarit d'échelle en jeu | ✅ | `src/demo/scale_board.gd`, capture automatique ; mires en blocs et modèles à la grille fine |
 | Capture différée de la démo | ✅ | `TerrainDemo.auto_shot_delay` + `--quit-after` : regarder une couche sans piloter la fenêtre |
 | Flore instanciée (MultiMesh par cellule) | ✅ | `src/worldgen/cw_flora_renderer.gd`, 1,1 ms/cellule hors fil principal |
-| Groupement de la flore en grappes | ⬜ | l'original sème par paquets de 3 à 6 ; le tirage uniforme par cellule ne sait pas le faire |
+| Groupement de la flore en grappes | ✅ | il n'y avait pas de mécanisme à écrire : la crête de bruit à 0,05 le produit seule (variance/moyenne 14,3 contre ~1) |
 | Éclairage et LOD des modèles instanciés | ⬜ | ils ne profitent ni de l'éclairage voxel (1.9) ni d'une réduction en distance ; `CWVoxelModel.reduced(n)` est prêt |
 | Inventaire des modèles `.vox` | ✅ | `tools/inspect_model.gd`, contrôle des plages de palette |
 | Aperçu rapproché des éléments | ✅ | `tools/preview_features.gd`, avec et sans la couche |
@@ -467,6 +480,7 @@ de le résoudre.
 
 | Date | Fait |
 |---|---|
+| 2026-09-05 | Les deux frequences de bruit portees dans `CWScatter`, et la gigue d'echelle par instance. **La crete a 0,05 est le mecanisme de groupement** : la dette « semer par grappes », ouverte le 2026-09-04, se ferme sans code de groupement — `|bruit(x*0,05)| > 0,5` passe 29,2 % de la surface en plaques de 19,1 blocs, et la variance/moyenne par cellule monte a 14,3 contre ~1 pour un tirage uniforme (195 cellules vides sur 576). La **rarete entiere n'est pas portee, deliberement** : l'original la tire par colonne, soit 256 echantillonnages par cellule (~19 ms, hors budget) ; le budget de candidats a la meme moyenne, et le calcul le confirme — 256 x 0,2917 x 1/8 = 9,3 plantes par cellule contre les 9,8 de la densite posee au juge, deux chemins independants sur le meme nombre. Le **test de signe se generalise par la parite de l'indice** et non en deux moities contigues : celles-ci donnaient une region a 40 % de cailloux, propriete de l'ordre de la table et non du mecanisme — defaut vu en jeu, pas dans un test. Corrige au passage : `PLACEMENT_PASS_RATE` mesure sur 250 000 colonnes autour du point de depart donnait 0,3012, trois points de trop ; la vraie valeur sur un million de colonnes reparties est 0,2917. `MAX_PER_CELL` 32 -> 64, sans quoi il rabotait au lieu de garder. 124 verifications. |
 | 2026-09-05 | `VOXELS_PER_BLOCK` passe de 16 a **40/3**, la valeur de l'original : ses echelles d'instanciation du decor sont 0,075 / 0,09 / 0,1, et 0,075 = 3/40 exactement. Ecrit en fraction, pas en 13.333 qui derive. Un cube de reference d'un bloc n'etant plus entier, la reference d'authoring devient **3 blocs = 40 voxels**. Le personnage de 32 voxels passe de 2,0 a 2,4 blocs, ce qui recoupe les 2,3 blocs mesures au pixel : le changement rapproche du terrain mesure. Piege regle au passage : `CWScatter` utilisait le rapport comme modulo entier pour la position sous le bloc — les deux notions sont independantes et sont separees, `CWScatter.SUBBLOCK_STEPS = 16` d'un cote, la grille de dessin de l'autre. Deux tests verrouillent la fraction. 117 verifications. Ajoute : `docs/prompt_generation_flore.md`, prompt autoportant pour regenerer le lot sous Blender/bpy, avec un ecrivain .vox valide de bout en bout par le chargeur du projet. |
 | 2026-09-05 | Seconde voie de pose identifiee, `docs/systems/02` §8. Il y a **deux** voies : les plantes a silhouette sont des entites a code de type, la flore basse (herbe, fleurs, algues, corail, roseaux) est du decor instancie sans entite, produit dans la meme passe que le terrain et pousse par `ChunkBuffer_loadAndNotify` (@005c03f0). Enregistrement reconstruit par recoupement de cinq branches : type a +0, echelle a +32, lacet a +36, drapeaux a +56. **Le rapport d'echelle est confirme par une constante du binaire** : les echelles de decor valent 0,075 / 0,09 / 0,1 et 0,075 = 1/13,333 exactement — la meme valeur que la mesure au pixel du 2026-09-04, par un chemin entierement different. Nos modeles sont 20 % plus fins que l'original a bloc egal ; VOXELS_PER_BLOCK = 16 reste delibere, mais l'ecart est chiffre. Deux manques de CWFloraRenderer releves : la gigue d'echelle de 1x a 2x par instance, et les deux frequences de bruit (0,05 pour ou, 0,01 pour laquelle). Reste la table type de decor -> modele ; trois pistes eliminees, la cible est le consommateur du champ type. |
 | 2026-09-05 | Table modele/biome trouvee, seconde passe : `docs/systems/02` §5. Elle n'etait dans aucune des deux fonctions au nom prometteur — `World_generateVegetationCluster` (@005d8750) est le resolveur de contenu d'une tuile, pas un disperseur. La table est le switch d'apparence de `creature_generateAppearance` (game_misc.cpp:3197) croise avec les slots de chargement de `GameController`. **Flore, filons et creatures sont un seul espace de types d'entites** : 120-130 plantes, 131-139 filons, 145-155 poissons — ce qui confirme par la source la decision du 2026-09-04 de sortir la flore des donnees voxels. Les boites englobantes recoupent l'echelle fixee ici (thorn-tree 12 blocs, cactus1 4, buisson 2). Selection par type de bloc de surface pondere par le climat, jamais par un identifiant de biome. Rarete des filons entierement determinee (fer 70 %, or 10 %, argent 10 %, diamant 0,1 %). Reste : la correspondance des numerotations de blocs, et la seconde voie de pose de la flore basse (grass, flowers, alga, coral, reed n'ont pas de code d'entite). |
