@@ -243,7 +243,7 @@ func _build_camera() -> void:
 
 
 ## Couche de flore : instanciee par-dessus le terrain, pas ecrite dedans. Les
-## modeles sont seize fois plus fins que la grille des blocs, voir
+## modeles sont treize fois plus fins que la grille des blocs, voir
 ## `assets/models/MODELS.md`, §1.
 func _build_flora() -> void:
 	flora = CWFloraRenderer.new()

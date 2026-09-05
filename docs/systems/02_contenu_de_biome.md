@@ -335,11 +335,11 @@ taille de chaque instance.
 > constante**, obtenue par un chemin entièrement différent. La mesure à l'œil
 > était juste.
 >
-> Le projet est donc à 16 voxels par bloc là où l'original est à 13,33 : nos
-> modèles sont **20 % plus fins** à taille de bloc égale. Ce n'est pas une
-> erreur — `VOXELS_PER_BLOCK = 16` reste un contrat d'authoring délibéré, et
-> une puissance de deux vaut mieux qu'un rapport bâtard — mais l'écart est
-> maintenant chiffré au lieu d'être supposé.
+> **Le projet a suivi le 2026-09-05** : `VOXELS_PER_BLOCK` est passé de 16 à
+> `40 / 3`. Le rapport n'est plus une puissance de deux — les réductions de LOD
+> ne tombent plus rond — mais il est celui de l'original, et un modèle de 32
+> voxels fait désormais 2,4 blocs, ce qui recoupe les 2,3 blocs mesurés sur la
+> capture. Le lot de flore a été redessiné à cette échelle le même jour.
 
 Ce qui **manque encore au projet** et que l'original fait : la **gigue
 d'échelle de 1× à 2× par instance**. `CWFloraRenderer` pose aujourd'hui toutes

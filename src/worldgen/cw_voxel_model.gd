@@ -4,7 +4,7 @@ extends RefCounted
 ## Un modele .vox prepare pour etre pose dans le monde.
 ##
 ## -- Les deux grilles ---------------------------------------------------------
-## Le terrain a un pas d'un bloc ; les modeles ont un pas seize fois plus fin
+## Le terrain a un pas d'un bloc ; les modeles ont un pas treize fois plus fin
 ## (VOXELS_PER_BLOCK). C'est cette difference qui distingue le rendu vise de
 ## celui de Minecraft : de gros cubes de terrain, mais du detail sur ce qui est
 ## pose dessus — une touffe d'herbe est faite de lames d'un voxel d'epaisseur,

@@ -5,3 +5,7 @@
 # Analyse externe et binaire de l'editeur : references locales, hors depot
 CubeWorld-Reversal-master/
 godot.windows.editor.double.x86_64.exe
+
+# Caches de l'interpreteur Python des outils de generation
+__pycache__/
+*.pyc

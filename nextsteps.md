@@ -25,7 +25,7 @@ ne s'ouvre pas proprement (il est déclaré dans `project.godot`).
 ## 2. Commandes
 
 ```
-# Suite de validation (116 vérifications, ~70 s)
+# Suite de validation (117 vérifications, ~70 s)
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd
 
 # Réimport après ajout d'un class_name (sinon l'éditeur ne le voit pas)
@@ -47,6 +47,10 @@ C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path 
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/repaint_models.gd
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path .     -s tools/repaint_models.gd -- --write
 
+# Regénération du lot de flore (39 .vox, ~2 min). Déterministe : une graine en
+# dur par fichier. `-- --seul <nom>` ne refait qu'un modèle.
+"C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" --background --factory-startup --python tools/blender/generer_flore.py
+
 # Gabarit d'échelle en jeu : mettre scale_board = true sur le nœud racine de
 # scenes/terrain_demo.tscn, puis lancer. Deux captures dans user://shots.
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --path . scenes/terrain_demo.tscn
@@ -66,7 +70,9 @@ ZQSD/WASD, Maj = rapide, Espace/Ctrl = monter/descendre, **F1** détails,
 Jalon 1 (le monde) : 1.1 à 1.6 faits ; **1.7 à moitié** — la mécanique de
 dispersion est en place et testée, l'échelle est fixée, et depuis le 2026-09-05
 **les 28 modèles du lot de flore sont livrés, intégrés et visibles en jeu** (39
-fichiers : plusieurs rôles ont un modèle par biome). Il reste la lecture du
+fichiers : plusieurs rôles ont un modèle par biome). Le lot a été **redessiné le
+même jour à l'échelle 40/3**, et il est maintenant **produit par script**
+(`tools/blender/generer_flore.py`) et non plus à la main. Il reste la lecture du
 binaire, qui dira *quoi* poser *où* et à quelle densité. **La table des entités
 est lue** (2026-09-05) : elle est dans le `switch` de
 `creature_generateAppearance`, et non dans les deux fonctions au nom prometteur,
@@ -87,19 +93,24 @@ src/worldgen/
   cw_terrain_field.gd      climat + altitude + chenaux + éléments  ← le cœur
   cw_palette.gd            palette et règles de surface (couleurs originales)
   cw_voxel_generator.gd    VoxelGeneratorScript + cache de colonnes
-  cw_voxel_model.gd        modèle .vox préparé : liste creuse, maillage 1/16
+  cw_voxel_model.gd        modèle .vox préparé : liste creuse, maillage 3/40
   cw_model_library.gd      chargement des modèles + table modèle/biome
   cw_scatter.gd            grille de dispersion 16², cellules en cache
   cw_flora_renderer.gd     instanciation de la flore (MultiMesh par cellule)
 src/demo/terrain_demo.gd   scène de démonstration (arbre voxel construit en code)
 src/demo/scale_board.gd    gabarit d'échelle : mires, silhouette, modèles
-tests/worldgen_test.gd     suite headless, 116 vérifications
+tests/worldgen_test.gd     suite headless, 117 vérifications
 tests/tile_features_test.gd  la moitié qui concerne les éléments de tuile
 tests/flora_test.gd        modèles, dispersion, maillage et pose (jalon 1.7)
 tools/export_palette.gd    régénère assets/palette/*.png depuis CWPalette
 tools/preview_features.gd  gros plan ombré, avec et sans la couche d'éléments
 tools/inspect_model.gd     inventaire d'un .vox : gabarit, index, plages
 tools/repaint_models.gd    remet un .vox dans la palette de projet
+tools/blender/             générateur du lot de flore (Python + bpy)
+  flore_vox.py               palette verbatim, écriture .vox, garde-fous
+  flore_formes.py            brins, tiges, feuilles, corolles, cailloux
+  flore_blender.py           courbes, métaballes, échantillonnage sur grille
+  generer_flore.py           le catalogue des 39, une graine par modèle
 assets/palette/            palette de projet + PALETTE.md
 assets/models/flore/<biome>/  39 modèles, un dossier par biome
 assets/models/             MODELS.md (échelle, palette et conventions)
@@ -161,7 +172,7 @@ docs/images/               gabarit d'échelle photographié en jeu
     confondues tant que le rapport tombait juste. Repasser la position sur
     `VOXELS_PER_BLOCK` casse le parse — `rng.mod()` prend un entier.
 12. **La flore n'est jamais écrite dans les données voxels du monde.** Elle est
-    seize fois plus fine que la grille du terrain. Le générateur ne la consulte
+    treize fois plus fine que la grille du terrain. Le générateur ne la consulte
     plus du tout ; elle est instanciée par `CWFloraRenderer`. Le test « le
     terrain ne contient plus de flore » attrape un retour en arrière — qui, sans
     lui, ferait juste doublon avec l'instance, sans erreur.
@@ -204,6 +215,12 @@ docs/images/               gabarit d'échelle photographié en jeu
   échantillonnages : un pour décider la densité, un par plante posée). Ne pas
   revenir à un tirage à rejet : échantillonner un candidat pour le jeter ensuite
   triplait la facture.
+- **Les 39 modèles de flore sont générés, pas dessinés.** Les rouvrir dans
+  MagicaVoxel pour les retoucher est du travail perdu : la prochaine exécution
+  de `tools/blender/generer_flore.py` les écrase. Corriger le générateur, puis
+  regénérer. Le script recopie le bloc `RGBA` de la palette de projet tel quel
+  et refuse à l'écriture tout index hors plage — c'est ce qui rend impossible
+  la faute de palette du premier lot.
 - **Ne pas mettre d'appel de liaison moteur sur le chemin chaud.**
   `OS.get_thread_caller_id()` dans `CWTileFeatureGrid.get_zone` coûtait ~15 µs
   par colonne avant d'être déplacé sur le chemin froid. Mesurer avant de
@@ -362,6 +379,44 @@ reprendra `CWFloraRenderer` :
 La rarete de l'original est un **tirage entier** (`rand()%8 == 0`, `%10 == 0`)
 appliqué après le seuil de bruit, pas une densité continue.
 
+### Fait (2026-09-05, quatrième passe) — le lot de flore redessiné à 40/3
+
+Le passage de 16 à 40/3 voxels par bloc rendait le lot précédent faux à 20 %, et
+neuf de ses modèles étaient des tapis d'un ou deux voxels (cf. §8, point clos).
+Les 39 fichiers ont donc été **refaits par script** plutôt qu'à la main, d'après
+`docs/prompt_generation_flore.md` : `tools/blender/generer_flore.py`, une graine
+en dur par modèle, le lot se regénère à l'identique.
+
+Ce que le générateur verrouille, et qui était justement ce qui avait cassé :
+
+- **la palette** est le bloc `RGBA` de `assets/palette/zentarys_palette.vox`,
+  recopié octet pour octet dans chaque fichier, avec un témoin sur l'index 128 ;
+- **les index** hors des plages végétation (128-175) et terrain (1-11, 14-31)
+  sont refusés à l'écriture — l'air et l'eau translucide compris ;
+- **l'enveloppe** (53 voxels de haut, 26 de rayon) l'est aussi.
+
+Répartition du travail : Python direct pour ce qui est une ligne d'un voxel
+(brins, tiges, corolles, cailloux, étoile de mer), `bpy` là où il paye — courbes
+à rayon variable pour les lianes, les branches et les algues, métaballes pour la
+frondaison des buissons, `Simple Deform` pour les courbures — puis
+échantillonnage du maillage évalué sur la grille entière par
+`closest_point_on_mesh` : distance à la surface pour ce qui doit rester mince,
+distance signée par la normale pour les quatre volumes pleins du lot (les deux
+cactus, le grès, les cailloux).
+
+Résultat : 117 vérifications, 0 échec ; `inspect_model.gd` ne signale aucun index
+hors plage sur les 39. Les hauteurs vont de 6 voxels (`etoile_de_mer`) à 45
+(`cactus_01`, 3,4 blocs, au-dessus de la tête du personnage). Images de référence
+de `docs/images/` refaites sur ce lot.
+
+Les six modèles les moins sûrs, à regarder à l'œil avant de les tenir pour
+acquis : `sable_desert/gres` (3 640 voxels pleins pour peu de silhouette),
+`jungle/liane` et `jungle/vrille` (deux torsades qui risquent de se ressembler
+en jeu), les deux `lierre` (même générateur, seules les teintes changent),
+`gravier_fond_marin/algue` (le mélange turquoise/vert imposé par la table peut
+lire comme du bruit) et `toundra/broussaille` (la table ne lui laisse que
+139-145, donc ses branches sont vertes faute de rampe d'écorce).
+
 ### Ce qui reste — la table type de décor → modèle
 
 Seule inconnue de la seconde voie. Trois pistes sont déjà **éliminées**, et
@@ -417,12 +472,12 @@ couche d'éléments de tuile, elle, y écrit encore.
 
 ## 7. Assets voxels
 
-### 7.1 L'échelle — fixée le 2026-09-04
+### 7.1 L'échelle — fixée le 2026-09-04, alignée sur l'original le 2026-09-05
 
 **Il y a deux grilles.** Le terrain a un pas d'un bloc ; les modèles ont un pas
-seize fois plus fin. **Un bloc de terrain vaut 16 voxels de modèle
-(`CWVoxelModel.VOXELS_PER_BLOCK`), et le personnage de référence mesure 2 blocs,
-soit 32 voxels.** Le détail par catégorie d'objet est dans
+treize fois plus fin. **Un bloc de terrain vaut 40/3 voxels de modèle
+(`CWVoxelModel.VOXELS_PER_BLOCK`) — trois blocs valent exactement 40 voxels — et
+le personnage de référence mesure 32 voxels, soit 2,4 blocs.** Le détail par catégorie d'objet est dans
 `assets/models/MODELS.md` — c'est le fichier à donner à qui modélise.
 
 C'est ce rapport, et lui seul, qui sépare ce rendu de celui de Minecraft : de
@@ -435,18 +490,23 @@ pas d'un jugement à l'œil : brin d'herbe 7 px de large, pupille du personnage
 6 px, écart entre les yeux 28 px, hauteur du personnage 205 px, face verticale
 d'une marche de terrain 90 px. Le brin d'herbe et la pupille font la même
 largeur — **la flore et le personnage sont sur la même grille fine**. Rapport
-mesuré : ~13 voxels par bloc ; on retient 16, la puissance de deux la plus
-proche.
+mesuré : ~13 voxels par bloc. On avait d'abord retenu 16, la puissance de deux la
+plus proche ; le 2026-09-05 le binaire a rendu la valeur exacte — ses échelles
+d'instanciation du décor sont 0,075, 0,09 et 0,1, et **0,075 = 3/40** — et le
+projet a suivi. Ce qu'on perd : les réductions de LOD ne tombent plus sur une
+puissance de deux. Ce qu'on gagne : un modèle de 32 voxels fait 2,4 blocs, ce qui
+recoupe les 2,3 blocs mesurés sur la capture. Détail dans
+`docs/systems/02_contenu_de_biome.md`, §8.3.
 
 **À revoir au jalon 3.1**, quand le contrôleur donnera la taille réelle du
 personnage. Si elle s'écarte de 2 blocs, c'est ce seul nombre qui change. Le
-rapport de 16, lui, est un contrat d'authoring : le changer invalide tous les
-modèles déjà dessinés, et il est verrouillé par un test.
+rapport de 40/3, lui, est un contrat d'authoring : le changer redimensionne tous
+les modèles déjà dessinés, et il est verrouillé par un test.
 
 **Ce que ça a changé dans le code** (2026-09-04) :
 
 - la flore n'est **plus estampée** dans les données voxels du monde — elle y
-  serait seize fois trop grosse. `CWVoxelGenerator` ne la consulte plus du tout,
+  serait treize fois trop grosse. `CWVoxelGenerator` ne la consulte plus du tout,
   et le surcoût de +14 % par bloc a disparu du chemin de génération ;
 - `CWVoxelModel.mesh()` maille le modèle une fois, avec **le même mailleur, la
   même palette et le même matériau que le terrain** — c'est la condition pour
@@ -566,35 +626,29 @@ de bon sens (cactus au désert, corail sous l'eau).
 vient des noms de modèles du binaire. Seule l'affectation peut bouger, et
 réaffecter un modèle existant coûte une ligne de code.
 
-#### Ce que le lot livré mesure réellement
+#### Ce que le lot mesure réellement
 
-Relevé par `tools/inspect_model.gd`, en voxels de modèle (16 = un bloc). À
-comparer aux enveloppes de §7.1 — les écarts ne sont pas des défauts, ce sont des
-choix d'auteur, notés ici pour qu'ils soient délibérés :
+Relevé par `tools/inspect_model.gd` sur le lot regénéré du 2026-09-05, en voxels
+de modèle (**40/3 = un bloc**) :
 
-| ce qui est conforme | |
-|---|---|
-| herbes | 10 – 13 (visé 8 – 12) |
-| cailloux | 5 – 10 (visé 4 – 8) |
-| champignons | 5 – 7 (visé 5 – 10) |
-| `cactus_01` | **48**, soit 3 blocs — au-dessus de la tête du personnage |
-| `algue`, `roseau`, `fleur_tournesol`, `fleur_ame` | 14 – 16 |
-
-| ce qui s'en écarte | mesuré | visé |
+| rôle | hauteur | en blocs |
 |---|---|---|
-| `fleur_bleuet` | 2 | 8 – 14 |
-| `bouquet_01`, `bouquet_02`, `fleur_ginseng` | 4 | 8 – 14 |
-| `liane`, `vrille`, `lierre` (×2), `feuille` | **1** | 16 – 28 |
-| `buisson`, broussailles | 6 – 16 | 16 – 28 |
-| `cactus_02` | 16 | 32 – 56 |
+| `etoile_de_mer` | 6 | 0,4 |
+| cailloux | 7 – 11 | 0,5 – 0,8 |
+| herbes, `feuille` | 11 – 13 | 0,8 – 1,0 |
+| champignons | 11 | 0,8 |
+| fleurs | 13 – 18 | 1,0 – 1,3 |
+| lierres, broussailles | 15 – 22 | 1,1 – 1,6 |
+| `corail` | 20 | 1,5 |
+| `roseau`, `algue`, `buisson`, `vrille` | 27 – 30 | 2,0 – 2,2 |
+| `cactus_02`, `gres`, `liane` | 27 – 34 | 2,0 – 2,5 |
+| `cactus_01` | **45** | **3,4** — au-dessus de la tête du personnage |
 
-Les cinq modèles d'un voxel d'épaisseur sont des **tapis au sol** dessinés vus de
-dessus, pas des plantes couchées par erreur : la matière est un semis de motifs
-répartis dans le plan horizontal, pas un profil debout. Les fleurs de 2 et 4
-voxels sont des **bouquets de plusieurs pieds** — tige d'un voxel, tête de cinq —
-et non une fleur unique. Les deux lectures se tiennent ; ce qu'il faut savoir,
-c'est qu'à cette hauteur une fleur se lit comme une tache peinte sur le sol et
-pas comme une plante. À trancher à l'œil dans la démo, pas ici.
+Tout tient dans les fourchettes de `docs/prompt_generation_flore.md` §5, et
+largement dans l'enveloppe dure vérifiée par le test (53 de haut, 26 de rayon).
+Les tapis d'un voxel du premier lot ont disparu : la plante la plus plate du lot
+fait 6 voxels. Les repères de MODELS.md §1 sont un peu plus serrés que ceux du
+prompt sur trois rôles — voir §8, c'est la seule divergence qui reste.
 
 #### Les lots suivants, pour information
 
@@ -619,12 +673,23 @@ gameplay, et c'est l'auteur des assets qui en subirait chaque manque.
 **La seule objection sérieuse est levée.** On ne peut pas réduire le pinceau de
 MagicaVoxel sous un voxel — et il n'y en a pas besoin : sa grille est *sans
 unité*. On ne descend pas sous le voxel, on agrandit la boîte, et c'est le moteur
-qui applique le 1/16 à l'import. Un personnage détaillé se dessine dans un
+qui applique le 3/40 à l'import. Un personnage détaillé se dessine dans un
 gabarit de 32 de haut, une touffe d'herbe dans 12.
 
 Pour garder l'œil juste en modélisant, poser dans la scène MagicaVoxel un cube de
-16³ (= un bloc de terrain) et une silhouette de 32 de haut (= le personnage).
-C'est ça qui remplace le réglage de taille du pinceau.
+**40³** (= trois blocs de terrain ; un bloc seul ne tombe pas sur un nombre
+entier de voxels) et une silhouette de 32 de haut (= le personnage). C'est ça qui
+remplace le réglage de taille du pinceau.
+
+**La flore, elle, est générée.** Depuis le 2026-09-05 les 39 `.vox` de flore
+sortent de `tools/blender/generer_flore.py` — Python pour les brins, les fleurs
+et les cailloux, `bpy` pour ce qui y gagne (buissons, cactus, coraux, lianes),
+une graine en dur par fichier. Ça ne remet pas en cause la décision ci-dessus :
+MagicaVoxel reste l'outil pour tout ce qui se dessine — personnages, mobilier,
+objets — et le générateur sert ce qui se répète et se mesure. Ce qu'il apporte
+et qu'une main n'apporte pas : le lot se regénère à l'identique après un
+changement d'échelle ou de palette, ce qui vient de servir deux fois en deux
+jours.
 
 **L'établi de personnalisation façon Cube World reste au programme** — il est
 d'ailleurs dans la liste du mobilier du jalon 4. Mais c'est une *fonctionnalité
@@ -674,13 +739,14 @@ terrain réellement généré), au jalon 4. Pas un éditeur généraliste.
   déjà peints. Depuis le 2026-09-05 il y a des modèles peints dessus, donc
   ajuster une teinte se voit maintenant en jeu — c'est justement le bon moment
   pour le faire, avant le lot suivant.
-- **Neuf modèles du lot sont beaucoup plus plats que l'enveloppe de §7.1** :
-  cinq tapis d'un voxel (`liane`, `vrille`, les deux `lierre`, `feuille`) et
-  quatre fleurs de 2 à 4 voxels. Ce sont des tapis vus de dessus et des bouquets
-  de plusieurs pieds, pas des modèles couchés par erreur — mais à cette hauteur
-  ils se lisent comme une tache peinte sur le sol. À regarder dans la démo et à
-  trancher : les garder tels quels, ou les redresser. Le tableau des mesures est
-  en §7.2.
+- **Deux tables de hauteurs coexistent et ne disent pas la même chose** : les
+  repères de `assets/models/MODELS.md` §1 (écrits quand un bloc valait 16 voxels)
+  et la table de `docs/prompt_generation_flore.md` §5, qui est celle que le lot
+  regénéré suit. Les écarts sont petits mais réels — herbe 10-14 contre 8-12,
+  caillou 5-10 contre 4-8, champignon 6-12 contre 5-10. C'est la table du prompt
+  qui a servi ; il faudrait aligner MODELS.md dessus, ou trancher l'inverse.
+  Aucune des deux n'est verrouillée par un test : seule l'enveloppe dure
+  (4 blocs de haut, 2 de rayon) l'est, et le lot y tient largement.
 - Les arêtes du graphe de sites ne sont **pas** le tracé des routes : le type 1
   est un élément unique par zone, posé sur son site. `site_edge_radius` reste
   donc à 0, et l'hypothèse notée au jalon 1.5 est close.

@@ -152,7 +152,7 @@ func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: i
 	# Chemins rapides : bloc entierement vide ou entierement plein. Ce sont eux
 	# qui rendent praticable un monde de mille blocs de haut.
 	#
-	# La flore ne s'invite pas ici : ses modeles sont seize fois plus fins que la
+	# La flore ne s'invite pas ici : ses modeles sont treize fois plus fins que la
 	# grille du terrain (CWVoxelModel.VOXELS_PER_BLOCK), donc ils ne sont pas
 	# ecrits dans les donnees du monde mais instancies par-dessus
 	# (`CWFloraRenderer`). Le generateur n'a plus a les consulter, ni a garder

@@ -7,7 +7,7 @@ extends Node3D
 ## -- Pourquoi pas dans le terrain ---------------------------------------------
 ## Un modele de flore est sur la grille fine (1 / CWVoxelModel.VOXELS_PER_BLOCK
 ## de bloc) : l'ecrire dans les donnees voxels du monde reviendrait a le grossir
-## seize fois. Il est donc maille a part — meme mailleur, meme palette, meme
+## treize fois. Il est donc maille a part — meme mailleur, meme palette, meme
 ## materiau que le terrain, ce qui est la condition pour que les deux grilles
 ## lisent comme un seul monde — puis instancie a l'echelle.
 ##

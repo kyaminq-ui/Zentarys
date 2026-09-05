@@ -208,7 +208,7 @@ static func build_voxel_palette() -> Resource:
 ## speculaire.
 ##
 ## Partage par le terrain, les modeles instancies et le gabarit d'echelle. Ce
-## n'est pas de la coquetterie : les modeles sont sur une grille seize fois plus
+## n'est pas de la coquetterie : les modeles sont sur une grille treize fois plus
 ## fine que le terrain, et le seul lien qui les fait lire comme un meme monde est
 ## d'avoir exactement la meme palette et le meme materiau. Un reglage qui derive
 ## d'un cote se voit immediatement.

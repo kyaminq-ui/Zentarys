@@ -109,7 +109,7 @@ déductible d'aucune décompilation.
 > largeur, donc la flore et les personnages sont sur la même grille fine.
 
 Conséquence d'architecture, prise le 2026-09-04 : **la flore n'est plus estampée
-dans les données voxels du monde**, elle y serait seize fois trop grosse. Elle
+dans les données voxels du monde**, elle y serait treize fois trop grosse. Elle
 est maillée à part — même mailleur, même palette, même matériau que le terrain,
 ce qui est la condition pour que les deux grilles lisent comme un seul monde —
 puis instanciée. Ce qu'on perd : la flore ne se creuse pas, ne porte pas de

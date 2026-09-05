@@ -26,7 +26,7 @@ exactement 40 voxels.** Le personnage de référence mesure **32 voxels**, soit
 
 C'est de là que vient tout le reste, et c'est ce qui sépare ce rendu de celui de
 Minecraft : le terrain est fait de gros cubes, mais ce qui est posé dessus est
-seize fois plus fin. Une touffe d'herbe n'est pas un cube vert, c'est une dizaine
+treize fois plus fin. Une touffe d'herbe n'est pas un cube vert, c'est une dizaine
 de lames d'un voxel d'épaisseur. Un personnage n'est pas six pavés, il a des yeux
 d'un voxel.
 
@@ -105,11 +105,12 @@ Et en **blocs**, pour situer ça dans le monde généré :
 
 On ne peut pas y réduire le pinceau sous un voxel — et il n'y en a pas besoin.
 La grille de MagicaVoxel est **sans unité** : on ne descend pas sous le voxel, on
-agrandit la boîte. Un personnage de 2 blocs se dessine dans un gabarit de 32 de
-haut, et c'est le moteur qui applique le 1/16 à l'import.
+agrandit la boîte. Le personnage de référence se dessine dans un gabarit de 32
+de haut, et c'est le moteur qui applique le 3/40 à l'import.
 
 Pour garder l'œil juste pendant qu'on modélise, poser dans la scène un cube de
-16 × 16 × 16 (= un bloc de terrain) et une silhouette de 32 de haut (= le
+**40 × 40 × 40** (= trois blocs de terrain, cf. §1 : un bloc seul ne tombe pas
+sur un nombre entier de voxels) et une silhouette de 32 de haut (= le
 personnage). C'est ça qui remplace le réglage de taille du pinceau.
 
 ### Revoir l'échelle soi-même
@@ -204,11 +205,25 @@ signale tout index sorti des plages autorisées.
 * Le fichier doit figurer dans la table de `CWModelLibrary.FLORA`, chemin
   complet, biome compris : `"herbe/herbe_01"`. Un test vérifie que chaque entrée
   de la table existe sur le disque.
+* **Les trente-neuf modèles de flore sont produits par script**, pas dessinés à
+  la main : `tools/blender/generer_flore.py`, une graine en dur par fichier. Une
+  retouche faite dans MagicaVoxel serait écrasée à la prochaine génération —
+  corriger le générateur, puis regénérer :
+
+  ```
+  blender --background --factory-startup --python tools/blender/generer_flore.py
+  #  -- --seul <nom>  pour ne refaire qu'un fichier
+  ```
+
+  Le script recopie le bloc `RGBA` de la palette de projet tel quel et refuse à
+  l'écriture tout index hors des plages autorisées : c'est là que se rattrape la
+  faute de palette du premier lot. Le reste de ce fichier reste la référence
+  pour les modèles qui, eux, se dessinent à la main.
 * Gabarit du `.vox` : **libre**, le plus juste possible autour de la matière.
-  16³ suffit à presque tout ; un cactus de 3 blocs demande 48³. La matière est
+  16³ suffit à presque tout ; un cactus de 3,5 blocs demande 48³. La matière est
   extraite au chargement et le vide jeté, donc un tampon large ne coûte rien —
   il rend seulement la relecture pénible. Ce qui est un contrat, c'est le rapport
-  de **16 voxels par bloc**, pas la taille de la boîte.
+  de **40/3 voxels par bloc**, pas la taille de la boîte.
 
 ### Orientation
 
@@ -230,9 +245,9 @@ vide sous elle, pas de décalage sur le côté.
 ### Comment le modèle arrive en jeu
 
 Un modèle fin n'est **pas** écrit dans les données voxels du monde : il y serait
-seize fois trop gros. Il est maillé une fois (`VoxelMesherCubes`, la même palette
-et le même matériau que le terrain, donc le même aspect), puis instancié à
-l'échelle 1/16. La flore passe par un `MultiMeshInstance3D` par modèle et par
+treize fois trop gros. Il est maillé une fois (`VoxelMesherCubes`, la même
+palette et le même matériau que le terrain, donc le même aspect), puis instancié
+à l'échelle 3/40. La flore passe par un `MultiMeshInstance3D` par modèle et par
 cellule de dispersion.
 
 Conséquences à connaître :
