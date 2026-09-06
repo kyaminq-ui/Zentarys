@@ -3083,6 +3083,57 @@ existe pour supprimer. Il reste 23 % de franges Deserts -> Lava Lands, bornees a
 25 blocs : c'est un ecotone, plus une tache. Le nombre est maintenant sous la
 main de l'outil, donc revenir dessus est de la mesure et non de la conception.
 
+### 7octies.2 « Le pas maximum doit varier d'un massif a l'autre »
+
+Les deux amplitudes de contour etaient des constantes partagees : tous les
+massifs du monde avaient la **meme silhouette a l'echelle pres**. Elles se
+tirent maintenant par massif, d'un **seul** nombre de rugosite — les deux
+echelles d'une erosion vont ensemble, et une masse aux grands lobes doux mais a
+la peau rugueuse ne ressemble a rien.
+
+Et la borne de marche devient **derivee** plutot que constante. Le dessus vaut
+`plancher(sol) + plancher(hauteur x f²)` ; sa pente se majore terme a terme —
+le radial donne `0,77 x hauteur / rayon`, chaque bruit `2f x 1,5 x ondes x
+amplitude x hauteur / rayon` — d'ou `CWMesa.slope_bound` et `CWMesa.max_step`.
+C'est contre `m.max_step()` que la mesure d'escalade de `relief_test` se fait
+desormais, et non contre un `2` ecrit en dur.
+
+> **Le contrat d'escalade garde le dernier mot.** Une rugosite tiree qui
+> porterait la marche au-dela de `CWMesa.CLIMB_MAX_STEP` est **rabattue** —
+> amplitudes divisees jusqu'a rentrer — plutot que retiree ou retiree au sort :
+> refuser la masse ferait des trous dans la repartition, et relancer le tirage
+> couterait la reproductibilite du flux de nombres.
+
+**Ce que ca rend, mesure** (`tools/mesa_stats.gd`, 99 massifs) :
+
+* rugosite lente **de 0,121 a 0,275**, mediane 0,190 — un facteur 2,3 ;
+* pente bornee **de 0,54 a 1,00 bloc par bloc**, mediane 0,85 ;
+* **24 massifs sur 99 rabattus** par le contrat ;
+* marche maximale : **2 blocs pour les 99**.
+
+> **Et c'est le point ou la demande et le contrat de la veille se rencontrent :
+> la borne *en blocs entiers* ne varie pas, et elle ne peut pas.** `max_step`
+> vaut `1 + ceil(pente)` ; le `ceil` de tout ce qui est positif vaut au moins 1,
+> et le terrain en ajoute un, donc le plancher est 2 — et 3 serait une marche
+> qu'on ne monte pas, c'est-a-dire le contrat d'escalade du 2026-09-08 rompu.
+> Ce qui varie reellement d'un massif a l'autre est la **pente continue** (0,54
+> a 1,00) et la silhouette, pas le nombre entier. La demande est donc satisfaite
+> dans son intention — des masses lisses et des masses abruptes dans le meme
+> paysage — et refusee dans sa lettre, parce que sa lettre demandait de laisser
+> passer des marches infranchissables. Le nombre est dans l'outil : c'est de la
+> qu'on reviendra dessus si l'arbitrage doit changer.
+
+**Un defaut latent est tombe avec, et il n'attendait qu'une forme plus
+decoupee.** La hauteur libre d'une galerie etait prise a la **face**, une seule
+colonne. Mais son axe est une ligne brisee qui derive lateralement : il traverse
+des colonnes ou la masse est plus mince, et le plafond y sortait par le dessus —
+un trou dans le sol vu d'en haut. Le rabattement se fait maintenant sur la
+**plus mince** des colonnes traversees, et une galerie qui n'y tient plus debout
+n'est pas posee. La verification « aucune grotte ne perce le dessus du massif »
+existait depuis le 2026-09-07 et passait : il a fallu des masses plus decoupees
+pour la mettre en defaut, ce qui est exactement le service qu'on attend d'un
+test qu'on ne touche pas.
+
 ---
 
 ## 8. Assets voxels

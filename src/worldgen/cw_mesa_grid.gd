@@ -235,10 +235,50 @@ func _build_cell(cx: int, cz: int, field: CWTerrainField) -> Array[CWMesa]:
 			+ rng.unit() * HEIGHT_PER_RADIUS_SPAN))
 	m.warp_ox = float(rng.next() * 32768 + rng.next())
 	m.warp_oz = float(rng.next() * 32768 + rng.next())
+	_tire_rugosite(m, rng)
 
 	_add_caves(m, rng, field)
 	out.append(m)
 	return out
+
+
+## Le caractere de la masse : lisse ou decoupee.
+##
+## -- Un seul tirage pour deux amplitudes, et c'est le point -------------------
+##
+## Les deux bruits de contour pourraient se tirer independamment. Ils ne le sont
+## pas : une masse dont les grands lobes sont doux mais la peau rugueuse ne
+## ressemble a rien de naturel — les deux echelles d'une erosion vont ensemble.
+## Un seul nombre, `rugosite`, les pilote donc toutes les deux, et il donne des
+## domes a une extremite et des masses decoupees en lobes a l'autre.
+##
+## -- Puis le contrat d'escalade reprend la main ------------------------------
+##
+## La rugosite tiree peut porter la marche du massif au-dela de
+## `CWMesa.CLIMB_MAX_STEP`, et alors elle est **rabattue** : les deux amplitudes
+## sont divisees jusqu'a ce que `max_step` rentre dans le contrat. On ne refuse
+## pas la masse, et on ne relance pas le tirage — l'un ferait des trous dans la
+## repartition, l'autre coûterait la reproductibilite du flux de nombres.
+##
+## La borne etant lineaire en les amplitudes a `f_max` pres, deux passes de
+## rabattement suffisent largement ; la boucle est bornee pour ne pas dependre
+## de cet argument.
+const RUGOSITE_SLOW_MIN: float = 0.12
+const RUGOSITE_SLOW_SPAN: float = 0.16
+const RUGOSITE_FINE_MIN: float = 0.028
+const RUGOSITE_FINE_SPAN: float = 0.042
+
+
+func _tire_rugosite(m: CWMesa, rng: CWRand) -> void:
+	var r: float = rng.unit()
+	m.amp_slow = RUGOSITE_SLOW_MIN + r * RUGOSITE_SLOW_SPAN
+	m.amp_fine = RUGOSITE_FINE_MIN + r * RUGOSITE_FINE_SPAN
+	for _i in 8:
+		if m.max_step() <= CWMesa.CLIMB_MAX_STEP:
+			return
+		m.amp_slow *= 0.85
+		m.amp_fine *= 0.85
+		m.damped = true
 
 
 ## Perce la masse d'une a deux galeries.
@@ -359,7 +399,11 @@ func _add_caves(m: CWMesa, rng: CWRand, field: CWTerrainField) -> void:
 		c.radius = float(CAVE_RADIUS_MIN + rng.mod(CAVE_RADIUS_SPAN))
 		c.flare = 1.7 + rng.unit() * 0.6
 		c.floor_y = floor_y
-		c.height = mini(CAVE_HEIGHT_MIN + rng.mod(CAVE_HEIGHT_SPAN), head)
+		# Le tirage se fait **ici**, a sa place dans le flux : la hauteur, elle,
+		# ne se decide qu'une fois l'axe connu (voir plus bas). Deplacer le
+		# tirage changerait tous les mondes deja explores.
+		var h_tire: int = CAVE_HEIGHT_MIN + rng.mod(CAVE_HEIGHT_SPAN)
+		c.height = mini(h_tire, head)
 
 		# L'axe brise : on avance vers l'interieur et on derive lateralement a
 		# chaque coude. Le troisieme flottant de chaque point est l'abscisse
@@ -382,4 +426,28 @@ func _add_caves(m: CWMesa, rng: CWRand, field: CWTerrainField) -> void:
 			c.axis.append(p.x)
 			c.axis.append(p.y)
 			c.axis.append(float(k + 1) / float(bends))
+
+		# -- Le plafond doit tenir **sur tout l'axe**, pas seulement a la face --
+		#
+		# La hauteur libre etait prise a la **face**, une seule colonne. Mais
+		# l'axe est une ligne brisee qui derive lateralement : il traverse des
+		# colonnes ou la masse est plus mince que la, et le plafond y sortait par
+		# le dessus — un trou dans le sol vu d'en haut. Le defaut existait avant
+		# le tirage du caractere par massif (2026-09-09) ; celui-ci l'a
+		# simplement rendu visible en donnant des masses plus decoupees.
+		#
+		# On rabat donc la hauteur sur la **plus mince** des colonnes traversees.
+		# Le plancher etant celui du seuil et non celui du lieu, la contrainte se
+		# mesure en altitude absolue.
+		var libre: int = h_tire
+		for k in range(1, c.axis.size() / 3):
+			var qx: int = int(c.axis[k * 3])
+			var qz: int = int(c.axis[k * 3 + 1])
+			var sommet: int = floori(field.sample_column(qx, qz).x) 					+ m.thickness(qx, qz)
+			libre = mini(libre, sommet - c.floor_y + 1)
+		c.height = mini(c.height, libre)
+		# Une galerie qu'on ne traverse pas debout n'en est pas une : plutot
+		# aucune grotte de ce cote-la qu'un boyau ecrase.
+		if c.height < CAVE_HEIGHT_MIN:
+			continue
 		m.caves.append(c)

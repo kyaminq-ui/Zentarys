@@ -73,9 +73,61 @@ extends RefCounted
 # tailles, ce qui est la seule facon de garantir l'escalade sans borner les
 # tailles.
 const SHAPE_WAVES_SLOW: float = 0.85    ## lobes par rayon
-const SHAPE_AMP_SLOW: float = 0.22
 const SHAPE_WAVES_FINE: float = 2.6
+
+## Amplitudes de reference. Elles ne servent plus a dessiner : **chaque massif
+## tire les siennes** (`amp_slow`, `amp_fine`, tirees d'un seul caractere de
+## rugosite par `CWMesaGrid`), et ces deux-ci ne restent que comme milieu de la
+## fourchette et comme reperes de lecture.
+##
+## -- Pourquoi par massif, et ce que ca change au contrat ---------------------
+##
+## Avec deux constantes partagees, tous les massifs du monde avaient la meme
+## borne de marche — deux blocs — et surtout la **meme silhouette a l'echelle
+## pres**. Un paysage n'a pas cette regularite : il porte des masses lisses,
+## presque des domes, et des masses decoupees en lobes. Le caractere se tire
+## donc par massif.
+##
+## Le contrat d'escalade devient alors **parametre** : ce n'est plus « jamais
+## plus de deux blocs » mesure contre une constante, c'est « jamais plus que la
+## borne de *ce* massif », et cette borne se calcule de ses propres nombres
+## (`max_step`). C'est elle que `tests/relief_test.gd` mesure.
+const SHAPE_AMP_SLOW: float = 0.22
 const SHAPE_AMP_FINE: float = 0.055
+
+# -- La borne de marche d'un massif -------------------------------------------
+#
+# Le dessus d'un massif vaut `plancher(sol) + plancher(hauteur x f²)`. Sa
+# derivee le long d'un rayon est `hauteur x 2f x df/dl`, et `f` a trois termes :
+#
+#   * le terme radial `1 - u²`, de derivee `2u/R`. Le produit `2f x 2u/R` avec
+#     `f = 1 - u²` vaut `4u(1-u²)/R`, maximal a `u = 1/sqrt(3)` : **0,77 / R** ;
+#   * les deux bruits, de longueur d'onde `R / ondes`. La pente d'un bruit de
+#     valeur ne depasse pas ~1,5 par longueur d'onde, d'ou `1,5 x ondes x
+#     amplitude / R` chacun, multiplie par `2f`.
+#
+# D'ou la borne ci-dessous. Elle est **conservatrice par construction** — elle
+# suppose les trois termes maximaux au meme point, ce qui n'arrive pas — et
+# c'est voulu : une borne qu'on depasse ne vaut rien, et le balayage de
+# `relief_test` mesure la marche reelle contre elle.
+
+## Pente maximale du terme radial, en multiples de `hauteur / rayon`.
+const SLOPE_RADIAL: float = 0.77
+
+## Pente maximale d'un bruit de valeur, par longueur d'onde.
+const NOISE_SLOPE: float = 1.5
+
+## Ce que le terrain lui-meme ajoute a la marche : les deux planchers de la
+## formule ont chacun le droit de changer d'une unite d'une colonne a la
+## suivante, et le terrain seul en fait deja un.
+const STEP_TERRAIN: int = 1
+
+## Marche maximale toleree, tous massifs confondus. **C'est le contrat
+## d'escalade du 2026-09-08**, et il ne se negocie pas : `CWMesaGrid` rabat la
+## rugosite d'un massif qui le depasserait plutot que de poser une masse qu'on
+## ne peut pas gravir. Le caractere varie librement jusqu'a cette limite, et la
+## limite gagne.
+const CLIMB_MAX_STEP: int = 2
 
 ## Epaisseur, en blocs, jusqu'a laquelle le dessus d'un massif garde la matiere
 ## du pre qu'il traverse, puis largeur de la bande sur laquelle il devient de la
@@ -145,13 +197,39 @@ var base_y: int = 0
 var height: float = 24.0
 var warp_ox: float = 0.0
 var warp_oz: float = 0.0
+## Le caractere de la masse : amplitudes des deux bruits de contour, tirees par
+## massif. Faibles, la masse est un dome ; fortes, elle est decoupee en lobes.
+## Voir la note de `SHAPE_AMP_SLOW`.
+var amp_slow: float = SHAPE_AMP_SLOW
+var amp_fine: float = SHAPE_AMP_FINE
+## Vrai si le contrat d'escalade a rabattu la rugosite tiree. Sert aux mesures :
+## un monde ou la moitie des masses est rabattue dit que la fourchette de tirage
+## est trop large, et l'eventail pose n'est plus celui qu'on croit tirer.
+var damped: bool = false
 var caves: Array[Cave] = []
+
+
+## La pente maximale du dessus de cette masse, en blocs par bloc, telle que la
+## derivation de l'en-tete la borne. Conservatrice.
+func slope_bound() -> float:
+	# `2f` avec f au plus `1 + les deux amplitudes` : le facteur du produit
+	# derive, pris a son maximum.
+	var f_max: float = 1.0 + amp_slow + amp_fine
+	return height / radius * (SLOPE_RADIAL + 2.0 * f_max * NOISE_SLOPE
+			* (amp_slow * SHAPE_WAVES_SLOW + amp_fine * SHAPE_WAVES_FINE))
+
+
+## La marche maximale de **ce** massif, en blocs : sa propre pente, plus ce que
+## le terrain ajoute. C'est contre ce nombre que la mesure d'escalade de
+## `tests/relief_test.gd` se fait — et non contre une constante partagee.
+func max_step() -> int:
+	return STEP_TERRAIN + ceili(slope_bound())
 
 
 ## Rayon au-dela duquel la colonne ne peut plus etre concernee, deformation
 ## comprise. Sert au rejet rapide, avant tout echantillon de bruit.
 func reach() -> float:
-	return radius * sqrt(1.0 + SHAPE_AMP_SLOW + SHAPE_AMP_FINE) + 2.0
+	return radius * sqrt(1.0 + amp_slow + amp_fine) + 2.0
 
 
 func near(cx: int, cz: int) -> bool:
@@ -179,7 +257,7 @@ func shape(cx: int, cz: int) -> float:
 	var ff: float = SHAPE_WAVES_FINE / radius
 	var slow: float = CWValueNoise.sample(fx * fs + warp_ox, fz * fs + warp_oz)
 	var fine: float = CWValueNoise.sample(fx * ff + warp_oz, fz * ff + warp_ox)
-	return 1.0 - u2 + slow * SHAPE_AMP_SLOW + fine * SHAPE_AMP_FINE
+	return 1.0 - u2 + slow * amp_slow + fine * amp_fine
 
 
 ## Intervalle de matiere ajoute par la masse dans cette colonne, bornes

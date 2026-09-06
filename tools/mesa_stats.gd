@@ -81,6 +81,41 @@ func _init() -> void:
 		hh.sort()
 		print("rayon median %.0f blocs, hauteur mediane %d blocs" % [
 				rr[rr.size() / 2], hh[hh.size() / 2]])
+
+	# Le caractere des masses (2026-09-09) : chaque massif tire sa rugosite, et
+	# c'est ce qui donne des domes et des masses decoupees dans le meme paysage.
+	# On rend l'eventail reellement pose sur le monde — le tirage a une
+	# fourchette, mais `CWMesaGrid` rabat celles qui sortiraient du contrat
+	# d'escalade, donc l'eventail pose n'est pas la fourchette tiree.
+	var aa: Array = []
+	var pas: Dictionary = {}
+	var rabattus: int = 0
+	for m in mesas_seen.keys():
+		aa.append(m.amp_slow)
+		pas[m.max_step()] = int(pas.get(m.max_step(), 0)) + 1
+		if m.damped:
+			rabattus += 1
+	if aa.size() > 0:
+		aa.sort()
+		var repartition: String = ""
+		var cles: Array = pas.keys()
+		cles.sort()
+		for k in cles:
+			repartition += " %d bloc(s):%d" % [k, pas[k]]
+		print("rugosite lente de %.3f a %.3f (mediane %.3f), %d rabattus par le contrat"
+				% [aa[0], aa[aa.size() - 1], aa[aa.size() / 2], rabattus])
+		print("marche maximale par massif :%s" % repartition)
+		# La borne **continue**, avant l'arrondi au bloc. C'est elle qui porte
+		# vraiment la variation : la borne en blocs entiers ne peut pas
+		# descendre sous 2 — `ceil` de tout ce qui est positif vaut au moins 1,
+		# et le terrain en ajoute un — donc le contrat d'escalade la fige. Ce
+		# qui varie d'un massif a l'autre est la pente reelle et la silhouette.
+		var bb: Array = []
+		for m in mesas_seen.keys():
+			bb.append(m.slope_bound())
+		bb.sort()
+		print("pente bornee de %.2f a %.2f bloc/bloc (mediane %.2f)"
+				% [bb[0], bb[bb.size() - 1], bb[bb.size() / 2]])
 	var line: String = "pentes  "
 	for b in 12:
 		line += " %.1f:%4.1f%%" % [b * 0.1, 100.0 * slopes[b] / maxi(n_land, 1)]

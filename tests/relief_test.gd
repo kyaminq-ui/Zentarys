@@ -125,16 +125,76 @@ func _test_surplombs() -> void:
 	# Une marche de deux blocs se monte ; une marche de douze — ce que rendait la
 	# premiere version, qui mesurait sa hauteur depuis le sol de son *centre* —
 	# ne se monte pas.
-	_ok("la masse s'escalade : jamais plus de deux blocs de marche",
-			pire_marche <= 2, "%d blocs en %s" % [pire_marche, ou])
-	print("     massif : rayon %.0f, hauteur %.0f, plus grande marche %d bloc(s)"
-			% [m.radius, m.height, pire_marche])
+	#
+	# **Et la borne est celle de ce massif-la** (2026-09-09). Depuis que chaque
+	# masse tire son propre caractere — des domes lisses, des masses decoupees en
+	# lobes —, la marche maximale n'est plus une constante partagee : elle se
+	# calcule des nombres du massif (`CWMesa.max_step`, derivee dans son en-tete).
+	# C'est contre elle que la mesure se fait. Le contrat global n'a pas disparu
+	# pour autant : `CWMesaGrid` rabat la rugosite d'une masse qui depasserait
+	# `CLIMB_MAX_STEP`, et la verification suivante le tient.
+	_ok("la masse s'escalade : jamais plus que sa propre borne",
+			pire_marche <= m.max_step(),
+			"%d blocs en %s, borne %d" % [pire_marche, ou, m.max_step()])
+	_ok("et sa borne tient le contrat d'escalade",
+			m.max_step() <= CWMesa.CLIMB_MAX_STEP,
+			"borne %d" % m.max_step())
+	print("     massif : rayon %.0f, hauteur %.0f, rugosite %.3f/%.3f, marche %d (borne %d)"
+			% [m.radius, m.height, m.amp_slow, m.amp_fine, pire_marche,
+			m.max_step()])
+
+	_caracteres(f)
 
 	# Le generateur et la requete ponctuelle doivent decrire le meme surplomb.
 	# C'est l'invariant n. 18, exerce **la ou il y a quelque chose au-dessus du
 	# sol** — le balayage du jalon 1.8 tombe sur un champ de hauteurs nu.
 	_ok("bloc genere et requete ponctuelle s'accordent sur un massif",
 			_accord(f, int(m.x), int(m.z)))
+
+
+## Le caractere varie d'un massif a l'autre, et chacun tient sa propre borne.
+##
+## Un seul massif ne peut pas montrer ca : il faut un echantillon. On balaie
+## donc les cellules autour du depart, on releve les rugosites tirees, et on
+## verifie les deux moities du contrat de 2026-09-09 — **il y a bien un
+## eventail** (sans quoi le tirage par massif ne sert a rien), et **aucune masse
+## ne sort du contrat d'escalade** (sans quoi le rabattement de `CWMesaGrid` ne
+## marche pas).
+func _caracteres(f: CWTerrainField) -> void:
+	var o: Vector2i = f.params().world_origin
+	var vus: Array[CWMesa] = []
+	for i in range(0, 26):
+		for j in range(0, 26):
+			var cx: int = CWMesaGrid.cell_of(o.x) + i - 13
+			var cz: int = CWMesaGrid.cell_of(o.y) + j - 13
+			for m in f.mesas().get_cell(cx, cz, f):
+				vus.append(m)
+	_ok("de quoi juger l'eventail des caracteres", vus.size() >= 12,
+			"%d massifs" % vus.size())
+	if vus.size() < 12:
+		return
+
+	var lisse: float = INF
+	var rude: float = 0.0
+	var hors: int = 0
+	var au_dela: int = 0
+	for m in vus:
+		lisse = minf(lisse, m.amp_slow)
+		rude = maxf(rude, m.amp_slow)
+		if m.max_step() > CWMesa.CLIMB_MAX_STEP:
+			hors += 1
+		if m.slope_bound() > float(CWMesa.CLIMB_MAX_STEP):
+			au_dela += 1
+	print("     caracteres : %d massifs, rugosite lente de %.3f a %.3f"
+			% [vus.size(), lisse, rude])
+	# Un eventail reel, et pas deux tirages qui se ressemblent : le plus rude
+	# doit porter au moins moitie plus d'amplitude que le plus lisse.
+	_ok("les massifs n'ont pas tous le meme caractere", rude > lisse * 1.5,
+			"de %.3f a %.3f" % [lisse, rude])
+	# Et le rabattement tient sur tout l'echantillon : c'est la moitie du
+	# contrat que le tirage par massif aurait pu casser.
+	_ok("aucun massif ne sort du contrat d'escalade", hors == 0,
+			"%d sur %d" % [hors, vus.size()])
 
 
 ## Compare `_generate_block` et `generated_voxel` sur la colonne de blocs qui
