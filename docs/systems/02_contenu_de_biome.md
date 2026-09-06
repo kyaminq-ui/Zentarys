@@ -833,14 +833,9 @@ pour chaque colonne (x, z) de la cellule :
   l'exclusion n'est pas tranché : la valeur rendue est une distance au carré
   selon le nom proposé, un poids de retombée selon la forme du code, et les deux
   donnent des exclusions inverses. Sans effet sur la carte d'ensemble ;
-- **quelle hauteur `terrain_generateColumnColor` rend.** Que ce soit une
-  couleur est déjà corrigé (elle rend une hauteur, `docs/ROADMAP.md` §1.7). Reste
-  à savoir si c'est la hauteur **finale** de la colonne ou son **ossature
-  continentale** avant les octaves de détail. Les berges creusées rendent les
-  deux jouables, et l'écart se voit : avec la finale, l'étang se creuse dans le
-  sol ; avec l'ossature, il se pose au fond de la vallée telle qu'elle est
-  taillée. **C'est la seule chose qui manque pour porter la passe**, et c'est
-  une lecture, pas un choix.
+- ~~quelle hauteur `terrain_generateColumnColor` rend~~ — **tranché le
+  2026-09-06 au soir, voir §10.4. C'est la hauteur finale, et c'est celle que ce
+  projet calcule déjà.** Plus rien ne bloque le portage de la passe.
 
 #### 10.2.3 Ce que la porte rend sur notre champ
 
@@ -867,3 +862,101 @@ deux points, et la seule interpolation qu'elle contient est le bras d'une
 spirale. Cela **confirme** la correction déjà écrite au jalon 1.6 : la source
 n'a pas de réseau de routes entre points d'intérêt. Un chemin reliant les bourgs
 d'une région serait une création de ce projet, et il faudra le dire comme tel.
+
+### 10.4 Quelle hauteur, et la réponse est plus grande que la question
+
+**Lu le 2026-09-06 au soir**, corps de `terrain_generateColumnColor` @005c5e20
+(`cube/game_misc/game_misc.cpp:32965`). La question était : la hauteur **finale**
+de la colonne, ou son **ossature continentale** avant les octaves de détail ? Le
+test décisif annoncé était : consulte-t-elle la porte des chenaux ?
+
+**Elle la consulte, et pas incidemment — elle en fait un lissage.** Ligne 33088 :
+
+```
+chan  = WorldInfo_sampleTerrainHeight()      -- le champ de chenaux
+g     = min(chan * 4, 1)
+g     = smoothstep(g)^2                       -- 3g^2 - 2g^3, puis au carré
+oct_1e-3 *= g ;  oct_2e-3 *= g ;  oct_detail *= g
+```
+
+C'est donc la **hauteur finale**. Et deux autres marques le confirment dans le
+même corps, chacune suffisante à elle seule :
+
+- **l'octave de détail à 1e-2 y est** (`local_118 * 0.01`, amplitude 20), après
+  la pondération de sites et avant le retour ;
+- **la couche d'éléments de tuile y est aussi**, au couple `+0x14018` / stride
+  `0x68` déjà relevé trois fois par ce dépôt, avec l'aplanissement du bourg
+  (type 1) appliqué aux trois amplitudes.
+
+#### Ce n'est pas une fonction voisine de la nôtre, c'est la nôtre
+
+Les quatre graines de la déformation d'éléments — `8432984.0`, `90493.0`,
+`3423.0`, `112.0`, à la fréquence `0.0025` — sont **mot pour mot**
+`CWTerrainField.LIFT_SEED_X`, `FALLOFF_SEED_XZ`, `FALLOFF_SEED_ZX`,
+`FALLOFF_SEED_Z` et `FALLOFF_WARP_FREQ`. `terrain_generateColumnColor`
+(@005c5e20, client) et `World_baseHeightField` (@004f9b70, serveur) sont **la
+même fonction dans les deux binaires** — celle que ce projet porte depuis le
+jalon 1.4.
+
+> **Conséquence pour le plan de portage** (`nextsteps.md`, §7bis.2) : le niveau
+> d'un étang est `CWTerrainField.sample_column(x, z).x`, **la valeur que le
+> projet calcule déjà**. Le point 1 du plan — sortir l'ossature `cont` et passer
+> `_sample` en `Vector4` — n'a plus lieu d'être *pour la hauteur*. Ce que
+> `_sample` doit encore remonter est la **valeur de chenal**, dont la passe a
+> besoin deux fois : comme porte (`<= 0,02`) et dans le creusement des berges
+> (`5 × (1 − (50·chan)³)`).
+
+#### Deux corroborations indépendantes, hors du corps de la fonction
+
+1. **Le binaire serveur nomme l'appel autrement, et dans le même sens.** Là où
+   le client appelle `WorldInfo_sampleTerrainHeight`, le serveur
+   (`server/world/World.cpp:4629`) appelle **`World_riverClimateGate`** — deux
+   noms proposés indépendamment pour le même appel, et le second dit « porte de
+   rivière » en toutes lettres. La lecture du champ de chenaux du jalon 1.4 est
+   confirmée par son nom dans l'autre binaire.
+2. **Un appelant s'en sert comme d'un sol.** `WorldInfo.cpp:2562` prend le
+   retour, fait `(int)(h + 1)`, et interroge `world_getColumnData` à cette
+   hauteur pour y poser un objet en refusant l'air et l'eau. On ne pose pas un
+   objet à « ossature + 1 » : ce serait l'enterrer ou le faire flotter.
+
+### 10.5 Trouvé au passage : la pente de l'original se mesure à un bloc
+
+**Ce n'est pas ce qui était cherché, et ça contredit un raisonnement de ce
+dépôt.** La passe de contenu de cellule (`WorldInfo.cpp:1598-1614`)
+**précalcule une grille 257 × 257 de hauteurs** — un appel à
+`terrain_generateColumnColor` par sommet, stride `0x101` — puis, dans la boucle
+de colonne (ligne 1649) :
+
+```
+raide = |h[i] - h[i+1]| > 0.3   ou   |h[i] - h[i+0x101]| > 0.3
+```
+
+C'est-à-dire **la colonne voisine en X et en Z, à un bloc, seuil 0,3** — et le
+drapeau garde ensuite un appel de couleur (`terrain_rockColor_blend` @005c7140,
+ligne 1766).
+
+Deux choses en découlent, et la seconde est une correction :
+
+- **le coût n'est pas celui qu'on croyait.** L'original ne paie pas trois
+  colonnes par colonne : il paie **une grille par cellule**, amortie sur 65 536
+  colonnes, et la pente n'est plus qu'une soustraction. Le portage du jalon 1.13
+  avait écarté la colonne voisine parce qu'elle « coûterait le monde » — vrai
+  pour un échantillonnage ponctuel, faux pour une passe qui construit sa cellule
+  d'un bloc ;
+- **et « une pente d'un bloc ne décrit pas une falaise » est démenti par la
+  source**, qui mesure exactement à un bloc. C'était la seconde des deux raisons
+  du treillis de 4, et la seule qui ne fût pas un argument de coût.
+
+> **Cela ne rouvre pas la falaise** — elle a été retirée sur le rendu, pas sur la
+> mesure, et `ROADMAP` §1.13 dit pourquoi. C'est noté ici parce que le jour où
+> le sujet reviendra, le mécanisme de la source est celui-ci et non celui qu'on
+> avait écrit.
+
+**Reste ouvert, et non lu :** `terrain_rockColor_blend` (@005c7140) est une
+fonction *distincte* de `terrain_surfaceColor_blend` (@005c56e0), et le drapeau
+la déclenche quand la colonne **n'est pas** raide — l'inverse de ce que le nom
+proposé laisse attendre. Les deux noms sont donnés « confiance moyenne » par le
+dépôt d'analyse, qui en a déjà treize de trompeurs. À lire avant d'en tirer quoi
+que ce soit. Note au passage : `terrain_surfaceColor_blend` prend un paramètre
+`slope` explicite (le cinquième), et il n'y sert qu'à une branche de pente
+**faible** — `slope < 0,2` et second paramètre climatique `> 0,75`, ligne 32825.

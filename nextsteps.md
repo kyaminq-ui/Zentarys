@@ -7,33 +7,35 @@ il contient des décisions qui coûtent cher à redécouvrir.
 
 ## 0. Demain, la première chose à faire
 
-**Une lecture, et elle débloque les lacs.** Tout le reste du portage est écrit et
-attend : plan en sept points en §7bis.2, algorithme complet en
+**Écrire les lacs. La lecture qui bloquait est faite, et la réponse simplifie le
+plan.** Tout est en main : sept points en §7bis.2, algorithme complet en
 `docs/systems/02` §10.2, porte mesurée à 3,4 % des terres.
 
-> **Que rend `terrain_generateColumnColor` ?** On sait déjà que ce n'est pas une
-> couleur mais une **hauteur de colonne** (c'est le quatrième des noms trompeurs,
-> `docs/ROADMAP.md` §1.7). Ce qu'on ne sait pas est *laquelle* : la hauteur
-> **finale** de la colonne, ou son **ossature continentale** avant les octaves de
-> détail. C'est le niveau de l'eau, et l'écart se voit en jeu — avec la finale,
-> l'étang se creuse dans le sol ; avec l'ossature, il se pose au fond de la
-> vallée telle qu'elle est taillée.
+> **`terrain_generateColumnColor` rend la hauteur FINALE de la colonne** — et
+> mieux que ça : **c'est la hauteur que ce projet calcule déjà**.
+> `terrain_generateColumnColor` (@005c5e20, client) et `World_baseHeightField`
+> (@004f9b70, serveur) sont **la même fonction**, celle du jalon 1.4. Ses quatre
+> graines de déformation d'éléments sont mot pour mot les nôtres. Le niveau d'un
+> étang est donc `CWTerrainField.sample_column(x, z).x`, sans rien de nouveau à
+> calculer. Lecture et preuves en `docs/systems/02` §10.4.
 
-Où chercher : la fonction est appelée en trois endroits de
-`WorldInfo_generateBiomeContent` (`cube/world/WorldInfo.cpp`, lignes 1606, 2562
-et 2706) et son corps est dans le dépôt d'analyse. Le point décisif est de savoir
-si elle consulte la **porte des chenaux** — si oui, c'est la hauteur finale ;
-sinon, l'ossature.
+**Ce que ça change au plan de §7bis.2 :** son **point 1 tombe à moitié**. Il n'y
+a pas d'ossature `cont` à sortir de `_height_from` — la hauteur est déjà là. Ce
+que `_sample` doit encore remonter est la **valeur de chenal**, dont la passe se
+sert deux fois : comme porte (`chan <= 0,02`) et dans le creusement des berges
+(`5 × (1 − (50·chan)³)`). Donc toujours un `Vector4`, mais la quatrième
+composante est `chan` et non une seconde hauteur — et elle est déjà calculée
+dans `_height_from`, ce qui reste à coût nul.
 
-**Ne pas deviner.** Le champ d'altitude porte l'identité de tous les mondes déjà
-explorés, et une passe qui le creuse en pariant sur la mauvaise hauteur poserait
-des mares au mauvais endroit sans que rien ne le signale.
-
-Ensuite, dans l'ordre : les sept points de §7bis.2. Le piège nommé est le n° 5 —
+**Les six autres points de §7bis.2 sont inchangés.** Le piège nommé est le n° 5 :
 les deux chemins rapides de `_generate_block` s'appuient sur `patch.lowest`, et
 le creusement des berges l'invalide.
 
----
+**Une question annexe est ouverte par la même lecture, et elle n'est pas dans le
+chemin des lacs** — `docs/systems/02` §10.5 : la pente de l'original se mesure
+**à un bloc**, sur une grille de hauteurs précalculée par cellule, seuil 0,3. Ce
+n'est pas ce qu'on avait écrit à la falaise, et c'est noté pour le jour où le
+sujet reviendra ; ça ne rouvre rien aujourd'hui.
 
 ## 1. Où sont les choses
 
@@ -178,8 +180,11 @@ biome, **Échap** rend la souris puis quitte.
 > **Restent donc les lacs — à écrire, plan en main — et la collision, objet par
 > objet (§7bis.3).** 2.6, l'apparition, reste l'autre porte ouverte.
 >
-> **La première chose à faire demain est en §0**, en tête de ce fichier : une
-> lecture, et les lacs se débloquent.
+> **La lecture qui bloquait les lacs est faite** (2026-09-06 au soir,
+> `docs/systems/02` §10.4) : `terrain_generateColumnColor` rend la hauteur
+> **finale**, et c'est la fonction que ce projet porte depuis le jalon 1.4 — le
+> niveau d'un étang est `sample_column(x, z).x`. Le plan de §7bis.2 y perd la
+> moitié de son premier point. **Il n'y a plus qu'à écrire.**
 
 Jalon 1 (le monde) : **1.1 à 1.12 sont portés, testés et vus en jeu** ; 1.13, la
 falaise, a été portée puis retirée (§7ter.4). Suite de validation :
@@ -1667,13 +1672,19 @@ déjà `sea` en paramètre ; il suffit qu'il reçoive le niveau *de la colonne*.
 
 Ce qu'il reste à écrire, dans l'ordre :
 
-1. **`_height_from` rend l'ossature `cont` en plus de la hauteur**, et `_sample`
-   passe de `Vector3` à `Vector4` — `(hauteur, température, humidité, base
-   d'étang)`, la quatrième valant `-INF` hors de la porte. `_sample` est
-   **interne et n'a que deux appelants** ; `sample_column` et
-   `sample_column_raw` gardent leur `Vector3`, donc **les trente-cinq
-   consommateurs ne bougent pas**. Coût : zéro échantillon de bruit de plus,
-   `cont` et `chan` étant déjà calculés ;
+1. **`_sample` passe de `Vector3` à `Vector4`** — `(hauteur, température,
+   humidité, **chenal**). `_sample` est **interne et n'a que deux appelants** ;
+   `sample_column` et `sample_column_raw` gardent leur `Vector3`, donc **les
+   trente-cinq consommateurs ne bougent pas**. Coût : zéro échantillon de bruit
+   de plus, `chan` étant déjà calculé.
+
+   > **Révisé le 2026-09-06 au soir, après la lecture** (`docs/systems/02`
+   > §10.4). Ce point demandait de sortir l'**ossature continentale** `cont`,
+   > parce qu'on ne savait pas laquelle des deux hauteurs était le niveau de
+   > l'eau. C'est **la hauteur finale**, c'est-à-dire celle que `sample_column`
+   > rend déjà : il n'y a pas d'ossature à extraire. La quatrième composante
+   > sert au **chenal**, dont la passe a besoin deux fois — comme porte
+   > (`<= 0,02`) et dans le creusement des berges (`5 × (1 − (50·chan)³)`) ;
 2. **`sample_patch` passe au pas de 4**, ce qui ne touche que `_get_patch` et
    `tools/preview_features.gd` ;
 3. **`pond_span(base) -> Vector2i`**, statique et pure — la quantification, la
@@ -1698,13 +1709,18 @@ Ce qu'il reste à écrire, dans l'ordre :
    On savait quoi y faire pousser sans savoir qui produisait la matière. C'est
    cette passe, et le roseau aura enfin une rive.
 
-**Ce qui bloque, et c'est une lecture et non un choix** :
-`terrain_generateColumnColor` rend une hauteur — la correction est déjà dans la
-liste des noms trompeurs — mais on ne sait pas **laquelle** : la hauteur finale
-de la colonne, ou son ossature continentale avant les octaves de détail. Les
-deux sont jouables et l'écart se voit en jeu ; c'est le niveau de l'eau. La
-lecture est petite. **Ne pas deviner** : le champ d'altitude est ce sur quoi
-repose l'identité de tous les mondes déjà explorés.
+**Plus rien ne bloque.** La lecture est faite le 2026-09-06 au soir
+(`docs/systems/02` §10.4) : `terrain_generateColumnColor` rend la **hauteur
+finale**, et c'est la fonction que ce projet porte depuis le jalon 1.4 — même
+corps, mêmes quatre graines de déformation d'éléments, deux adresses dans les
+deux binaires. Le niveau d'un étang est `sample_column(x, z).x`.
+
+Trois marques le disent indépendamment, et une seule aurait suffi : elle
+applique la **porte des chenaux** en lissage sur ses octaves de détail (c'était
+le test décisif annoncé), elle contient l'**octave à 1e-2**, et elle applique la
+**couche d'éléments de tuile**. Plus deux corroborations hors du corps : le
+binaire serveur nomme le même appel `World_riverClimateGate`, et un appelant
+fait `(int)(h + 1)` pour poser un objet **au sol**.
 
 ### 3 — La collision : ce qui en a, ce qui n'en a pas, et ce que ça coûte
 
