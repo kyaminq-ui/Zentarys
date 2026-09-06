@@ -815,9 +815,19 @@ regardant le paysage :
 
 **Ce qui reste :**
 
-- **la collision n'est pas branchée.** Le terrain de la démo a
-  `generate_collisions = false` : la matière est là, le corps qui s'y cogne
-  n'existe pas encore. C'est le jalon 3.1.
+- **la collision n'est pas branchée, et elle ne couvre pas tout.** Le terrain
+  de la démo a `generate_collisions = false` : la matière est là, le corps qui
+  s'y cogne n'existe pas encore. Surtout, tout n'est pas de la matière — le
+  tronc **et son branchage** le sont (les branches sont dans le modèle de
+  charpente, donc estampées avec le fût), les neuf filons le seront par
+  construction, mais les **houppiers**, les six **modèles entiers** (`pin`,
+  `sapin_enneige`, `pin_enneige`, `cactus_geant`, `arbre_epineux`,
+  `rocher_geant`) et les cactus de flore sont instanciés, donc traversables.
+  Décompte, coûts mesurés et arbitrage — matière contre volume approché — en
+  `nextsteps.md`, §7bis.3. Le résumé : les six modèles entiers sont à passer en
+  matière (186 à 1 907 voxels, une ligne de code), le feuillage ne l'est
+  probablement pas (×12 sur ce qu'un arbre écrit dans le monde) et relève d'un
+  volume approché au jalon 3.1.
 - **abattre un arbre est grossier.** Creuser un tronc retire ses houppiers — la
   colonne porte une édition, donc la dispersion écarte le candidat — mais le fût
   garde son trou et reste debout.
@@ -1104,6 +1114,7 @@ sans valeur tant que les jalons 2 et 3 ne sont pas là.
 | Groupement de la flore en grappes | ✅ | il n'y avait pas de mécanisme à écrire : la crête de bruit à 0,05 le produit seule (variance/moyenne 14,3 contre ~1) |
 | Table de sélection du décor | ✅ | `src/worldgen/cw_decor_rules.gd` : deux crêtes à 0,01, neuf rôles, `docs/systems/02` §8.5-8.6 |
 | Lacet libre du décor | ⬜ | trois rôles le demandent ; `CWVoxelModel` ne précalcule que quatre quarts de tour |
+| Collision des modèles instanciés | ⬜ | houppiers, six modèles entiers et cactus de flore restent traversables ; troncs, branchages et filons sont de la matière. Arbitrage en `nextsteps.md`, §7bis.3 |
 | Éclairage et LOD des modèles instanciés | 🔶 | **le tronc a rejoint le terrain** (1.11) : il est éclairé et se creuse comme lui. Ce qui reste instancié — flore, houppiers, arbres entiers — ne profite toujours ni de l'éclairage voxel ni d'une réduction en distance ; `CWVoxelModel.reduced(n)` est prêt et n'a toujours aucun usage |
 | Aperçu de la carte hors du jeu | ✅ | `tools/preview_map.gd`, vierge et parcourue |
 | Cache disque des dalles de carte | ⬜ | 43 ms la dalle, recalculée à chaque session ; l'original la compresse en base |

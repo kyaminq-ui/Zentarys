@@ -1473,7 +1473,9 @@ d'objets** et `World_generateTreeRecursive` **ne génère pas d'arbres**.
 Décidé le 2026-09-06, après la question « a-t-on prévu un jalon pour les lacs,
 les rivières, les chemins entre POI et les falaises ? ». Réponse : non, aucun des
 quatre n'a de jalon, et ils ne sont pas au même stade. L'ordre qui suit n'est pas
-un ordre de préférence, c'est celui de leurs dépendances.
+un ordre de préférence, c'est celui de leurs dépendances. S'y ajoute un
+troisième point, demandé le même jour : **la collision du branchage, du
+feuillage, des filons et des cactus**.
 
 ### 1 — La falaise, d'abord
 
@@ -1552,6 +1554,69 @@ l'échelle d'une tuile. Un réseau reliant les bourgs d'une région serait une
 >
 > Trancher **avant** d'écrire une ligne : les trois donnent des lacs, une seule
 > donne des rivières, et le choix se paie sur tout le reste du jalon 1.
+
+### 3 — La collision : ce qui en a, ce qui n'en a pas, et ce que ça coûte
+
+Demandé le 2026-09-06 : *la collision doit couvrir aussi le branchage, le
+feuillage, les filons et les cactus.* Ce n'était prévu que pour un tiers, et le
+reste ne se traite pas d'un seul geste — il y a **trois mécanismes différents**
+selon l'objet, et le choix se fait au voxel près.
+
+Le décompte, mesuré sur le lot réel (`tools/inspect_model.gd`) :
+
+| objet | aujourd'hui | voxels | ce qu'il faut |
+|---|---|---|---|
+| tronc d'un feuillu, d'un palmier, d'un grand arbre | **matière** | 406 (charpente) | rien — c'est fait (§7) |
+| **branchage d'un grand arbre** | **matière** | compris dans les 406 | rien : les branches sont **dans le modèle de tronc**, donc estampées avec lui |
+| houppier, dôme | instancié | 983 le dôme, ×5 par grand arbre ; 2 316 le houppier de chêne | à décider — voir plus bas |
+| arbre entier (`pin`, `sapin_enneige`, `pin_enneige`) | instancié | 692 – 809 | **à passer en matière** |
+| `cactus_geant` | instancié | 250 | **à passer en matière** |
+| `arbre_epineux` | instancié | 186 | **à passer en matière** |
+| `rocher_geant` | instancié | 1 907 | **à passer en matière** — c'est un rocher, il est déjà de la roche |
+| les neuf filons | pas encore posés | 13 – 32 | rien de plus : ils sont dessinés à **1 voxel = 1 bloc** pour être estampés, et se minent. Il ne leur manque que leur *pose* (2.6) |
+| cactus de flore (`cactus_01`, `cactus_02`) | instancié | — | ils sont à **4 voxels par bloc** : inestampables tels quels. Volume approché, ou rien |
+
+**Ce qui est déjà réglé, et il faut le savoir avant d'ouvrir le sujet :** le
+branchage a la collision. Les quatre branches d'une charpente sont dessinées
+*dans le modèle de tronc*, pas ajoutées par l'assembleur, donc `_stamp_trunks`
+les écrit avec le fût. Idem pour les filons : leur grille a été choisie pour ça
+au jalon 1.11, la seule chose qui leur manque est l'endroit où les poser.
+
+**Les six modèles entiers sont le morceau facile**, et il vaut d'être fait tôt :
+ce sont des objets *solides* — un cactus, un rocher, un arbre mort — et les
+passer en matière tient en une ligne (`pied.matiere = true` sur le montage
+ENTIER, plus leur hauteur). Coût : 186 à 1 907 voxels par instance, sur des
+espèces rares. Le rocher géant est le cas le plus évident : il est déjà peint
+dans la matière de roche, et c'est le seul objet du monde qu'on contourne
+aujourd'hui en le traversant.
+
+> **Le feuillage est le seul vrai arbitrage, et il ne se tranche pas au
+> sentiment.** Le passer en matière multiplie par douze ce qu'un arbre écrit
+> dans le monde — 406 voxels aujourd'hui, ~5 300 avec ses cinq dômes — et
+> l'étampage des troncs coûte déjà +2 % du chargement. Ce serait donc de l'ordre
+> de +25 %, sur le poste qui est déjà le verrou de la distance de vue. Et ça
+> change deux autres choses : le feuillage deviendrait **creusable au bloc près**
+> (une pioche qui perce un houppier), et **opaque à l'éclairage voxel** (une
+> forêt dans le noir sous ses arbres, ce qui est peut-être voulu).
+>
+> L'autre voie est un **volume approché**, décidé au jalon 3.1 avec le
+> contrôleur : la couche de dispersion donne déjà tout ce qu'il faut — position,
+> rayon et hauteur de chaque pièce sont dans `Placement`, et un cylindre aplati
+> par dôme coûte une forme de physique et zéro voxel. C'est ce que la feuille de
+> route prévoit pour les entités, et c'est probablement la bonne réponse ici
+> aussi.
+>
+> **Ce qu'il faut vérifier avant de choisir** : à quelle hauteur commence un
+> houppier. Sur le lot agrandi, les dômes d'un grand arbre démarrent entre 15 et
+> 25 blocs, très au-dessus d'un personnage de 2,4 — un joueur au sol ne les
+> rencontre jamais. La question ne se pose donc vraiment qu'au jalon 3.4, avec le
+> vol à voile et l'escalade. Ce n'est pas une raison de ne rien décider, c'en est
+> une pour **ne pas payer la matière** avant de savoir qui la touchera.
+
+**Et une remarque qui vaut pour tout ce tableau :** rien de tout cela ne se voit
+tant que `generate_collisions` est à faux sur le terrain de la démo. La matière
+est là, le corps qui s'y cogne n'existe pas — c'est le jalon 3.1 qui allumera
+les deux, et c'est à ce moment-là qu'il faudra que ce tableau soit juste.
 
 ### Et 2.6 reste ouverte
 
