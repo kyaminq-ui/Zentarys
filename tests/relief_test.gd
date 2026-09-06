@@ -242,73 +242,122 @@ func _test_grottes() -> void:
 	g.params = f.params()
 
 	var ouvertes: int = 0
+	var bouches: int = 0
 	var percees: int = 0
+	var pincees: int = 0
+	var marches: int = 0
 	var profondeurs: PackedFloat32Array = PackedFloat32Array()
 	for c in m.caves:
+		var n: int = c.points()
+
 		# 1. Le tube ne sort jamais par le dessus de la masse : une grotte qui
 		#    deboucherait au sommet serait un trou dans le sol. On le verifie
-		#    **le long de l'axe** et non a la bouche — la bouche est au seuil de
-		#    la masse, la ou celle-ci n'a par definition aucune epaisseur.
-		var plafond: int = c.floor_y + c.height - 1
-		for k in range(1, c.axis.size() / 3):
-			var px: int = int(c.axis[k * 3])
-			var pz: int = int(c.axis[k * 3 + 1])
-			var sommet: int = floori(f.sample_column(px, pz).x) \
-					+ m.thickness(px, pz)
-			if plafond > sommet:
+		#    **le long de l'axe** et non aux bouches — une bouche est au seuil
+		#    de la masse, la ou celle-ci n'a par definition aucune epaisseur.
+		for k in range(1, n - 1):
+			var q: Vector2 = c.point_at(k)
+			var sommet: int = floori(f.sample_column(int(q.x), int(q.y)).x) \
+					+ m.thickness(int(q.x), int(q.y))
+			if c.floor_at(k) + c.clearance_at(k) - 1.0 > float(sommet):
 				percees += 1
 				break
 
-		# 2. **Elle est accessible sans creuser.** L'entree est sur le flanc, au
-		#    ras du sol : le bloc qui s'y trouve a la hauteur du plancher doit
-		#    deja etre de l'air, et le rester en s'eloignant. C'est la garantie
-		#    demandee, et elle est verifiee dehors, sur le monde genere, pas sur
-		#    la regle qui l'a posee.
-		var mouth: Vector2 = c.mouth()
-		var dir: Vector2 = (mouth - Vector2(m.x, m.z)).normalized()
-		var libre: bool = true
-		for step in range(0, 26, 5):
-			var px: int = int(mouth.x + dir.x * float(step))
-			var pz: int = int(mouth.y + dir.y * float(step))
-			if g.generated_voxel(px - g.params.world_origin.x, c.floor_y,
-					pz - g.params.world_origin.y) != CWPalette.AIR:
-				libre = false
+		# 2. **Praticable d'un bout a l'autre** (2026-09-09). C'est le prix de la
+		#    section variable : elle peut se pincer jusqu'a boucher la galerie,
+		#    et une grotte bouchee au milieu est pire qu'une grotte droite — on y
+		#    entre, on marche, et on se cogne. On exige donc a **chaque** point
+		#    de l'axe une section et une hauteur libre au-dessus des planchers,
+		#    et un plancher qui ne fait pas de marche : une galerie qui monte de
+		#    six blocs d'un point au suivant ne se parcourt pas plus qu'un mur.
+		for k in range(0, n):
+			if c.radius_at(k) < CWMesaGrid.CAVE_SECTION_FLOOR - 0.001 \
+					or c.clearance_at(k) < CWMesaGrid.CAVE_CLEARANCE_FLOOR - 0.001:
+				pincees += 1
 				break
-		if libre:
-			ouvertes += 1
+		for k in range(1, n):
+			var d: float = absf(c.floor_at(k) - c.floor_at(k - 1))
+			var pas: float = c.point_at(k).distance_to(c.point_at(k - 1))
+			# Une pente d'un bloc par bloc se monte ; au-dela, c'est une marche.
+			if d > maxf(2.0, pas):
+				marches += 1
+				break
 
-		# 3. Sa longueur : la somme de ses segments, en blocs.
+		# 3. **Elle est accessible sans creuser, et par ses deux bouts.** Le bloc
+		#    qui se trouve a une bouche a la hauteur du plancher doit deja etre
+		#    de l'air, et le rester en s'eloignant. Verifie dehors, sur le monde
+		#    genere, pas sur la regle qui l'a posee.
+		#
+		#    Un embranchement en est dispense : il s'arrete **dans** la masse par
+		#    construction, et on y accede par la galerie qui le porte.
+		if c.branch:
+			continue
+		for cote in 2:
+			bouches += 1
+			var bouche: Vector2 = c.mouth() if cote == 0 else c.mouth_out()
+			var sol: float = c.floor_at(0) if cote == 0 else c.floor_at(n - 1)
+			var dir: Vector2 = (bouche - Vector2(m.x, m.z)).normalized()
+			var libre: bool = true
+			for step in range(0, 26, 5):
+				var px: int = int(bouche.x + dir.x * float(step))
+				var pz: int = int(bouche.y + dir.y * float(step))
+				if g.generated_voxel(px - g.params.world_origin.x, int(sol),
+						pz - g.params.world_origin.y) != CWPalette.AIR:
+					libre = false
+					break
+			if libre:
+				ouvertes += 1
+
+		# 4. Sa longueur : la somme de ses segments, en blocs.
 		var l: float = 0.0
-		for i in c.axis.size() / 3 - 1:
-			l += Vector2(c.axis[(i + 1) * 3] - c.axis[i * 3],
-					c.axis[(i + 1) * 3 + 1] - c.axis[i * 3 + 1]).length()
+		for i in n - 1:
+			l += c.point_at(i + 1).distance_to(c.point_at(i))
 		profondeurs.append(l)
 
 	_ok("aucune grotte ne perce le dessus du massif", percees == 0,
 			"%d sur %d" % [percees, m.caves.size()])
-	_ok("chaque grotte debouche a l'air libre, sans creuser",
-			ouvertes == m.caves.size(),
-			"%d sur %d" % [ouvertes, m.caves.size()])
+	_ok("aucune galerie ne se pince sous ses planchers", pincees == 0,
+			"%d sur %d" % [pincees, m.caves.size()])
+	_ok("le plancher d'une galerie ne fait pas de marche", marches == 0,
+			"%d sur %d" % [marches, m.caves.size()])
+	# **Les deux bouts**, depuis que la galerie traverse : une grotte ouverte
+	# d'un seul cote est un cul-de-sac, ce qui etait justement le reproche.
+	_ok("chaque galerie debouche a l'air libre par ses deux bouts, sans creuser",
+			ouvertes == bouches, "%d bouches sur %d" % [ouvertes, bouches])
+	_ok("une galerie a bien deux bouches", bouches >= 2, "%d" % bouches)
 	var l_min: float = profondeurs[0]
 	for l in profondeurs:
 		l_min = minf(l_min, l)
 	_ok("une galerie s'enfonce d'au moins vingt blocs", l_min >= 20.0,
 			"la plus courte fait %.0f blocs" % l_min)
-	_ok("son axe est brise, pas droit",
-			m.caves[0].axis.size() / 3 >= 3,
-			"%d points" % (m.caves[0].axis.size() / 3))
-	print("     grottes : %d galeries, la plus courte %.0f blocs"
-			% [m.caves.size(), l_min])
+	_ok("son axe est brise, pas droit", m.caves[0].points() >= 3,
+			"%d points" % m.caves[0].points())
 
-	# 3. Le tube est bien creux : au fond, la colonne porte de l'air a la hauteur
-	#    du plancher, alors que le terrain, lui, est plus haut.
-	var c0 = m.caves[0]
-	var n0: int = c0.axis.size() / 3
-	var fond := Vector2(c0.axis[(n0 - 1) * 3], c0.axis[(n0 - 1) * 3 + 1])
+	# La section respire : le rayon n'est pas constant le long de l'axe, sans
+	# quoi la galerie reste le tuyau que le reproche visait.
+	var c0: CWMesa.Cave = m.caves[0]
+	var r_min: float = INF
+	var r_max: float = 0.0
+	for k in c0.points():
+		r_min = minf(r_min, c0.radius_at(k))
+		r_max = maxf(r_max, c0.radius_at(k))
+	_ok("la section varie le long de la galerie", r_max > r_min * 1.15,
+			"de %.1f a %.1f" % [r_min, r_max])
+	var branches: int = 0
+	for c in m.caves:
+		if c.branch:
+			branches += 1
+	print("     grottes : %d galeries dont %d embranchements, la plus courte %.0f blocs, section %.1f a %.1f"
+			% [m.caves.size(), branches, l_min, r_min, r_max])
+
+	# Le tube est bien creux : au milieu, la colonne porte de l'air a la hauteur
+	# du plancher, alors que le terrain, lui, est plus haut.
+	@warning_ignore("integer_division")
+	var mid: int = c0.points() / 2
+	var q0: Vector2 = c0.point_at(mid)
 	var creux: bool = g.generated_voxel(
-			int(fond.x) - g.params.world_origin.x, c0.floor_y + 1,
-			int(fond.y) - g.params.world_origin.y) == CWPalette.AIR
-	_ok("le tube est creux jusqu'a son fond", creux)
+			int(q0.x) - g.params.world_origin.x, int(c0.floor_at(mid)) + 1,
+			int(q0.y) - g.params.world_origin.y) == CWPalette.AIR
+	_ok("le tube est creux en son milieu", creux)
 
 
 # -- 3. Les chemins -----------------------------------------------------------

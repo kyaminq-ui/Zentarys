@@ -91,6 +91,35 @@ const CAVE_BENDS_SPAN: int = 3
 ## Ecart lateral d'un coude, en fraction de la longueur du segment.
 const CAVE_BEND_SWING: float = 0.55
 
+# -- La section respire, et deux planchers l'empechent de se pincer -----------
+#
+# *« Un creusement plus aleatoire, un peu comme Minecraft »* : le rayon et la
+# hauteur libre varient d'un point de l'axe au suivant, donc la galerie se
+# resserre et s'ouvre au lieu d'etre un tuyau.
+#
+# **C'est la contrainte qui coute.** Une section variable peut se pincer jusqu'a
+# boucher la galerie, et une grotte bouchee au milieu est pire qu'une grotte
+# droite : on y entre, on marche, et on se cogne. D'ou deux planchers absolus,
+# sous lesquels aucun point de l'axe ne descend — et une verification qui
+# parcourt l'axe entier, parce que ces planchers bornent la geometrie posee et
+# non ce que le generateur ecrit, qui est l'intersection du tube et de la masse.
+
+## Amplitude de la respiration, en fraction du rayon (resp. de la hauteur)
+## nominal. A 0,45, une galerie de rayon 7 va de 4 a 10.
+const CAVE_SECTION_SWING: float = 0.45
+const CAVE_CLEARANCE_SWING: float = 0.35
+
+## Les deux planchers. En dessous, on ne passe plus : trois blocs de large et
+## quatre de haut sont le minimum pour qu'un couloir se parcoure.
+const CAVE_SECTION_FLOOR: float = 3.0
+const CAVE_CLEARANCE_FLOOR: float = 4.0
+
+## Chance, sur cent, qu'une galerie porte un embranchement court, et longueur de
+## celui-ci en fraction de la galerie. Un embranchement ne debouche pas : il
+## s'arrete dans la masse, et on y accede par la galerie.
+const CAVE_BRANCH_CHANCE: int = 55
+const CAVE_BRANCH_LEN: float = 0.35
+
 var _params: CWWorldParams
 var _cells: Dictionary = {}
 var _mutex: Mutex = Mutex.new()
@@ -242,6 +271,72 @@ func _build_cell(cx: int, cz: int, field: CWTerrainField) -> Array[CWMesa]:
 	return out
 
 
+## Le **seuil** dans une direction : la ou la masse cesse, en partant du dehors.
+##
+## C'est de la que part — ou la qu'arrive — une galerie, et c'est ce qui garantit
+## qu'elle debouche. Le contour etant deforme par deux bruits, on ne le calcule
+## pas : on le rencontre.
+func _seuil(m: CWMesa, dir: Vector2) -> Vector2:
+	var centre := Vector2(m.x, m.z)
+	var out: Vector2 = centre + dir * m.reach()
+	for k in range(0, 60):
+		var t: float = 1.15 - float(k) * 0.02
+		if t <= 0.1:
+			break
+		var q: Vector2 = centre + dir * (m.radius * t)
+		if m.thickness(int(q.x), int(q.y)) <= 0:
+			out = q
+			continue
+		break
+	return out
+
+
+## Un embranchement court, greffe sur un point interieur de la galerie.
+##
+## Il ne debouche pas, et c'est sa definition : il s'arrete dans la masse, on y
+## accede par la galerie qui le porte, et ni la verification d'acces ni celle du
+## porche ne s'appliquent a lui — d'ou le drapeau `branch`.
+##
+## Sa hauteur est rabattue sur l'epaisseur de la masse comme celle de la galerie,
+## et il n'est pose que s'il tient : un embranchement qui perce le dessus est le
+## meme trou dans le sol, en plus discret.
+func _ajoute_embranchement(m: CWMesa, parent: CWMesa.Cave,
+		pts: Array[Vector2], rng: CWRand, field: CWTerrainField) -> void:
+	if rng.mod(100) >= CAVE_BRANCH_CHANCE or pts.size() < 3:
+		return
+	@warning_ignore("integer_division")
+	var mid: int = 1 + rng.mod(pts.size() - 2)
+	var base: Vector2 = pts[mid]
+	var le_long: Vector2 = (pts[mid + 1] - pts[mid - 1]).normalized()
+	var cote: float = 1.0 if rng.mod(2) == 0 else -1.0
+	var dir: Vector2 = (le_long.orthogonal() * cote
+			+ le_long * (rng.unit() - 0.5)).normalized()
+	var longueur: float = (pts[pts.size() - 1] - pts[0]).length() \
+			* CAVE_BRANCH_LEN
+
+	var b := CWMesa.Cave.new()
+	b.branch = true
+	b.radius = maxf(CAVE_SECTION_FLOOR, parent.radius * 0.75)
+	b.flare = 1.0
+	var fl: float = parent.floor_at(mid)
+	var n: int = 3
+	for k in n:
+		var u: float = float(k) / float(n - 1)
+		var q: Vector2 = base + dir * (longueur * u)
+		var qx: int = int(q.x)
+		var qz: int = int(q.y)
+		var sommet: int = floori(field.sample_column(qx, qz).x) \
+				+ m.thickness(qx, qz)
+		var libre: float = float(sommet) - fl + 1.0
+		if libre < CAVE_CLEARANCE_FLOOR:
+			return
+		var hl: float = minf(libre, maxf(CAVE_CLEARANCE_FLOOR,
+				parent.clearance_at(mid) * (0.8 + rng.unit() * 0.3)))
+		b.push(q.x, q.y, u, fl, maxf(CAVE_SECTION_FLOOR,
+				b.radius * (0.8 + rng.unit() * 0.4)), hl)
+	m.caves.append(b)
+
+
 ## Le caractere de la masse : lisse ou decoupee.
 ##
 ## -- Un seul tirage pour deux amplitudes, et c'est le point -------------------
@@ -386,68 +481,99 @@ func _add_caves(m: CWMesa, rng: CWRand, field: CWTerrainField) -> void:
 		if not trouve:
 			continue
 
-		# Le plancher est pris **au seuil**, pas a la face : c'est la que la
-		# galerie doit etre de plain-pied avec le terrain.
-		var ground: float = field.sample_column(int(seuil.x), int(seuil.y)).x
-		var floor_y: int = floori(ground) + 1
+		# -- Les deux seuils, et le plancher qui va de l'un a l'autre --------
+		#
+		# La galerie **traverse** depuis le 2026-09-09. Sa seconde bouche se
+		# cherche exactement comme la premiere — huit directions essayees, la
+		# premiere qui debouche est gardee — a ceci pres qu'on part de l'oppose
+		# de la premiere, pour que le tube coupe la masse au lieu de la raser.
+		var sortie := Vector2(-dir.x, -dir.y)
+		var essai2: int = 0
+		var theta2: float = theta + PI
+		while essai2 < 8:
+			if _debouche(m, sortie, field):
+				break
+			essai2 += 1
+			theta2 += TAU / 8.0
+			sortie = Vector2(cos(theta2), sin(theta2))
+		if essai2 >= 8:
+			continue
+		var seuil2: Vector2 = _seuil(m, sortie)
+
+		# Le plancher est pris **aux seuils**, pas aux faces : c'est la que la
+		# galerie doit etre de plain-pied avec le terrain, et il y en a deux.
+		var sol_a: float = field.sample_column(int(seuil.x), int(seuil.y)).x
+		var sol_b: float = field.sample_column(int(seuil2.x), int(seuil2.y)).x
+		var floor_a: float = floorf(sol_a) + 1.0
+		var floor_b: float = floorf(sol_b) + 1.0
 		var head: int = m.thickness(int(face.x), int(face.y)) - 1
 		if head < CAVE_HEADROOM_MIN:
 			continue
-		var a: Vector2 = seuil
 
 		var c := CWMesa.Cave.new()
 		c.radius = float(CAVE_RADIUS_MIN + rng.mod(CAVE_RADIUS_SPAN))
 		c.flare = 1.7 + rng.unit() * 0.6
-		c.floor_y = floor_y
-		# Le tirage se fait **ici**, a sa place dans le flux : la hauteur, elle,
-		# ne se decide qu'une fois l'axe connu (voir plus bas). Deplacer le
-		# tirage changerait tous les mondes deja explores.
 		var h_tire: int = CAVE_HEIGHT_MIN + rng.mod(CAVE_HEIGHT_SPAN)
-		c.height = mini(h_tire, head)
 
-		# L'axe brise : on avance vers l'interieur et on derive lateralement a
-		# chaque coude. Le troisieme flottant de chaque point est l'abscisse
-		# curviligne normalisee, dont l'evasement de la bouche se deduit.
-		var bends: int = CAVE_BENDS_MIN + rng.mod(CAVE_BENDS_SPAN)
-		var length: float = m.radius * (CAVE_LEN_MIN
-				+ rng.unit() * CAVE_LEN_SPAN)
-		var step: float = length / float(bends)
-		var lat := Vector2(-dir.y, dir.x)
-		var p: Vector2 = a
-		var d: Vector2 = -dir
-		c.axis.append(p.x)
-		c.axis.append(p.y)
-		c.axis.append(0.0)
-		for k in bends:
+		# -- L'axe : de seuil a seuil2, en passant par le milieu -------------
+		#
+		# Les coudes s'ecartent lateralement de la corde qui joint les deux
+		# bouches. On ne tire donc plus une longueur : elle est celle de la
+		# corde, et c'est ce qui fait que la galerie **ressort**.
+		var bends: int = CAVE_BENDS_MIN + rng.mod(CAVE_BENDS_SPAN) + 1
+		var lat: Vector2 = (seuil2 - seuil).orthogonal().normalized()
+		var pts: Array[Vector2] = [seuil]
+		for k in range(1, bends):
+			var u: float = float(k) / float(bends)
+			# L'ecart s'annule aux deux bouts : une bouche doit rester ou le
+			# terrain a dit qu'elle etait.
+			var enveloppe: float = sin(u * PI)
 			var swing: float = (rng.unit() - 0.5) * 2.0 * CAVE_BEND_SWING
-			d = (d + lat * swing).normalized()
-			lat = Vector2(-d.y, d.x)
-			p += d * step
-			c.axis.append(p.x)
-			c.axis.append(p.y)
-			c.axis.append(float(k + 1) / float(bends))
+			pts.append(seuil.lerp(seuil2, u)
+					+ lat * swing * enveloppe * (seuil2 - seuil).length() * 0.5)
+		pts.append(seuil2)
+
+		# Puis la section, point par point, avec ses deux planchers.
+		var pire_r: float = INF
+		var pire_h: float = INF
+		for k in pts.size():
+			var u: float = float(k) / float(pts.size() - 1)
+			var r: float = maxf(CAVE_SECTION_FLOOR, c.radius
+					* (1.0 + (rng.unit() - 0.5) * 2.0 * CAVE_SECTION_SWING))
+			var hl: float = maxf(CAVE_CLEARANCE_FLOOR, float(h_tire)
+					* (1.0 + (rng.unit() - 0.5) * 2.0 * CAVE_CLEARANCE_SWING))
+			pire_r = minf(pire_r, r)
+			pire_h = minf(pire_h, hl)
+			c.push(pts[k].x, pts[k].y, u, lerpf(floor_a, floor_b, u), r, hl)
 
 		# -- Le plafond doit tenir **sur tout l'axe**, pas seulement a la face --
 		#
 		# La hauteur libre etait prise a la **face**, une seule colonne. Mais
-		# l'axe est une ligne brisee qui derive lateralement : il traverse des
-		# colonnes ou la masse est plus mince que la, et le plafond y sortait par
-		# le dessus — un trou dans le sol vu d'en haut. Le defaut existait avant
-		# le tirage du caractere par massif (2026-09-09) ; celui-ci l'a
-		# simplement rendu visible en donnant des masses plus decoupees.
+		# l'axe traverse des colonnes ou la masse est plus mince, et le plafond
+		# y sortait par le dessus — un trou dans le sol vu d'en haut. On rabat
+		# donc chaque point sur l'epaisseur de **sa** colonne, ce qui est plus
+		# juste que rabattre toute la galerie sur la pire : une galerie qui
+		# s'ecrase sous un col et se rouvre apres reste une galerie.
 		#
-		# On rabat donc la hauteur sur la **plus mince** des colonnes traversees.
-		# Le plancher etant celui du seuil et non celui du lieu, la contrainte se
-		# mesure en altitude absolue.
-		var libre: int = h_tire
-		for k in range(1, c.axis.size() / 3):
-			var qx: int = int(c.axis[k * 3])
-			var qz: int = int(c.axis[k * 3 + 1])
-			var sommet: int = floori(field.sample_column(qx, qz).x) 					+ m.thickness(qx, qz)
-			libre = mini(libre, sommet - c.floor_y + 1)
-		c.height = mini(c.height, libre)
+		# **Les deux bouches sont exclues**, et c'est la meme raison qui fait que
+		# la verification du plafond les exclut deja : une bouche est *au seuil*
+		# de la masse, la ou celle-ci n'a par definition aucune epaisseur. Les y
+		# soumettre rejetait toutes les galeries du monde.
+		var praticable: bool = true
+		for k in range(1, pts.size() - 1):
+			var qx: int = int(pts[k].x)
+			var qz: int = int(pts[k].y)
+			var sommet: int = floori(field.sample_column(qx, qz).x) \
+					+ m.thickness(qx, qz)
+			var libre: float = float(sommet) - c.floor_at(k) + 1.0
+			if libre < c.clearance_at(k):
+				c.axis[k * CWMesa.Cave.STRIDE + 5] = libre
+			if c.clearance_at(k) < CAVE_CLEARANCE_FLOOR:
+				praticable = false
+				break
 		# Une galerie qu'on ne traverse pas debout n'en est pas une : plutot
 		# aucune grotte de ce cote-la qu'un boyau ecrase.
-		if c.height < CAVE_HEIGHT_MIN:
+		if not praticable:
 			continue
 		m.caves.append(c)
+		_ajoute_embranchement(m, c, pts, rng, field)

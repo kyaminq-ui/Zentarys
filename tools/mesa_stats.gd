@@ -116,6 +116,44 @@ func _init() -> void:
 		bb.sort()
 		print("pente bornee de %.2f a %.2f bloc/bloc (mediane %.2f)"
 				% [bb[0], bb[bb.size() - 1], bb[bb.size() / 2]])
+
+	# Les galeries (2026-09-09) : traversantes, a section variable, avec ou sans
+	# embranchement. Ce que la suite de tests mesure sur **une** masse, cet outil
+	# le mesure sur toutes celles qu'on a croisees.
+	var galeries: int = 0
+	var branches: int = 0
+	var avec_branche: int = 0
+	var longueurs: Array = []
+	var sections: Array = []
+	for m in mesas_seen.keys():
+		var b_ici: int = 0
+		for c in m.caves:
+			if c.branch:
+				branches += 1
+				b_ici += 1
+				continue
+			galeries += 1
+			var l: float = 0.0
+			var rmin: float = INF
+			var rmax: float = 0.0
+			for k in c.points():
+				rmin = minf(rmin, c.radius_at(k))
+				rmax = maxf(rmax, c.radius_at(k))
+				if k > 0:
+					l += c.point_at(k).distance_to(c.point_at(k - 1))
+			longueurs.append(l)
+			sections.append(rmax / maxf(0.1, rmin))
+		if b_ici > 0:
+			avec_branche += 1
+	if galeries > 0:
+		longueurs.sort()
+		sections.sort()
+		print("galeries %d, embranchements %d sur %d massifs (%.0f %% des galeries en portent)"
+				% [galeries, branches, mesas_seen.size(),
+				100.0 * float(branches) / float(galeries)])
+		print("longueur mediane %.0f blocs, rapport de section median %.2f"
+				% [longueurs[longueurs.size() / 2],
+				sections[sections.size() / 2]])
 	var line: String = "pentes  "
 	for b in 12:
 		line += " %.1f:%4.1f%%" % [b * 0.1, 100.0 * slopes[b] / maxi(n_land, 1)]

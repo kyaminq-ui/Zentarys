@@ -3134,6 +3134,69 @@ existait depuis le 2026-09-07 et passait : il a fallu des masses plus decoupees
 pour la mettre en defaut, ce qui est exactement le service qu'on attend d'un
 test qu'on ne touche pas.
 
+### 7octies.3 « Deux bouches en entonnoir, et un creusement plus libre » — les grottes
+
+Trois demandes, et la troisieme est celle qui coute.
+
+**La galerie traverse.** Elle avait une entree evasee et un fond ferme ; elle a
+maintenant **deux bouches**, choisies l'une et l'autre par la regle des huit
+directions qui garantissait deja qu'on debouche a l'air libre — la seconde
+partant de l'oppose de la premiere, pour que le tube coupe la masse au lieu de
+la raser. L'evasement s'applique aux deux bouts : *un tube evase d'un seul cote
+a une entree et une fissure.* Le porche aussi, sans quoi la sortie ne se verrait
+pas de l'exterieur alors qu'on entrera par elle une fois sur deux.
+
+> **Ce que traverser a force a changer, et qui n'etait pas prevu : le plancher
+> ne peut plus etre un nombre.** Les deux bouches sont a des altitudes
+> differentes, et la promesse « de plain-pied a l'entree » vaut aux **deux**
+> entrees. Le plancher est donc porte par l'axe, point par point, et il
+> interpole d'un seuil a l'autre. Une consequence gratuite : la galerie a une
+> **pente**, ce qui est la moitie de « le plafond monte et descend ».
+
+**Le creusement est plus libre.** L'axe ne tire plus une longueur : il joint les
+deux seuils, et ses coudes s'ecartent de la corde sous une enveloppe en sinus
+qui s'annule aux deux bouts — une bouche doit rester la ou le terrain a dit
+qu'elle etait. Le rayon et la hauteur libre sont tires **par point** et
+interpoles le long de chaque segment, donc la galerie se resserre et s'ouvre.
+Et 37 % des galeries portent un **embranchement** court, marque `branch` : il ne
+debouche pas et n'a pas a le faire — on y accede par la galerie qui le porte, ce
+qui le dispense de la verification d'acces et du porche.
+
+**Sans cesser d'etre praticable, et c'est la contrainte qui coute.** Une section
+variable peut se pincer jusqu'a boucher la galerie, et *une grotte bouchee au
+milieu est pire qu'une grotte droite : on y entre, on marche, et on se cogne.*
+Trois garde-fous, a deux etages :
+
+* **au placement**, deux planchers absolus — `CAVE_SECTION_FLOOR` a trois blocs
+  de rayon, `CAVE_CLEARANCE_FLOOR` a quatre blocs de haut — sous lesquels aucun
+  point de l'axe ne descend ;
+* **au placement encore**, le rabattement du plafond sur l'epaisseur de **chaque**
+  colonne traversee, et non de la pire : une galerie qui s'ecrase sous un col et
+  se rouvre apres reste une galerie ;
+* **a la verification**, un parcours de l'axe d'un bout a l'autre qui exige a
+  chaque point une section, une hauteur libre, et un **plancher sans marche** —
+  une galerie qui monte de six blocs d'un point au suivant ne se parcourt pas
+  plus qu'un mur. C'est le pendant de la verification d'acces, qui ne regardait
+  que l'entree ; les planchers bornent la geometrie posee, pas ce que le
+  generateur ecrit, qui est l'intersection du tube et de la masse.
+
+> **Le piege, et il a coute la premiere execution.** Le controle de praticabilite
+> appliquait ses planchers a **tous** les points de l'axe, bouches comprises — et
+> il a rejete toutes les galeries du monde. Une bouche est *au seuil* de la
+> masse, c'est-a-dire exactement la ou celle-ci n'a par definition aucune
+> epaisseur. La verification du plafond excluait deja les bouches pour cette
+> raison, depuis le 2026-09-07 ; il a fallu la relire pour comprendre pourquoi.
+
+**Ce que ca rend, mesure** (`tools/mesa_stats.gd`, 99 massifs) :
+
+| | avant | apres |
+|---|---|---|
+| galeries | culs-de-sac | **75 traversantes** |
+| bouches par galerie | 1 | **2** |
+| longueur mediane | ~87 blocs | **171 blocs** |
+| rapport de section (large / etroit) | 1,00 — un tuyau | **1,94** |
+| embranchements | aucun | **28**, sur 37 % des galeries |
+
 ---
 
 ## 8. Assets voxels

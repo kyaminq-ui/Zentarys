@@ -158,33 +158,91 @@ const PORCH_LIFT: int = 7
 const PORCH_REACH: float = 2.6
 
 
-## Une grotte : un **tube brise** qui s'enfonce dans la masse.
+## Une grotte : un **tube brise et traversant** qui perce la masse de part en
+## part.
 ##
-## -- Trois choses qui la definissent -----------------------------------------
+## -- Ce qui la definit -------------------------------------------------------
 ##
-##   * **son plancher est l'altitude du sol a son entree**, relevee au placement.
-##     C'est ce qui rend la grotte accessible par construction : a l'entree, le
-##     tube est de plain-pied avec le terrain. On n'a jamais a creuser pour
-##     entrer, et ce n'est pas un reglage, c'est une consequence ;
-##   * **son axe est une ligne brisee**, pas un segment. Trois a cinq points qui
-##     s'ecartent lateralement : la galerie tourne, et on ne voit pas le fond
-##     depuis l'entree ;
-##   * **elle s'evase a l'entree** (`flare`). Une bouche deux fois plus large que
-##     la galerie se voit de loin ; un tube de rayon constant se confond avec une
-##     ombre.
+##   * **elle traverse** (2026-09-09). Deux bouches, choisies l'une et l'autre
+##     par la regle des huit directions qui garantit deja qu'on debouche a l'air
+##     libre, et evasees toutes les deux. On entre d'un cote et on ressort de
+##     l'autre ; la version precedente s'arretait sur un cul-de-sac ;
+##   * **son plancher suit le terrain**. Il ne peut plus etre un seul nombre :
+##     les deux bouches sont a des altitudes differentes, et la promesse « de
+##     plain-pied a l'entree » vaut aux **deux** entrees. Le plancher est donc
+##     porte par l'axe, point par point, et il interpole entre les deux seuils.
+##     C'est aussi ce qui donne a la galerie sa pente ;
+##   * **son axe est une ligne brisee**, pas un segment : la galerie tourne, et
+##     on ne voit pas d'un bout a l'autre depuis une bouche ;
+##   * **sa section respire** (2026-09-09) : le rayon et la hauteur libre varient
+##     d'un point de l'axe au suivant, donc la galerie se resserre et s'ouvre.
+##     Jamais sous les deux planchers de `CWMesaGrid` : une section variable qui
+##     se pince jusqu'a boucher la galerie n'est pas une grotte, c'est un mur ;
+##   * **elle peut porter un embranchement court** : un tube marque `branch`, qui
+##     part d'un point de l'axe principal et s'arrete dans la masse. Il ne
+##     debouche pas, et il n'a pas a le faire — on y accede par la galerie.
+##
+## -- La garantie de praticabilite --------------------------------------------
+##
+## Les deux planchers ne suffisent pas a eux seuls : ils bornent la geometrie au
+## **placement**, pas ce que le generateur finit par ecrire, qui est
+## l'intersection du tube et de la masse. C'est `tests/relief_test.gd` qui
+## parcourt l'axe d'un bout a l'autre et exige un passage libre a chaque point —
+## le pendant de la verification d'acces, qui ne regardait que l'entree.
 class Cave extends RefCounted:
-	## Les points de l'axe, trois flottants par point : x, z, et la distance
-	## parcourue depuis l'entree, normalisee dans [0, 1].
+	## L'axe, **six flottants par point** : x, z, l'abscisse curviligne
+	## normalisee, le plancher en blocs, le rayon, et la hauteur libre.
+	##
+	## Les quatre dernieres valeurs sont interpolees le long de chaque segment :
+	## c'est ce qui fait que la galerie monte, descend, se resserre et s'ouvre
+	## sans marche d'un point de l'axe au suivant.
+	const STRIDE: int = 6
+
 	var axis: PackedFloat32Array = PackedFloat32Array()
+	## Rayon nominal — le rayon des points de l'axe s'en ecarte, et c'est lui qui
+	## sert de reference aux mesures et au porche.
 	var radius: float = 6.0
-	## Elargissement a l'entree, en multiples du rayon.
+	## Elargissement aux bouches, en multiples du rayon.
 	var flare: float = 1.9
-	var floor_y: int = 0
-	var height: int = 6
+	## Un embranchement ne debouche pas : il s'arrete dans la masse, et on y
+	## accede par la galerie qui le porte.
+	var branch: bool = false
+
+	func points() -> int:
+		@warning_ignore("integer_division")
+		var n: int = axis.size() / STRIDE
+		return n
 
 	## Entree du tube, en coordonnees monde.
 	func mouth() -> Vector2:
 		return Vector2(axis[0], axis[1])
+
+	## **Sortie** du tube. Pour un embranchement, c'est son fond : il n'a qu'une
+	## bouche, et l'appelant qui pose un porche doit le savoir.
+	func mouth_out() -> Vector2:
+		var k: int = (points() - 1) * STRIDE
+		return Vector2(axis[k], axis[k + 1])
+
+	func point_at(i: int) -> Vector2:
+		return Vector2(axis[i * STRIDE], axis[i * STRIDE + 1])
+
+	func floor_at(i: int) -> float:
+		return axis[i * STRIDE + 3]
+
+	func radius_at(i: int) -> float:
+		return axis[i * STRIDE + 4]
+
+	func clearance_at(i: int) -> float:
+		return axis[i * STRIDE + 5]
+
+	func push(px: float, pz: float, s: float, fl: float, r: float,
+			h: float) -> void:
+		axis.append(px)
+		axis.append(pz)
+		axis.append(s)
+		axis.append(fl)
+		axis.append(r)
+		axis.append(h)
 
 
 var x: float = 0.0
@@ -309,13 +367,20 @@ func porch(cx: int, cz: int) -> int:
 		return 0
 	var best: float = 0.0
 	for c in caves:
-		var m: Vector2 = c.mouth()
-		var r: float = c.radius * PORCH_REACH
-		var d: float = Vector2(float(cx) - m.x, float(cz) - m.y).length()
-		if d >= r:
-			continue
-		var t: float = 1.0 - d / r
-		best = maxf(best, t * t * (3.0 - 2.0 * t))
+		# **Les deux bouches** depuis que la galerie traverse : une sortie sans
+		# porche ne se voit pas de l'exterieur, et c'est par elle qu'on entrera
+		# une fois sur deux. Un embranchement n'en a pas — son fond est dans la
+		# masse.
+		var bouches: Array[Vector2] = [c.mouth()]
+		if not c.branch:
+			bouches.append(c.mouth_out())
+		for m in bouches:
+			var r: float = c.radius * PORCH_REACH
+			var d: float = Vector2(float(cx) - m.x, float(cz) - m.y).length()
+			if d >= r:
+				continue
+			var t: float = 1.0 - d / r
+			best = maxf(best, t * t * (3.0 - 2.0 * t))
 	return int(best * float(ROOT_DEPTH + PORCH_LIFT))
 
 
@@ -325,43 +390,68 @@ func cave(cx: int, cz: int) -> Vector2i:
 		return Vector2i(1, 0)
 	var fx: float = float(cx)
 	var fz: float = float(cz)
+	var lo: int = 1
+	var hi: int = 0
 	for c in caves:
-		var hit: Vector2 = _tube(c, fx, fz)
+		# Le tube rend desormais son plancher et sa hauteur au point, tous deux
+		# interpoles le long du segment : c'est ce qui fait monter et descendre
+		# le plafond sans marche.
+		var hit: Vector3 = _tube(c, fx, fz)
 		if hit.x < 0.0:
 			continue
-		# La galerie s'evase vers l'entree, et son plafond monte avec elle : une
+		var fl: int = floori(hit.y)
+		# La galerie s'evase aux bouches, et son plafond monte avec elles : une
 		# bouche large et basse ne se lit pas comme une entree.
-		var extra: int = int(float(c.height) * 0.5 * hit.y)
-		return Vector2i(c.floor_y, c.floor_y + c.height - 1 + extra)
-	return Vector2i(1, 0)
+		var top: int = fl + maxi(1, floori(hit.z)) - 1 \
+				+ int(hit.x * 0.5 * hit.z)
+		# **On reunit** au lieu de rendre le premier trouve : depuis qu'une
+		# galerie porte des embranchements, deux tubes de la meme masse se
+		# croisent, et rendre le premier couperait le second au croisement.
+		if lo > hi:
+			lo = fl
+			hi = top
+		else:
+			lo = mini(lo, fl)
+			hi = maxi(hi, top)
+	return Vector2i(lo, hi)
 
 
-## Distance a l'axe brise, rapportee au rayon local. Rend `Vector2(-1, 0)` hors
-## du tube, sinon `(1, part d'evasement)` — cette seconde valeur vaut 1 a
-## l'entree et 0 des le premier tiers de la galerie.
-func _tube(c: Cave, px: float, pz: float) -> Vector2:
-	var n: int = c.axis.size() / 3 - 1
+## Le tube au point donne. Rend `Vector3(-1, 0, 0)` hors du tube, sinon
+## `(part d'evasement, plancher, hauteur libre)` — les deux dernieres interpolees
+## le long du segment touche.
+##
+## L'evasement vaut 1 a une bouche et 0 des le premier tiers de la galerie. Il
+## est pris **aux deux bouts** depuis que la galerie traverse : un tube evase
+## d'un seul cote a une entree et une fissure.
+func _tube(c: Cave, px: float, pz: float) -> Vector3:
+	var n: int = c.points() - 1
 	for i in n:
-		var ax: float = c.axis[i * 3]
-		var az: float = c.axis[i * 3 + 1]
-		var at: float = c.axis[i * 3 + 2]
-		var bx: float = c.axis[(i + 1) * 3]
-		var bz: float = c.axis[(i + 1) * 3 + 1]
-		var bt: float = c.axis[(i + 1) * 3 + 2]
-		var vx: float = bx - ax
-		var vz: float = bz - az
+		var k: int = i * Cave.STRIDE
+		var l: int = k + Cave.STRIDE
+		var ax: float = c.axis[k]
+		var az: float = c.axis[k + 1]
+		var vx: float = c.axis[l] - ax
+		var vz: float = c.axis[l + 1] - az
 		var len2: float = vx * vx + vz * vz
 		var t: float = 0.0
 		if len2 > 0.0:
 			t = clampf(((px - ax) * vx + (pz - az) * vz) / len2, 0.0, 1.0)
 		var dx: float = px - (ax + vx * t)
 		var dz: float = pz - (az + vz * t)
-		var s: float = at + (bt - at) * t
+		var s: float = c.axis[k + 2] + (c.axis[l + 2] - c.axis[k + 2]) * t
+		# Les deux bouches. Un embranchement n'en a qu'une : son fond est dans
+		# la masse, et l'evaser y creuserait une bulle sans raison.
 		var evase: float = maxf(0.0, 1.0 - s * 3.0)
-		var r: float = c.radius * (1.0 + (c.flare - 1.0) * evase)
-		if dx * dx + dz * dz <= r * r:
-			return Vector2(1.0, evase)
-	return Vector2(-1.0, 0.0)
+		if not c.branch:
+			evase = maxf(evase, maxf(0.0, 1.0 - (1.0 - s) * 3.0))
+		var rl: float = c.axis[k + 4] + (c.axis[l + 4] - c.axis[k + 4]) * t
+		var r: float = rl * (1.0 + (c.flare - 1.0) * evase)
+		if dx * dx + dz * dz > r * r:
+			continue
+		var fl: float = c.axis[k + 3] + (c.axis[l + 3] - c.axis[k + 3]) * t
+		var hl: float = c.axis[k + 5] + (c.axis[l + 5] - c.axis[k + 5]) * t
+		return Vector3(evase, fl, hl)
+	return Vector3(-1.0, 0.0, 0.0)
 
 
 func _to_string() -> String:
