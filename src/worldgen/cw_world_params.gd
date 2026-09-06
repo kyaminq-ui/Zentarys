@@ -80,6 +80,26 @@ const OFFSET_COUNT: int = 32
 ## champ : les éléments ne s'appliquent qu'en fin de chaîne.
 @export var tile_features: bool = true
 
+## Active la couche de **surplombs** (jalon 1.15) : mesas, parois taillees,
+## abris sous roche et grottes.
+##
+## Bascule conservee pour la meme raison que `tile_features` : comparer un meme
+## monde avec et sans, et isoler une regression. La desactiver ne change rien au
+## champ d'altitude — cette couche est posee au-dessus de lui, jamais dedans.
+@export var overhangs: bool = true
+
+## Active le **reseau de chemins** (jalon 1.16) et ses ponts.
+@export var road_network: bool = true
+
+## Active la **roche de pente** (la falaise, jalon 1.15).
+##
+## Ce n'est pas qu'une regle de couleur : la pente se mesure par difference
+## avant, donc l'empreinte echantillonnee par bloc gagne une colonne sur chaque
+## axe — **+12,9 %** d'echantillonnage, le poste dominant du chargement. C'est
+## la seule des trois bascules qui coute quelque chose quand elle est vraie et
+## qu'on ne regarde rien.
+@export var cliff_slope: bool = true
+
 ## Contribution du mélange « marais » au champ de chenaux.
 ## L'accumulateur de `World_waterProximityInfluence` est perdu dans la
 ## décompilation (valeur de retour en xmm0) : on connaît sa structure, pas le

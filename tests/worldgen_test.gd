@@ -26,6 +26,7 @@ func _initialize() -> void:
 	_test_terrain_field()
 	_test_tile_features()
 	_test_generator()
+	_test_relief()
 	_test_decor()
 	_test_flora()
 	_test_trees()
@@ -381,6 +382,12 @@ func _test_tile_features() -> void:
 	CWTileFeaturesTest.new().run(self)
 
 
+## Les trois couches posees au-dessus du champ : surplombs, grottes, chemins,
+## et le tramage des matieres qui les accompagne (jalons 1.15 et 1.16).
+func _test_relief() -> void:
+	CWReliefTest.new().run(self)
+
+
 func _test_decor() -> void:
 	CWDecorTest.new().run(self)
 
@@ -418,6 +425,16 @@ func _test_generator() -> void:
 	buf.create(16, 16, 16)
 	var ground: int = roundi(g.field().sample_column(p.world_origin.x, p.world_origin.y).x)
 	var oy: int = (ground / 16) * 16
+
+	# Les couches paresseuses posees **au-dessus** du champ — surplombs (1.15) et
+	# reseau de chemins (1.16) — se construisent au premier acces et coutent
+	# quelques centaines de millisecondes par zone. Ce qui suit mesure le cache
+	# de colonnes, pas ces constructions : on les provoque d'abord, aux deux
+	# endroits mesures. `generated_voxel` est le bon outil, c'est le seul chemin
+	# qui traverse toutes les couches **sans** toucher au cache de cartes de
+	# hauteurs.
+	g.generated_voxel(0, ground, 0)
+	g.generated_voxel(4096, ground, 4096)
 
 	# Premier bloc d'une colonne : plein tarif.
 	var t0: int = Time.get_ticks_usec()

@@ -149,6 +149,86 @@ static func at(height: float, temperature: float, humidity: float,
 	return GREENLANDS
 
 
+# -- La frontiere entre deux biomes, tramee -----------------------------------
+#
+# `at` compare un climat continu a des seuils : sa frontiere est donc une
+# **courbe de niveau du champ de climat**, et le sol y change de couleur sur un
+# trait. C'est le meme defaut que le haut de plage et la roche de pente avant le
+# 2026-09-07, et c'est celui qui se voit le plus : un desert qui rencontre une
+# prairie est la plus grande frontiere de matiere du monde.
+#
+# On brouille donc le climat d'un bruit **avant** de le comparer aux seuils. La
+# frontiere devient une bande d'une trentaine de blocs ou les deux matieres
+# s'interpenetrent — un ecotone —, et elle suit les memes plaques que les autres
+# transitions du projet.
+#
+# **Deux precautions.**
+#
+#   * *le biome tramé ne sert qu'a la matiere du sol.* Le biome **nommé** — celui
+#     qui choisit ce qui pousse, ce qui apparait, ce que l'ATH affiche et ce que
+#     la carte teinte — reste celui de `at`, sans quoi une prairie ferait pousser
+#     un cactus tous les vingt blocs le long de son desert. En frange, une touffe
+#     d'herbe se tient donc sur une plaque de sable : c'est exactement ce qu'on
+#     voit au bord d'un desert ;
+#   * *la sortie rapide n'est pas une optimisation cosmetique.* Loin de toute
+#     frontiere — la quasi-totalite du monde — le tramage ne peut rien changer,
+#     et la fonction sort avant d'echantillonner quoi que ce soit. Sans elle, ce
+#     seraient quatre bruits par colonne sur tout le monde.
+
+## Amplitude du brouillage, en unites de climat. Comparees aux seuils : a 0,05
+## sur la temperature, la frange fait environ un dixieme de la largeur d'une
+## bande climatique.
+const DITHER_T: float = 0.07
+const DITHER_H: float = 0.09
+
+## Les deux frequences du tramage. Plus lentes que celles de `CWPalette` : une
+## frange de biome se compte en dizaines de blocs, pas en unites — a la maille
+## du bloc, elle se lirait comme du bruit et non comme une frontiere.
+const DITHER_FREQ_FINE: float = 0.10
+const DITHER_FREQ_LARGE: float = 0.02
+const DITHER_WEIGHT_LARGE: float = 0.55
+const DITHER_OFFSET_X: float = 30011.0
+const DITHER_OFFSET_Z: float = 61403.0
+
+
+## Le biome qui decide de la **matiere du sol** : meme regle que `at`, seuils
+## trames. Voir la note ci-dessus.
+static func at_dithered(height: float, temperature: float, humidity: float,
+		sea_level: int, x: int, z: int) -> int:
+	if not _near_edge(temperature, humidity):
+		return at(height, temperature, humidity, sea_level)
+	# Deux champs decorreles pour le prix d'un jeu de constantes : le second lit
+	# le meme bruit avec les coordonnees echangees et decalees, ce qui suffit a
+	# rendre les deux independants sans introduire une seconde graine a tenir.
+	var nt: float = _blotch(x, z)
+	var nh: float = _blotch(z + 7919, x + 3271)
+	return at(height, temperature + nt * DITHER_T,
+			humidity + nh * DITHER_H, sea_level)
+
+
+## Vrai si le climat de la colonne est assez pres d'un seuil pour que le
+## brouillage puisse changer sa reponse.
+static func _near_edge(t: float, h: float) -> bool:
+	if absf(t - SNOW_T) < DITHER_T or absf(t - JUNGLE_T) < DITHER_T \
+			or absf(t - DESERT_T) < DITHER_T or absf(t - LAVA_T) < DITHER_T:
+		return true
+	return absf(h - JUNGLE_H) < DITHER_H or absf(h - DESERT_H) < DITHER_H
+
+
+## Bruit a deux frequences, dans [-1, 1]. Meme construction que
+## `CWPalette.blend_threshold` — c'est la seconde frequence qui fait les
+## plaques — a une echelle trois fois plus grande.
+static func _blotch(x: int, z: int) -> float:
+	var fine: float = CWValueNoise.sample(
+			float(x) * DITHER_FREQ_FINE + DITHER_OFFSET_X,
+			float(z) * DITHER_FREQ_FINE + DITHER_OFFSET_Z)
+	var large: float = CWValueNoise.sample(
+			float(x) * DITHER_FREQ_LARGE + DITHER_OFFSET_Z,
+			float(z) * DITHER_FREQ_LARGE + DITHER_OFFSET_X)
+	return clampf(fine * (1.0 - DITHER_WEIGHT_LARGE)
+			+ large * DITHER_WEIGHT_LARGE, -1.0, 1.0)
+
+
 ## Nom lisible, pour l'ATH, la carte et les outils.
 static func name_of(biome: int) -> String:
 	match biome:

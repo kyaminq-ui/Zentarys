@@ -51,14 +51,41 @@ se cartographie, se boise et **porte ses lacs** :
   `World_generateWaterOrPathFeature` **ne fait ni eau ni chemin**, c'est le
   douzième nom trompeur, et l'élément de tuile 12 n'est donc pas un plan d'eau.
 
-**Le jalon 1 est clos.**
+- **1.15**, les **massifs**, leurs **grottes**, et la falaise qui revient — une
+  seconde nappe de matière posée par-dessus le champ d'altitude. **Fait le
+  2026-09-07**, et sa forme refaite le lendemain : les mesas à chapeau plat sont
+  devenues des masses arrondies qu'on peut gravir ;
+- **1.16**, les **chemins** et leurs **ponts** — le réseau qui relie les jalons
+  d'une zone, posé en dernier, qui tranche la colonne, perce les surplombs et
+  jette un tablier sur les rivières. **Fait le 2026-09-07**.
+
+**Le jalon 1 a été clos le 2026-09-06 et rouvert le lendemain**, pour trois
+systèmes demandés en regardant le jeu d'origine à côté du nôtre. Ils ont ceci de
+commun qu'aucun n'est dans la source, et la charte demande de le dire : ce sont
+des **créations de ce projet**, écrites pour rapprocher le paysage de ce que
+montrent les captures. C'est la deuxième fois — après les provinces climatiques
+du 1.12bis — que ce dépôt ajoute une couche que l'analyse n'a pas trouvée, et
+c'est la première où il en ajoute trois d'un coup.
+
+> **Ce que 1.15 répare, c'est le diagnostic de 1.13.** *Une falaise ne se peint
+> pas, elle se taille*, disait le compte rendu du retrait, et il ajoutait à
+> quelle condition elle pourrait revenir : « il faudrait que le champ
+> d'altitude produise d'abord des parois ». C'est exactement ce que fait la
+> couche de surplombs, et la roche de pente revient avec elle — cette fois
+> **tramée**, ce qui est la seconde moitié de la réponse.
 
 Il reste ensuite la **collision**, objet par objet (`nextsteps.md`, §7bis.3), la
 finition listée en dette technique, et les questions d'analyse pendantes de
-`docs/systems/02`, §9. **Les chemins sortent du périmètre** : la source n'a pas
-de réseau de routes, ce qui confirme la correction du jalon 1.6 ; en faire un
-serait une création de ce projet, à décider comme telle. La porte suivante côté
-entités est **2.6, l'apparition**.
+`docs/systems/02`, §9. La porte suivante côté entités est **2.6, l'apparition**.
+
+> **Correction de périmètre, 2026-09-07.** Cette feuille disait « les chemins
+> sortent du périmètre : la source n'a pas de réseau de routes ». Le constat
+> reste vrai — `World_roadField` est l'aplanissement du bourg, les arêtes du
+> graphe de sites ne sont pas des voies, et l'invariant n° 3 tient. Ce qui
+> change est la conclusion qu'on en tirait : *une chose absente de la source
+> n'est pas hors périmètre, elle est à décider*. Elle a été décidée, et elle est
+> écrite comme une création, signalée comme telle dans l'en-tête de
+> `CWPathNetwork`.
 
 | # | Système | Source analysée | Statut | Note |
 |---|---|---|---|---|
@@ -74,7 +101,9 @@ entités est **2.6, l'apparition**.
 | 1.10 | Carte du monde | `WorldMap.cpp`, `loadLandscapeTile` @006024d0, `NameGen_generateRegionName` | ✅ | pièces de Voronoï, découverte, noms ; `docs/systems/05` |
 | 1.11 | **Arbres et grande végétation** | voie des entités, `docs/systems/02` §5.2 | ✅ | assets, dispersion, montage, et **le tronc écrit dans le terrain** ; reste la pose des filons, qui appartient à 2.6 |
 | 1.12 | **Les six biomes** | climat de 1.3 + biomes de l'alpha 2013 | ✅ | couche `CWBiome` au-dessus des matières, Lava Lands et ses coulées, **42 modèles de flore et 24 d'arbres regénérés** (la flore a été refaite le soir même : 38 modèles, à 4 voxels par bloc et 6 pour les petits props) |
-| 1.13 | **La falaise** | `terrain_surfaceColor_blend` @005c56e0, 5ᵉ branche | ⬜ | **portée puis retirée le 2026-09-06** — peindre la roche ne suffit pas, il faudrait tailler la paroi ; mesures gardées ci-dessous |
+| 1.13 | **La falaise** | `terrain_surfaceColor_blend` @005c56e0, 5ᵉ branche | ✅ | portée puis **retirée** le 2026-09-06, **rétablie le 2026-09-07** une fois le relief taillé par 1.15, et cette fois **tramée** : 2,6 % des terres |
+| 1.15 | **Massifs, grottes, falaise** | — (création de ce projet) | ✅ | masses arrondies et **escaladables**, cœur de roche et frange enherbée, galeries brisées à bouche évasée sous leur porche ; **1,4 % des terres sous un massif** |
+| 1.16 | **Chemins et ponts** | — (création de ce projet) | ✅ | arbre couvrant par zone, portes de frontière partagées, tracé relaxé, chaussée **toujours en contrebas**, tunnels proportionnels à la masse, et un **lot d'ouvrages à 6 voxels par bloc** sur les tabliers |
 | 1.14 | **Les lacs** | `WorldInfo_generateBiomeContent` @005e4850, seconde passe | ✅ | porte = chenaux à 0,02 ; niveau quantifié au pas de 5, rampe triangulaire, berges creusées. **1,90 % des terres en eau, 1,35 % en rive**, profondeur 1 à 4 blocs ; coût sous le bruit de mesure |
 
 ### 1.6 — Éléments de tuile (fait)
@@ -1324,6 +1353,381 @@ le biome que `FAMILIES_SURFACE_BIOME` déclare capable de la garnir. Le jour où
 chaque biome aura son roseau, cette table grandira et la rive suivra sans qu'on
 retouche au code.
 
+### 1.15 — Les surplombs, les grottes, et la falaise qui revient (fait, 2026-09-07)
+
+**Trois choses sortent d'un seul mécanisme**, et c'est ce qui le justifie : la
+paroi verticale que la falaise attendait depuis le 1.13, le surplomb sous lequel
+on marche, et l'abri sous roche qui donne aux grottes une entrée qu'on n'a pas
+à creuser.
+
+#### Une seconde nappe, jamais un terme d'altitude
+
+Le champ du jalon 1.4 est un **champ de hauteurs** : une colonne, une altitude,
+rien au-dessus. C'est ce qui le rend assez bon marché pour le streaming, et
+c'est aussi ce qui lui interdit une paroi — un bruit de valeur à interpolation
+cosinus est lisse par construction, et 1.13 a mesuré son plus grand dénivelé
+d'un bloc au suivant : **0,65 bloc**.
+
+La couche de surplombs ne touche pas à ce champ. `_height_from` est mot pour mot
+ce qu'il était, et le relief du monde n'a pas bougé d'un bloc. Elle **ajoute**
+une seconde nappe de matière, décrite elle aussi par colonne, et composée de
+deux morceaux :
+
+- un **chapeau** plat sur un disque déformé. Son bord est une paroi verticale de
+  8 à 31 blocs : c'est la falaise, et elle est taillée ;
+- un **socle** qui descend sous le terrain au centre et s'arrête net à une
+  fraction du rayon. Entre le bord du socle et celui du chapeau, il n'y a rien :
+  c'est le porte-à-faux, et il va jusqu'à **64 blocs de vide** sur le premier
+  surplomb mesuré près du départ.
+
+> **La recursion n'existe pas ici, et c'est ce qui rend la couche bon marché.**
+> `CWTileFeatureGrid` doit se garder contre elle par trois verrous et une garde
+> de réentrance, parce que ses éléments déforment le champ dont ils lisent
+> l'altitude. Une cellule de surplombs peut échantillonner le terrain
+> librement : rien dans le champ ne la consultera jamais. **Le jour où un terme
+> d'altitude lirait un surplomb, tout l'appareil de 1.6 deviendrait nécessaire.**
+
+#### La forme, refaite le lendemain : un massif, pas une mesa
+
+La première version était un **chapeau plat sur un socle étroit** — une mesa au
+sens propre, sa paroi verticale et son porte-à-faux. Elle a tenu une journée.
+L'objection ne se discute pas : *le joueur doit pouvoir y monter*, et un chapeau
+qui déborde de son socle est fait pour qu'on ne le puisse pas.
+
+La forme est donc devenue un **champ de bosses** — un dôme radial déformé par
+deux bruits, qui retombe à zéro sur son contour :
+
+```
+f(x, z) = (1 − u²) + bruit lent + bruit fin
+dessus  = sol de la colonne + hauteur × max(0, f)²
+```
+
+Trois choses la rendent gravissable, et les trois ont été trouvées en mesurant :
+
+1. **le dessus se mesure depuis le sol de *sa* colonne**, pas depuis celui du
+   centre du massif. Une masse posée sur un flanc qui descend de douze blocs
+   entre son centre et son bord finissait sinon par une **marche de douze
+   blocs** sur tout son contour ;
+2. **le profil est au carré**, `f²` et non `f` : la masse rejoint le sol
+   *tangentiellement*, sa pente s'annule sur son contour au lieu d'y valoir son
+   maximum ;
+3. **les fréquences des deux bruits sont relatives au rayon.** Un bruit à
+   fréquence fixe donne dix lobes à une grosse masse et un demi-lobe à une
+   petite — deux formes qui n'ont rien à voir, et sur la grosse une pente
+   proportionnelle à la hauteur. *Une déformation se règle en nombre de lobes
+   par tour, et ce nombre vaut `2π × rayon × fréquence`.*
+
+**Le contrat est vérifié, pas supposé.** Une vérification balaie un massif en
+croix sur vingt-quatre rayons et relève la plus grande marche : **deux blocs**,
+et deux est le minimum atteignable — le dessus vaut
+`plancher(sol) + plancher(hauteur × f²)`, et chacun des deux termes a le droit
+de changer d'une unité d'une colonne à la suivante.
+
+> **Un massif tout vert est une colline, pas un relief.** La règle de falaise ne
+> peut pas l'aider : elle mesure la pente du *champ d'altitude*, qui ne sait rien
+> de cette couche. On prend donc l'**épaisseur** — la frange, où la masse
+> affleure de deux ou trois blocs, garde l'herbe du pré qu'elle traverse ; le
+> cœur, où elle fait dix blocs et plus, est de la roche nue. C'est un
+> affleurement, et c'est ce qui le fait voir.
+
+Le seul surplomb qui subsiste est le **porche** d'une grotte, et il est là pour
+rendre son entrée visible.
+
+#### Où ils sont : des pays de canyons, et des buttes isolées entre eux
+
+Un tirage uniforme met des mesas partout à la même fréquence, ce que les
+captures du jeu ne montrent pas : on y voit soit une butte seule au milieu d'une
+prairie, soit un canyon où elles se touchent presque. La chance d'une cellule de
+512 unités est donc modulée par un bruit de très basse fréquence — la même idée
+que la crête de placement du décor, à une échelle mille fois plus grande. Le
+monde a des *pays de canyons* de la taille d'une région.
+
+Mesuré sur 36 zones éloignées, graine 1337 :
+
+| | part des terres |
+|---|---|
+| sous un massif | **1,37 %** |
+| dans une grotte | 0,182 % |
+| roche de pente (la falaise) | **2,59 %** |
+
+Rayon médian **73 blocs**, hauteur médiane **32 blocs**. Le porte-à-faux, lui,
+est tombé à zéro et c'est voulu : depuis la refonte du 2026-09-08 une masse
+rejoint le sol tangentiellement, et le seul endroit où de la roche surplombe
+encore du vide est le **porche** d'une grotte.
+
+#### Les grottes : accessibles par construction, pas par réglage
+
+La demande était précise : *pas profondes comme celles de Minecraft, toujours
+accessibles par une falaise ou un surplomb, jamais besoin de creuser*. Elle est
+tenue par la géométrie et non par un seuil.
+
+Une grotte est un **tube brisé** qui s'enfonce dans la masse. Son entrée est
+prise au **seuil** du massif — la dernière colonne où celui-ci n'a aucune
+épaisseur, donc un endroit qui est déjà de l'air —, et **son plancher est
+l'altitude du sol à ce point-là**, relevée au placement. Les deux ensemble font
+qu'on entre de plain-pied dans un trou qui donne sur l'extérieur.
+
+Trois propriétés viennent de la seconde passe, sur trois reproches faits à la
+première :
+
+- **plus profondes** : la galerie fait de 55 à 130 % du rayon du massif, contre
+  un tiers. Mesuré sur la zone de départ : **67 blocs** pour la plus courte ;
+- **plus aléatoires** : l'axe est une ligne brisée de deux à quatre coudes, avec
+  un écart latéral qui va jusqu'à la moitié du segment. On ne voit pas le fond
+  depuis l'entrée ;
+- **plus visibles** : la bouche s'évase — deux fois le rayon de la galerie — et
+  le dessous de la masse se soulève autour d'elle. C'est le **porche**.
+
+Une vérification constate l'accessibilité **sur le monde généré** et non sur la
+règle qui l'a posée : elle part de l'entrée, s'éloigne de vingt-cinq blocs à la
+hauteur du plancher, et exige de l'air tout du long. Elle a attrapé deux
+défauts, et le second n'était pas prévisible :
+
+> **Sortir de la masse ne suffit pas à voir le ciel.** Un massif posé au pied
+> d'un versant a des côtés où le terrain *remonte* dès qu'on le quitte, et une
+> galerie percée de ce côté-là donne sur un talus. On essaie donc **huit
+> directions** et on garde la première qui descend.
+
+#### La falaise, reprise et tramée
+
+Elle revient, et deux choses ont changé depuis son retrait :
+
+- **la roche n'est plus seule.** Une plaque grise sur un flanc vert lisait comme
+  une tache parce qu'elle était le seul accident du paysage ; elle est
+  maintenant la même matière que les parois qui la dominent ;
+- **la frontière est tramée** — c'est la demande, et c'est ce qui manquait le
+  plus. Voir la section suivante.
+
+Un réglage a été refait en capture, et il mérite d'être noté parce qu'il se
+reproduira : **à seuil bas, la roche de pente dessine des courbes de niveau**.
+La pente d'un champ lisse est elle-même un champ lisse, ses valeurs fortes
+forment des rubans qui suivent les lignes de plus grande pente, et une colline
+verte se retrouve cerclée de gris — dans l'axe même des marches d'un bloc que la
+voxelisation dessine déjà. Deux quadrillages superposés, et le paysage se lit
+comme une carte topographique. Le remède n'est pas de tramer plus fin, c'est de
+ne prendre que le haut de la distribution : **au-dessus de 0,34 bloc par bloc,
+une pente n'est plus un ruban, c'est un flanc.**
+
+#### Le dégradé adouci entre deux matières
+
+Jusqu'ici, toute frontière de matière était un seuil, et la ligne entre deux
+matières suivait une courbe de niveau au bloc près. Le jeu d'origine ne fait pas
+ça : sur une capture de plage ou de flanc, les deux matières **s'interpénètrent**
+sur une dizaine de blocs, et l'œil lit un dégradé là où il n'y a pourtant que
+deux couleurs.
+
+C'est un **tramage**, pas un mélange de couleurs : un bloc reste d'une seule
+matière, il se creuse et il porte son décor. Ce qui varie est la proportion, et
+elle est décidée par un bruit à **deux fréquences** — et c'est la seconde qui
+fait le travail. Une seule crête fine rend un poivre-et-sel qui se lit comme du
+bruit de compression ; en lui ajoutant une fréquence lente, on obtient des
+*plaques* : des langues de sable qui remontent une combe, des îlots d'herbe dans
+une plage. Mesuré : **88 % d'accord entre deux colonnes voisines** à
+mi-transition, contre 50 % pour un tirage indépendant.
+
+Quatre frontières l'emploient : le haut de plage, la roche de pente, le bord de
+la chaussée du jalon 1.16 — et la **frontière entre deux biomes**, qui est la
+plus grande de toutes et qu'on a failli oublier.
+
+> **La plus grande frontière de matière du monde n'est pas une bande d'altitude,
+> c'est un désert qui rencontre une prairie.** `CWBiome.at` compare un climat
+> continu à des seuils : sa frontière est donc une *courbe de niveau du champ de
+> climat*, et le sol y changeait de couleur sur un trait. Le tramage s'y applique
+> autrement — on ne trame pas deux matières, on **brouille le climat avant de le
+> comparer aux seuils** —, mais le résultat est le même : une bande d'une
+> trentaine de blocs où les deux s'interpénètrent, un écotone.
+>
+> **Le biome tramé ne sert qu'à la matière du sol.** Le biome *nommé* — celui qui
+> choisit ce qui pousse, ce que l'ATH affiche et ce que la carte teinte — reste
+> celui de `at`, sans quoi une prairie ferait pousser un cactus tous les vingt
+> blocs le long de son désert. En frange, une touffe d'herbe se tient donc sur
+> une plaque de sable : c'est exactement ce qu'on voit au bord d'un désert.
+>
+> Et une sortie rapide qui n'est pas cosmétique : loin de tout seuil — la
+> quasi-totalité du monde — le brouillage ne peut rien changer, et la fonction
+> sort avant d'échantillonner. Sans elle, ce seraient quatre bruits par colonne
+> partout.
+
+#### Plusieurs teintes par matière — la seconde passe
+
+Deux couleurs ne font pas un dégradé au bloc près : elles font un damier. La
+frontière était bien répartie, elle n'était pas *fondue*.
+
+La correction tient à une propriété du rendu qu'on n'avait pas encore
+exploitée : depuis le jalon 1.9, un voxel porte **son type dans `CHANNEL_TYPE` et
+sa couleur dans `CHANNEL_COLOR`**, et le second n'est pas un index de palette
+mais une couleur RVBA libre. *Rien n'oblige deux blocs d'herbe à être de la même
+teinte.* D'où deux nuances, l'une sur l'autre :
+
+- **la teinte de transition** : entre deux matières, la couleur *interpole* en
+  cinq marches pendant que le type, lui, bascule d'un coup. Le sol garde une
+  matière par bloc — il se creuse, il porte son décor — mais l'œil lit un fondu
+  de cinq tons là où il ne voyait qu'un damier de deux ;
+- **la teinte propre** : loin de toute frontière, une prairie prend trois tons de
+  vert au lieu d'un. C'est ce qui empêche une plaine d'être un aplat.
+
+> **Le facteur de fondu est tiré du même bruit que le type**, et ce n'est pas un
+> détail : un bloc qui bascule en sable prend une teinte déjà tirée vers le
+> sable, donc le damier et le dégradé sont **en phase**. Avec deux bruits
+> indépendants, on obtiendrait un fondu correct parsemé de blocs à contre-teinte.
+
+Conséquence sur un contrat ancien : `tests/edit_test.gd` vérifiait que la couleur
+d'un voxel est *exactement* celle de son type. Elle demande désormais qu'elle
+reste une **nuance plausible** de sa matière ; ce qu'elle attrape est le vrai
+défaut, *un sol dont la couleur ne dit plus du tout la matière*.
+
+**Coût.** La pente se mesure par différence avant sur un bloc, donc l'empreinte
+échantillonnée par bloc gagne une colonne sur chaque axe — **+12,9 %**
+d'échantillonnage. C'est le seul poste vraiment cher des deux jalons, et il est
+isolable : `CWWorldParams.cliff_slope`. Le tramage lui-même ne coûte deux
+échantillons de bruit que dans la bande de transition, c'est-à-dire nulle part
+la plupart du temps.
+
+Chargement d'une vue de 384 blocs au démarrage, les bascules mesurées dans la
+même session : **24,1 s les trois éteintes, 28,5 s les trois allumées** — soit
+**+18 %**. La veille, avant les teintes multiples et la refonte des massifs, le
+même écart valait +13 % (22,2 → 25,1 s) : ce que la seconde passe a ajouté est
+un échantillon de bruit par colonne de surface pour la teinte propre, et la
+recherche de direction des grottes.
+
+---
+
+### 1.16 — Les chemins et les ponts (fait, 2026-09-07)
+
+Le réseau qui relie les jalons d'une zone — son bourg, ses donjons, ses
+agglomérations — et qui se raccorde à celui des zones voisines.
+
+**Ce n'est pas dans la source, et c'est dit dans l'en-tête de `CWPathNetwork`.**
+Ce dépôt l'a établi deux fois : `World_roadField` est l'aplanissement du bourg
+et non un champ de routes, et les arêtes du graphe de sites ne sont pas des
+voies (invariant n° 3). Ce qui justifie la couche est ce qu'on voit sur les
+captures du jeu : des sentiers clairs qui montent en lacets le long d'un flanc et
+passent d'un lieu habité à un autre.
+
+#### Trois propriétés qui décident de toute l'architecture
+
+**1. Un chemin se pose en dernier.** Il ne déforme pas le champ : il *tranche*
+la colonne à son altitude, efface ce qui le surplombe de trop près — y compris
+le socle d'un surplomb, d'où les **tunnels** — et jette un tablier au-dessus de
+l'eau. L'ordre complet des recouvrements est désormais : **grotte et chemin
+creusent, le surplomb remplit, l'étang mouille, le terrain porte.**
+
+**2. Un chemin ne sort pas de sa zone.** C'est ce qui rend la couche abordable :
+sinon une colonne devrait consulter le réseau des neuf zones voisines, donc les
+construire toutes. Les zones se raccordent par des **portes** — un point de
+passage sur chaque frontière, calculé à partir de l'identité de la frontière
+elle-même, donc identique des deux côtés sans qu'aucune des deux zones ait
+besoin de lire l'autre. Deux voisines tracent chacune leur moitié.
+
+**3. Le tracé se relaxe, il ne se cherche pas.** Un A* sur une grille de hauteurs
+demanderait des dizaines de milliers d'échantillons de colonne à 75 µs pièce.
+Ici, chaque arête part d'une ligne droite et ses points intérieurs glissent
+perpendiculairement, six fois, vers ce qui monte le moins. Ce n'est pas un
+optimum, c'est un contournement — et c'est tout ce qu'on demande.
+
+#### Chercher un itinéraire et épouser un sol ne sont pas la même échelle
+
+C'est la seule erreur de conception du jalon, et elle s'est vue en capture :
+**des tranchées de seize blocs à paroi verticale**. Avec un seul jalon de tracé
+tous les 192 blocs, l'altitude du chemin entre deux jalons est une **corde** : le
+terrain bombe au milieu, le chemin passe dessous, et la colonne est tranchée de
+tout ce qui les sépare. Mesure : 167 blocs de sol pour un chemin à 151.
+
+Le tracé se fait donc en deux temps, à deux mailles :
+
+1. **l'itinéraire**, tous les 256 blocs, relaxé — chaque point y coûte deux
+   échantillons de colonne par passe, donc la maille est grossière par
+   construction ;
+2. **le profil**, tous les 32 blocs : l'itinéraire est rééchantillonné, chaque
+   point posé sur le sol, l'altitude lissée puis **bornée** à 4 blocs de
+   déblai et 3 de remblai. Le bornage est repris une seconde fois **colonne par
+   colonne**, parce qu'entre deux jalons de profil l'altitude reste une corde —
+   4 colonnes de chaussée sur 340 dépassaient encore, et c'est exactement le
+   genre d'écart qui devient une paroi au milieu d'un chemin. *Le chemin préfère
+   onduler.*
+
+**Au-dessus de l'eau, la référence n'est pas le fond mais la surface**, sans quoi
+le profil plongerait dans chaque rivière et le tablier serait un escalier.
+
+#### La chaussée : toujours en contrebas, et plus large
+
+Deux réglages de la seconde passe, et le premier n'est pas cosmétique : la
+chaussée est **toujours creusée d'au moins un bloc** sous le terrain qui la
+borde. C'est ce qui lui donne son ombre portée et sa berge, donc ce qui la fait
+lire comme un chemin plutôt que comme une bande de gravier peinte. Sur
+l'accotement, la borne se relève avec le raccord, sinon le bord serait une
+marche au lieu d'une pente. La demi-chaussée passe de 3 à **4,5 blocs**.
+
+#### Les tunnels : un dégagement proportionnel, jamais une coupe en deux
+
+Six blocs de dégagement sous quarante blocs de roche est un terrier. Sous un
+massif, le dégagement vaut **55 % de la masse traversée**, avec deux bornes :
+jamais moins que six blocs, et **jamais au point de laisser moins de huit blocs
+de toit**. Sans la seconde, le chemin ne perce plus le massif — il le coupe en
+deux et laisse une tranchée à ciel ouvert là où on attendait une arche.
+
+#### Les ponts, et le lot d'ouvrages
+
+Sur l'eau, pas de tranchée : un **tablier** de bois deux blocs au-dessus de la
+surface libre. Le terrain et l'eau restent ce qu'ils sont et passent dessous.
+C'est la seule manière honnête de traverser une rivière — la combler ferait un
+barrage, et un barrage retient une eau que ce monde ne simule pas.
+
+Mais un tablier de matière est fait de blocs d'un mètre, et un ouvrage d'art fait
+de blocs d'un mètre est une planche posée sur l'eau. Le pont suit donc le
+**partage du jalon 1.11**, celui du tronc et du houppier :
+
+- le **tablier** reste de la matière, un bloc d'épaisseur : c'est le sol sur
+  lequel on marchera, et qu'on pourra abattre ;
+- l'**ouvrage** — platelage, longerons, garde-corps, poteaux et leurs chapeaux —
+  est un modèle à **six voxels par bloc**, la grille la plus fine du projet,
+  instancié par `CWBridgeRenderer` le long du franchissement.
+
+> **Le lacet est libre, et c'est le seul endroit du projet où on l'accepte.** La
+> flore et les arbres se posent au quart de tour, parce que leurs voxels doivent
+> rester alignés sur la grille du monde. Un pont suit une courbe : une travée
+> alignée au quart de tour le plus proche serait de travers une fois sur deux. À
+> six voxels par bloc, un platelage de biais se lit comme un platelage de biais.
+
+Et une erreur de conception que seule la capture pouvait montrer :
+
+> **Le profil d'un chemin ne voit pas les rivières.** Il pose un jalon tous les
+> 32 blocs ; une rivière de ce monde en fait six de large. Elle passe donc entre
+> deux jalons neuf fois sur dix, et le premier relevé des franchissements n'a
+> trouvé **aucun** des ponts qu'on voyait en jeu — la matière du tablier, elle,
+> se décide colonne par colonne et les posait bien. On raffine donc, mais
+> seulement là où il peut y avoir de l'eau : le champ de chenaux est déjà lu à
+> chaque jalon et il est lisse, donc un jalon à trente blocs d'une rivière a déjà
+> une valeur basse. *Un relevé grossier d'une chose fine ne se corrige pas en
+> affinant tout ; il se corrige en affinant là où la chose peut être.*
+
+#### Ce que ça rend, mesuré
+
+Zone du départ, graine 2024 : **2 376 segments** de 32 blocs, 389 cellules
+d'index, réseau construit en **350 ms** — une fois par zone, sur le fil qui la
+demande, les autres attendant. Sur 340 colonnes de chaussée sondées, 14 sont sur
+un pont, aucune ne tranche plus de quatre blocs, toutes ont leur dégagement de
+six blocs libre, et rien n'y pousse.
+
+**La chaussée est en gravier, tramé** dans la matière du lieu sur quatre blocs :
+un chemin qui s'arrêterait sur un trait aurait l'air peint.
+
+#### Ce que les deux dispersions ont dû apprendre
+
+Comme au jalon 1.14 pour le creusement des étangs, et pour la même raison :
+**flore et arbres poussent sur le sol remodelé**, pas sur celui du champ. Trois
+règles s'ajoutent à leur boucle, et chacune répare un défaut qu'on aurait vu en
+jeu :
+
+- **rien ne pousse sur la chaussée** — c'est ce qui la rend lisible de loin ;
+- **l'accotement suit le terrain remodelé**, sinon la première touffe de bord de
+  route flotte ou s'enterre ;
+- **ce qui pousse au-dessus d'un surplomb pousse sur son chapeau**, jamais sur
+  le sol qu'il ensevelit ou qu'il ombrage. Une mesa porte ses arbres sur le dos
+  et son ombre est nue — c'est ce que montrent les captures d'origine.
+
+---
+
 ---
 
 ---
@@ -1398,7 +1802,7 @@ sans valeur tant que les jalons 2 et 3 ne sont pas là.
 
 | Sujet | Statut | Détail |
 |---|---|---|
-| Suite de tests headless | ✅ | 327 vérifications, `tests/worldgen_test.gd` |
+| Suite de tests headless | ✅ | **377 vérifications**, `tests/worldgen_test.gd` |
 | Planche de validation des assets | ✅ | `scenes/model_portraits.tscn` : un modèle par capture, seul, deux angles, plus les arbres **montés** ; 84 sujets en 5,6 s |
 | Gabarit d'échelle en jeu | ✅ | `src/demo/scale_board.gd`, capture automatique ; mires en blocs et modèles à la grille fine |
 | Capture différée de la démo | ✅ | `TerrainDemo.auto_shot_delay` + `--quit-after` : regarder une couche sans piloter la fenêtre |
@@ -1409,6 +1813,15 @@ sans valeur tant que les jalons 2 et 3 ne sont pas là.
 | Collision des modèles instanciés | ⬜ | houppiers, six modèles entiers et cactus de flore restent traversables ; troncs, branchages et filons sont de la matière. Arbitrage en `nextsteps.md`, §7bis.3 |
 | Éclairage et LOD des modèles instanciés | 🔶 | **le tronc a rejoint le terrain** (1.11) : il est éclairé et se creuse comme lui. Ce qui reste instancié — flore, houppiers, arbres entiers — ne profite toujours ni de l'éclairage voxel ni d'une réduction en distance ; `CWVoxelModel.reduced(n)` est prêt et n'a toujours aucun usage |
 | Aperçu de la carte hors du jeu | ✅ | `tools/preview_map.gd`, vierge et parcourue |
+| Mesure de la couche de surplombs | ✅ | `tools/mesa_stats.gd` : part des terres sous un chapeau, en porte-à-faux, en grotte, en roche de pente, plus l'histogramme des pentes |
+| Repérage d'un surplomb, d'un canyon, d'un chemin | ✅ | `tools/find_mesa.gd`, `tools/find_canyon.gd`, `tools/find_path.gd` : trois points de vue prêts à passer à `--ici` / `--vers` |
+| Viser une capture | ✅ | `--vers x z` oriente la caméra, `--altitude n` la lève. Sans les deux, une capture d'un objet posé à cent blocs est une capture de ce qui se trouvait dans l'autre sens |
+| Isoler une couche au chargement | ✅ | `--sans-surplombs`, `--sans-chemins`, `--sans-falaise`, comme `tile_features` avant elles |
+| Lot d'ouvrages (`assets/models/structures/`) | ✅ | `tools/blender/generer_ponts.py` : la travée de pont, à **6 voxels par bloc**, seul lot du projet à cette maille avec les petits props de flore |
+| Rendu des ouvrages | ✅ | `src/worldgen/cw_bridge_renderer.gd` : une instance multiple par franchissement, **lacet libre** |
+| Souder les massifs au terrain (talus) | ⬜ | le pied d'un massif rencontre l'herbe sans transition ; un éboulis lui donnerait son assise |
+| Piles de pont | ⬜ | sur une rivière de six blocs ça ne se voit pas ; sur un bras de mer, ça se verra |
+| Collision des surplombs et des chemins | ✅ | gratuite : les deux sont de la **matière** dans les données du monde, comme le tronc depuis 1.11 |
 | Cache disque des dalles de carte | ⬜ | 43 ms la dalle, recalculée à chaque session ; l'original la compresse en base |
 | Inventaire des modèles `.vox` | ✅ | `tools/inspect_model.gd` : plages de palette, échelle par lot, et **compte de morceaux** |
 | Aperçu rapproché des éléments | ✅ | `tools/preview_features.gd`, avec et sans la couche |
@@ -1634,6 +2047,8 @@ de le résoudre.
 
 | Date | Fait |
 |---|---|
+| 2026-09-08 | **Seconde passe sur les trois couches, sur six reproches faits en jeu.** (1) **Plusieurs teintes par matiere**, et c'est ce qui manquait au degrade : deux couleurs ne font pas un fondu au bloc pres, elles font un damier. Depuis le jalon 1.9, un voxel porte son **type** dans un canal et sa **couleur** dans l'autre, et le second est une couleur libre — rien n'oblige deux blocs d'herbe a etre de la meme teinte. Une prairie prend donc trois tons, et une frontiere cinq marches de fondu, pendant que le type, lui, bascule d'un coup. Le facteur de fondu est tire du **meme bruit** que le type, sans quoi le damier et le degrade se dephasent. Consequence sur un contrat ancien : la couleur d'un voxel n'est plus *exactement* celle de son type, et la verification demande desormais qu'elle en reste une **nuance plausible**. (2) **Les surplombs deviennent des massifs.** Le chapeau sur socle a tenu une journee : *le joueur doit pouvoir y monter*, et un chapeau qui deborde de son socle est fait pour qu'on ne le puisse pas. La forme est un dome deforme par deux bruits qui retombe a zero sur son contour. Trois choses la rendent gravissable, et les trois ont ete trouvees en mesurant : la hauteur se compte **depuis le sol de sa colonne** — la mesurer depuis le centre laissait une marche de **douze blocs** sur tout le contour —, le profil est **au carre**, ce qui annule la pente au raccord, et les frequences des deux bruits sont **relatives au rayon**, faute de quoi une grosse masse prend dix lobes et une petite un demi. Contrat mesure, pas suppose : vingt-quatre rayons balayes, **deux blocs** de marche maximum, et deux est le minimum atteignable. Et parce qu'un massif tout vert est une colline et non un relief, sa matiere se decide sur son **epaisseur** : herbe sur la frange, roche nue au coeur. (3) **Les grottes** : galeries de 55 a 130 % du rayon contre un tiers — **67 blocs** pour la plus courte —, axe **brise** de deux a quatre coudes, bouche **evasee** et **porche** de roche au-dessus. Deux defauts d'acces attrapes par la meme verification : partir de la premiere colonne epaisse emmurait le tube derriere le flanc, et *sortir de la masse ne suffit pas a voir le ciel* — un massif au pied d'un versant a des cotes ou le terrain remonte, donc la direction se **choisit** parmi huit. (4) **Les chemins** sont **toujours creuses d'un bloc** — c'est ce qui leur donne leur berge et leur ombre — et leur demi-chaussee passe de 3 a 4,5 blocs. (5) **Le degagement d'un tunnel est proportionnel a la masse traversee**, 55 %, avec un **toit d'au moins huit blocs** : sans lui, le chemin ne perce plus le massif, il le coupe en deux. (6) **Le lot d'ouvrages**, a **six voxels par bloc** : le tablier reste de la matiere — c'est le sol sur lequel on marchera — et l'ouvrage (platelage, longerons, garde-corps, poteaux) devient un modele instancie, avec un **lacet libre**, seul endroit du projet ou la grille d'un modele n'est pas alignee sur celle du monde. Une erreur de conception en chemin : *le profil d'un chemin ne voit pas les rivieres*, il pose un jalon tous les 32 blocs quand une riviere en fait six de large, et le premier releve n'a trouve aucun des ponts qu'on voyait en jeu. On raffine la ou le champ de chenaux dit qu'il peut y avoir de l'eau, soit moins d'un segment sur dix. **377 verifications, 0 echec.** Cout : 24,1 s les trois couches eteintes, **28,5 s** allumees. |
+| 2026-09-07 | **Trois couches par-dessus le champ : les surplombs, leurs grottes, les chemins et leurs ponts — et la falaise qui revient.** Aucune n'est dans la source, les trois en-tetes le disent, et le jalon 1 a donc ete rouvert le lendemain de sa cloture. (1) **Les surplombs.** Une seconde nappe de matiere posee au-dessus du champ d'altitude, jamais dedans : un chapeau plat sur un disque deforme, dont le bord est une paroi verticale de 8 a 31 blocs, et un socle qui s'arrete avant lui. Jusqu'a **64 blocs de vide** sous un chapeau ; 2,04 % des terres sous un chapeau, 0,40 % en porte-a-faux. Trois formes — butte une fois sur deux, surplomb une sur trois, champignon une sur six —, parce qu'un seul profil rendait vingt champignons identiques. Ou ils sont : un bruit tres basse frequence donne au monde des **pays de canyons** et, entre eux, des buttes isolees. (2) **Les grottes**, et leur garantie est geometrique : l'entree est prise **sous le chapeau**, la ou il n'y a deja pas de matiere, et le plancher du tube est l'altitude du sol a cette entree — on entre de plain-pied dans un trou qui donne dehors. Une sur six traverse le socle : c'est l'arche. La verification le constate **sur le monde genere**, pas sur la regle. (3) **La falaise revient**, et c'est le premier systeme que ce depot retire puis retablit. Les deux raisons de son echec sont levees : la roche n'est plus seule — c'est la matiere des parois qui la dominent — et **la frontiere est tramee**. Reglage refait en capture : *a seuil bas, la roche de pente dessine des courbes de niveau*, parce que la pente d'un champ lisse est un champ lisse dont les valeurs fortes suivent les lignes de niveau ; `CLIFF_SLOPE_LO` passe de 0,22 a 0,34 et la roche tombe a 2,6 % des terres. (4) **Le degrade adouci**, demande explicitement : un **tramage** a deux frequences, et c'est la seconde qui travaille — 88,2 % d'accord entre colonnes voisines a mi-transition, donc des plaques et non du poivre-et-sel. **Quatre** frontieres l'emploient, dont la plus grande du monde : celle entre deux biomes, ou l'on ne trame pas deux matieres mais ou l'on **brouille le climat avant de le comparer aux seuils** — un desert et une prairie s'interpenetrent desormais sur une trentaine de blocs, et le biome *nomme*, lui, ne bouge pas. (5) **Les chemins.** Arbre couvrant sur les jalons d'une zone, quatre **portes** de frontiere dont la position est une fonction pure de la frontiere — donc identique des deux cotes sans qu'aucune zone ne lise l'autre —, trace relaxe en six passes qui contourne le relief. Le chemin est pose **en dernier** : il tranche la colonne, efface six blocs au-dessus (d'ou les **tunnels** dans les socles de surplomb) et jette un **tablier de bois** sur l'eau plutot que de la combler. La seule erreur de conception du jalon, vue en capture : *chercher un itineraire et epouser un sol ne se font pas a la meme echelle* — un jalon tous les 192 blocs faisait de l'altitude une corde, et le terrain bombait de seize blocs au-dessus d'elle. Deux mailles, 256 et 32, plus un bornage repris colonne par colonne. (6) **Ce que les deux dispersions ont du apprendre** : rien ne pousse sur la chaussee, l'accotement suit le terrain remodele, et ce qui pousse au-dessus d'un surplomb pousse **sur son chapeau**. (7) **Cout : +13 % de chargement** (22,2 a 25,1 s a 384 blocs de vue), dont 1,8 s pour la seule falaise — sa pente demande une colonne de plus sur chaque axe de l'empreinte. Trois bascules `overhangs` / `road_network` / `cliff_slope` isolent les trois couches, comme `tile_features` avant elles. `sample_column` n'a pas bouge. **377 verifications, 0 echec**, dont une suite nouvelle, `tests/relief_test.gd`. Vu en jeu sur une mesa, une entree de grotte, un chemin, un pont et un tunnel. |
 | 2026-09-06 (soir, 4) | **Cinq corrections vues en jeu : le marais, les provinces climatiques, et trois sur l'eau.** (1) **Le marais n'est plus une matiere de biome.** C'etait la derniere frange d'humidite, au-dessus de 0,92 en Jungles, et elle avait survecu aux deux retraits du matin parce qu'elle *portait* quelque chose — le roseau pousse sur ce bloc et sur aucun autre. Ce qui l'a emporte est autre chose : *une Jungles annoncee « jungle » sur un sol de marais dit deux choses a la fois*, exactement comme l'herbe seche de Greenlands. **Le marais n'a pas disparu du monde** — il est devenu la matiere de **rive** des cours d'eau, ou un roseau se tient : il passe de 6,5 % du monde a 0,1 %, et d'une frange de climat a un lieu. (2) **Les provinces climatiques**, et c'est une creation de ce projet : la source tire le climat d'une zone independamment de ses voisines et prend un extreme une fois sur deux, d'ou *une Snowlands contre un desert*. Un bruit basse frequence sur la grille de zones decide desormais quel extreme et **a quel point** — au coeur d'une province l'extreme est celui de la source, au bord il glisse vers le tempere. La seconde moitie est celle qui compte : ne prendre que le signe aurait laisse une couture franche entre deux provinces, c'est-a-dire le meme defaut plus rare. **Le relief est identique au bloc pres** — `base_height` sort d'un bruit et tous les tirages du LCG sont conserves, `rng.coin()` etant toujours appele et sa valeur ignoree ; l'ocean rend 12 108 colonnes avant comme apres. Mesure : Deserts de **1,2 a 13,9 % des terres**, Snowlands de 35,8 a 13,9, Greenlands de 49,5 a 57,7 ; le **coin froid-sec du climat passe de 17,98 % a 0,00 %**, et les paires neige/desert a 4 096 unites de 6 a **0**. `biome_stats` porte la mesure de voisinage, a 4 096 unites et non a 256 — a 256 deux sondages tombent dans le meme climat et la mesure rendait zero avant comme apres. (3) **L'eau descend d'un bloc sous la rive.** A ras bord elle ne se lisait pas comme de l'eau mais comme une matiere bleue posee a plat. (4) **Les rivieres sont continues, et finissent en lacs.** Le decoupage venait de la rampe triangulaire, qui ne laissait passer l'eau que sur 60 % d'un palier : elle garde le **fond** et perd la **presence**. Et le seuil du chenal n'est plus constant — 0,02 en altitude, **0,055 au ras de la mer** : un reseau de chenaux ne dit pas ou est un bassin, mais il dit l'altitude, et *une riviere qui s'elargit en descendant est ce qu'on voit d'un bassin*. Fenetre de 64 blocs autour d'un point bas : **27 % d'eau**. (5) **Ni Deserts ni Lava Lands n'ont d'eau de surface**, ce qui n'est pas dans la source — elle n'a pas de biomes — mais se defend seul. **Consequence a laquelle il a fallu repondre** : l'eau partout dans la porte faisait disparaitre la rive, donc le sol humide, donc le roseau. La rive redevient la **bande exterieure du lit** (`POND_WATER_FRAC`), continue le long du cours d'eau la ou celle de la source apparaissait par plaques. Eau 2,77 % des terres, rive 0,58 %. **346 verifications, 0 echec**, cout inchange (mediane de cinq passes, 76,1 us). Vu en jeu sur une riviere de Greenlands et sur un desert. |
 | 2026-09-06 (soir, 3) | **Jalon 1.14 : les lacs, et le jalon 1 est clos.** (1) **La porte est le champ de chenaux, a 0,02**, celui du jalon 1.4 : il ne manquait pas un champ, il manquait un seuil. L'eau est une seconde passe de `generateBiomeContent`, colonne par colonne, avec un niveau **quantifie au pas de 5** et une **rampe triangulaire** qui decide s'il y a de l'eau et quelle profondeur — d'ou des chapelets de mares le long des fonds de vallee et non une riviere continue. (2) **Trois corrections a notre propre note d'analyse, relevees en relisant la source pour l'ecrire**, et la premiere change le sens de la passe. **Le sol humide est la rive, pas le lit** : son ecriture est gardee par « le bloc qui se trouve la n'est pas de l'eau », garde qui echoue precisement quand il y en a. Le type 3 est donc l'anneau autour de chaque mare — beaucoup mieux, `FAMILIES_SURFACE` y faisant pousser des roseaux, et un roseau se tient sur la rive et non au fond. **Le lit remonte a `q + 5|t|` dans le dernier quart d'un palier**, ce qui evite une marche franche de cinq blocs a chaque bord. **Et la porte de la rampe est `t > 0,2` et non `t >= 0,4`**, par troncature entiere : 60 % du palier au lieu de 45 %, mesure a 58,4 % apres portage. *Un pseudo-code ecrit depuis un nom se relit avant d'etre porte.* (3) **Le creusement s'exprime en abaissement de colonne**, pas en passe separee : `column_profile` rend `(sol, eau_bas, eau_haut)` et `pond_span` isole l'arithmetique de la rampe, pure et testee seule. Cela regle du meme coup le piege annonce — les deux chemins rapides de `_generate_block` s'appuient sur `patch.lowest`, et prendre le minimum *apres* le profil suffit. (4) **`_sample` rend un `Vector4`** : le chenal sort avec l'altitude et le climat, il etait deja calcule, donc **zero echantillon de bruit de plus** ; `sample_column` garde son `Vector3` et les trente-cinq consommateurs n'ont pas bouge. (5) **Les deux dispersions savent nager**, et l'ATH aussi — il annoncait « sol 117 » au bord d'une mare dont le fond est a 111. Un test de la flore a attrape le changement de contrat tout seul : 145 plantes « flottantes » qui ne l'etaient pas, parce qu'il comparait au sol d'avant creusement. (6) **La rive n'est humide qu'en Jungles, et c'est assume** : le seul roseau du lot est `jungles/roseau`, et poser du sol humide ailleurs rendrait un anneau nu — *une matiere qui ne porte rien est un trou*, paye trois fois deja. La table lue est `FAMILIES_SURFACE_BIOME` ; le jour ou chaque biome aura son roseau, elle grandira et la rive suivra sans qu'on retouche au code. **Mesures** : porte 3,25 % des terres, **eau 1,90 %**, rive 1,35 %, creusement moyen 2,78 blocs, profondeur 1 a 4 blocs a un quart chacun. **Cout sous le bruit de mesure** — mediane de cinq passes, 76,4 us par colonne contre 75,7 sans, +0,9 % pour une dispersion de +-6 %. **344 verifications, 0 echec**, vu en jeu. |
 | 2026-09-06 (soir, 2) | **Les lacs : la lecture qui bloquait est faite, et la reponse est plus grande que la question.** (1) **`terrain_generateColumnColor` rend la hauteur FINALE de la colonne.** Le test decisif annonce etait : consulte-t-elle la porte des chenaux ? Elle la consulte, et pas incidemment — elle en fait un lissage sur ses octaves de detail (`chan*4` borne a 1, smoothstep, au carre). Deux autres marques du meme corps suffiraient chacune : l'octave de detail a 1e-2 y est, et la couche d'elements de tuile aussi, au couple `+0x14018` / stride `0x68` deja releve trois fois par ce depot. (2) **Ce n'est pas une fonction voisine de la notre, c'est la notre.** Les quatre graines de deformation d'elements — 8432984, 90493, 3423, 112, a la frequence 0,0025 — sont mot pour mot `LIFT_SEED_X`, `FALLOFF_SEED_XZ`, `FALLOFF_SEED_ZX`, `FALLOFF_SEED_Z` et `FALLOFF_WARP_FREQ`. `terrain_generateColumnColor` (@005c5e20, client) et `World_baseHeightField` (@004f9b70, serveur) sont **la meme fonction dans les deux binaires**, celle du jalon 1.4. **Le niveau d'un etang est `sample_column(x, z).x`**, rien de nouveau a calculer. (3) **Deux corroborations hors du corps de la fonction.** Le binaire serveur nomme le meme appel **`World_riverClimateGate`** la ou le client dit `WorldInfo_sampleTerrainHeight` : deux noms proposes independamment, le second disant « porte de riviere » en toutes lettres — la lecture du champ de chenaux du jalon 1.4 est confirmee par son nom dans l'autre binaire. Et un appelant (`WorldInfo.cpp:2562`) fait `(int)(h+1)` puis interroge la colonne pour y poser un objet en refusant l'air et l'eau : on ne pose pas un objet a « ossature + 1 ». (4) **Le plan de portage y perd la moitie de son premier point** : pas d'ossature `cont` a extraire de `_height_from`, la hauteur est deja la. `_sample` passe quand meme en `Vector4`, mais la quatrieme composante porte le **chenal**, dont la passe a besoin deux fois — comme porte et dans le creusement des berges. Les six autres points sont inchanges. (5) **Trouve au passage, et ca contredit un raisonnement de ce depot** : la passe de contenu de cellule **precalcule une grille 257 x 257 de hauteurs** puis mesure la pente **a un bloc**, contre la colonne voisine en X et en Z, seuil 0,3. L'original ne paie donc pas trois colonnes par colonne, il paie une grille par cellule amortie sur 65 536 colonnes — et « une pente d'un bloc ne decrit pas une falaise » est dementi par la source, qui mesure exactement a un bloc. **Cela ne rouvre pas la falaise**, retiree sur le rendu et non sur la mesure ; c'est note pour le jour ou le sujet reviendra. Reste non lu : `terrain_rockColor_blend` (@005c7140), fonction distincte de `terrain_surfaceColor_blend`, que le drapeau declenche quand la colonne **n'est pas** raide — l'inverse de ce que son nom laisse attendre, et les deux noms sont donnes « confiance moyenne ». Analyse : `docs/systems/02` Sec. 10.4 et 10.5. Aucun code touche. |

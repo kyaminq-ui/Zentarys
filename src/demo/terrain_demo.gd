@@ -124,6 +124,7 @@ var edits: CWWorldEdits
 var stream: VoxelStream
 var flora: CWFloraRenderer
 var trees: CWFloraRenderer
+var bridges: CWBridgeRenderer
 var world_map: CWWorldMap
 var map_overlay: CWMapOverlay
 var camera: Camera3D
@@ -265,6 +266,36 @@ func _read_cmdline() -> void:
 				if i + 2 < args.size():
 					place_at(Vector2i(int(args[i + 1]), int(args[i + 2])))
 					i += 2
+			# Prendre de la hauteur. Une capture de paysage se prend d'un point
+			# de vue, et `place_at` se pose a hauteur d'homme : a vingt-six
+			# blocs du sol, le premier houppier venu bouche le cadre.
+			"--altitude":
+				if i + 1 < args.size():
+					i += 1
+					camera.position.y += float(args[i])
+			# Viser un objet plutot que le hasard de l'orientation par defaut.
+			# `--ici` pose la camera, `--vers` la tourne : sans les deux, une
+			# capture d'un surplomb pose a cent blocs de la est une capture de
+			# ce qui se trouvait dans l'autre sens.
+			"--vers":
+				if i + 2 < args.size():
+					look_at_world(Vector2i(int(args[i + 1]), int(args[i + 2])))
+					i += 2
+			# Les trois couches posees au-dessus du champ, isolables une a une :
+			# c'est ce qui permet de mesurer ce que chacune coute au chargement
+			# et de comparer deux captures du meme endroit.
+			"--sans-surplombs":
+				params.overhangs = false
+				generator.clear_caches()
+			"--sans-chemins":
+				params.road_network = false
+				generator.clear_caches()
+			"--sans-falaise":
+				params.cliff_slope = false
+				generator.clear_caches()
+			"--sans-ponts":
+				if bridges != null:
+					bridges.set_enabled(false)
 			"--sans-arbres":
 				if trees != null:
 					trees.enabled = false
@@ -421,6 +452,14 @@ func _build_flora() -> void:
 	if terrain != null and terrain.has_method("get_voxel_tool"):
 		flora.set_terrain(terrain.get_voxel_tool())
 	add_child(flora)
+
+	# Les ouvrages : les travees de pont, a six voxels par bloc. Une poignee par
+	# zone, donc pas de dispersion ni de file — voir `CWBridgeRenderer`.
+	bridges = CWBridgeRenderer.new()
+	bridges.name = "Bridges"
+	bridges.view_distance = float(view_distance) + 128.0
+	bridges.setup(generator.field(), params.world_origin, camera)
+	add_child(bridges)
 
 	# La couche des arbres : le meme rendu, une autre dispersion. Elle a sa
 	# cellule (64 blocs), sa bibliotheque et sa marge — voir `CWTreeScatter`.
@@ -711,11 +750,45 @@ func _finish_biome_search() -> void:
 ## et la recherche de biome posent la camera de la meme facon — deux hauteurs de
 ## survol differentes donneraient deux captures qu'on ne peut pas comparer.
 func place_at(world_xz: Vector2i) -> void:
-	var h: float = generator.field().sample_column(world_xz.x, world_xz.y).x
+	var h: float = ground_top_at(world_xz)
 	camera.position = Vector3(
 			float(world_xz.x - params.world_origin.x),
 			maxf(h, float(params.sea_level)) + 26.0,
 			float(world_xz.y - params.world_origin.y))
+
+
+## Dessus **praticable** d'une colonne, en coordonnees monde : le dessus du
+## chapeau quand un surplomb la couvre, le sol sinon.
+##
+## Sans cela, se poser sous une mesa met la camera **dans la roche** : le socle
+## d'un surplomb monte jusqu'a son chapeau, et `sample_column` ne connait que le
+## champ d'altitude, qui ignore tout de la couche posee au-dessus de lui.
+func ground_top_at(world_xz: Vector2i) -> float:
+	var f: CWTerrainField = generator.field()
+	var h: float = f.sample_column(world_xz.x, world_xz.y).x
+	if not params.overhangs:
+		return h
+	var rel: Vector4i = CWMesaGrid.relief(
+			f.mesas().mesas_at(world_xz.x, world_xz.y, f),
+			world_xz.x, world_xz.y, floori(h))
+	if rel.y >= rel.x:
+		return maxf(h, float(rel.y))
+	return h
+
+
+## Tourne la camera vers un point du monde, en coordonnees **monde**. La visee
+## se fait sur le sol du point, remonte de vingt blocs : viser le sol exact d'un
+## surplomb mettrait la moitie du cadre dans l'herbe du premier plan.
+func look_at_world(world_xz: Vector2i) -> void:
+	var h: float = ground_top_at(world_xz)
+	var target := Vector3(
+			float(world_xz.x - params.world_origin.x),
+			maxf(h, float(params.sea_level)) + 20.0,
+			float(world_xz.y - params.world_origin.y))
+	var d: Vector3 = target - camera.position
+	_yaw = atan2(-d.x, -d.z)
+	_pitch = atan2(d.y, Vector2(d.x, d.z).length())
+	camera.rotation = Vector3(_pitch, _yaw, 0.0)
 
 
 func _world_position() -> Vector2i:

@@ -40,10 +40,33 @@ champ, il manquait un seuil. Elles s'élargissent en descendant et finissent en
 nappes dans les bas-fonds. 2,8 % des terres en eau, profondeur d'un à quatre
 blocs, une berge un bloc au-dessus de la surface, et rien dans les déserts.
 
-Deux chantiers suivent : la **collision**, objet par objet, maintenant que le
-tronc des arbres est écrit dans le terrain ; et le **jalon 2**, créatures et
-comportements, en commençant par les points d'apparition, dont les constantes
-sont déjà relevées.
+**Le relief a trois couches de plus**, posées par-dessus le champ d'altitude et
+jamais dedans — aucune n'est dans la source, et les trois en-têtes le disent.
+Les **massifs** : des masses de roche arrondies et irrégulières, cœur de pierre
+nue et frange enherbée, hautes d'une trentaine de blocs — et **qu'on peut
+gravir**, ce qui est un contrat mesuré et non une intention : jamais plus de deux
+blocs de marche d'une colonne à la suivante. Leurs **grottes** : des galeries
+brisées de soixante à quatre-vingts blocs, à bouche évasée sous un porche de
+roche, dont le plancher est l'altitude du sol à leur entrée — on n'a donc jamais
+à creuser pour y entrer. Et les **chemins**, qui relient les jalons d'une zone,
+se raccordent à ceux des voisines par des portes de frontière, se creusent
+toujours d'un bloc, percent les massifs en tunnels proportionnels à la masse
+traversée, et franchissent les rivières sur un **ouvrage dessiné à six voxels
+par bloc**.
+
+La **falaise** revient avec eux — c'est le premier système que ce dépôt retire
+puis rétablit —, et avec elle le **dégradé adouci** entre deux matières de
+surface. Il tient à une propriété du rendu qu'on n'avait pas exploitée : un
+voxel porte sa matière dans un canal et sa **couleur** dans l'autre, et rien
+n'oblige deux blocs d'herbe à être de la même teinte. Une prairie prend donc
+trois tons, une frontière cinq marches de fondu, et le sable et l'herbe
+s'interpénètrent sur une dizaine de blocs au lieu d'être séparés par une courbe
+de niveau.
+
+Deux chantiers suivent : la **collision** des objets instanciés, qui reste due —
+les surplombs et les chemins, eux, sont de la matière et l'ont gratuitement ; et
+le **jalon 2**, créatures et comportements, en commençant par les points
+d'apparition, dont les constantes sont déjà relevées.
 
 - `docs/ROADMAP.md` — les cinq jalons, leur avancement, les mesures
 - `docs/systems/01_generation_terrain.md` — l'analyse du système de terrain
@@ -59,7 +82,7 @@ sont déjà relevées.
 ## Démarrer
 
 ```
-godot --headless --path . -s tests/worldgen_test.gd   # 315 vérifications
+godot --headless --path . -s tests/worldgen_test.gd   # 377 vérifications
 ```
 
 Scène de démonstration : `scenes/terrain_demo.tscn`. Clic pour capturer la

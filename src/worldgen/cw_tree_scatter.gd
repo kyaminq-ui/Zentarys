@@ -338,6 +338,18 @@ func _build_cell(cx: int, cz: int) -> Array:
 					else _candidats(cx + dx, cz + dz)
 
 	var sea: int = _field.params().sea_level
+	# La fenetre de surplombs de la cellule, prise une fois. Une cellule
+	# d'arbres fait 64 blocs et une cellule de surplombs 512 : le voisinage
+	# 3 x 3 du centre couvre tout candidat, rayon maximum compris.
+	@warning_ignore("integer_division")
+	var mid: int = cell_size / 2
+	var mesas: Array[CWMesa] = _field.mesas().mesas_at(
+			(cx << cell_shift) + mid, (cz << cell_shift) + mid, _field)
+	var road_zone: CWPathNetwork.Zone = _field.paths().zone_at(
+			(cx << cell_shift) + mid, (cz << cell_shift) + mid, _field)
+	var road_cells: PackedInt32Array = road_zone.index.get(
+			CWPathNetwork.cell_key((cx << cell_shift) + mid,
+					(cz << cell_shift) + mid), PackedInt32Array())
 	for c in mine:
 		if out.size() >= MAX_ARBRES_PAR_CELLULE:
 			break
@@ -347,27 +359,51 @@ func _build_cell(cx: int, cz: int) -> Array:
 		var x: int = int(c["x"])
 		var z: int = int(c["z"])
 		var col: Vector4 = _field.sample_column_full(x, z)
-		# Un arbre les pieds dans l'eau n'existe pas ici : le sol humide est une
-		# matiere a part, au-dessus du niveau de la mer.
-		if col.x < float(sea):
-			continue
-		# Ni dans une mare (jalon 1.14). Un arbre est estampe dans le terrain
-		# depuis le jalon 1.11 : un tronc pose au niveau d'avant creusement
-		# traverserait l'eau sur toute sa hauteur, et il est ecrit dans la
-		# matiere, donc rien ne le retirerait ensuite.
 		var biome_c: int = CWBiome.at(col.x, col.y, col.z, sea)
 		var prof: Vector3i = CWTerrainField.column_profile(
 				col.x, col.w, sea, biome_c)
-		if prof.y <= prof.z:
-			continue
+		# Le surplomb (jalon 1.15) : un arbre pousse **sur le chapeau**, jamais
+		# sur le sol qu'il couvre. C'est ce que montrent les captures du jeu
+		# d'origine — une mesa porte ses arbres sur le dos, et son ombre est nue.
+		var rel: Vector4i = Vector4i(1, 0, 1, 0)
+		if not mesas.is_empty():
+			rel = CWMesaGrid.relief(mesas, x, z, prof.x)
+		var on_cap: bool = rel.y >= rel.x
+		var surface: int = CWPalette.surface_of(
+				CWBiome.at_dithered(col.x, col.y, col.z, sea, x, z),
+				col.x - float(sea), col.y, col.z, x, z)
+		if on_cap:
+			surface = CWVoxelGenerator.standing_surface(rel, surface, biome_c,
+					col.y, col.z, x, z, sea)
+		else:
+			# Un arbre les pieds dans l'eau n'existe pas ici : le sol humide est
+			# une matiere a part, au-dessus du niveau de la mer.
+			if col.x < float(sea):
+				continue
+			# Ni dans une mare (jalon 1.14). Un arbre est estampe dans le
+			# terrain depuis le jalon 1.11 : un tronc pose au niveau d'avant
+			# creusement traverserait l'eau sur toute sa hauteur, et il est
+			# ecrit dans la matiere, donc rien ne le retirerait ensuite.
+			if prof.y <= prof.z:
+				continue
+			if CWVoxelGenerator.cave_breaks(rel, prof.x):
+				continue
+		# Le chemin (jalon 1.16). Rien ne pousse sur la chaussee — c'est ce qui
+		# la rend lisible de loin —, et l'accotement suit le terrain **remodele**
+		# par le chemin, sans quoi la premiere touffe de bord de route flotte ou
+		# s'enterre de trois blocs. Meme piege qu'au creusement des etangs.
+			if not road_cells.is_empty():
+				var road: Vector2 = CWPathNetwork.nearest(
+						road_zone, road_cells, float(x), float(z))
+				if CWPathNetwork.on_roadway(road):
+					continue
+				prof.x = CWPathNetwork.shaped_top(prof.x, road)
+			surface = CWVoxelGenerator.pond_surface(surface, biome_c, prof,
+					CWTerrainField.pond_gate(col.x, col.w, sea, biome_c))
 		# La matiere exacte du point est verifiee, comme pour la flore : le
 		# biome dit ou l'on est, la matiere dit si ca porte quelque chose. Un
 		# bosquet ne pousse ni sur la scorie d'une Lava Lands, ni sur une plage,
 		# ni sur le fond marin.
-		var surface: int = CWPalette.surface_of(biome_c,
-				col.x - float(sea), col.y, col.z, x, z)
-		surface = CWVoxelGenerator.pond_surface(surface, biome_c, prof,
-				CWTerrainField.pond_gate(col.x, col.w, sea, biome_c))
 		if not CWDecorRules.decor_allowed(biome_c, surface):
 			continue
 		var sp: Dictionary = CWTreeRules.species_at(biome_c, float(c["pick"]))
@@ -376,7 +412,7 @@ func _build_cell(cx: int, cz: int) -> Array:
 		# Le sol est celui **d'apres** creusement : sur la rive d'une mare, la
 		# colonne a ete tranchee, et un arbre pose a la hauteur brute du champ
 		# flotterait de quelques blocs.
-		var ground: int = prof.x + 1
+		var ground: int = CWVoxelGenerator.standing_top(rel, prof.x) + 1
 		if not _supported(x, z, ground):
 			continue
 		_monte(out, sp, x, z, ground, c)

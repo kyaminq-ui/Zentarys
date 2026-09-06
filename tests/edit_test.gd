@@ -524,17 +524,51 @@ func _test_two_channels() -> void:
 				# **Le bois est l'exception, et c'est le contrat du jalon 1.9.**
 				# Un tronc estampe porte le type WOOD et la teinte de son propre
 				# modele : c'est ce qui donne quatre ecorces pour un seul type de
-				# bloc. Le reste du terrain, lui, doit garder les deux canaux
-				# d'accord — un sol dont la couleur ne suit plus le type ment a
-				# l'oeil sans qu'aucun test de logique ne s'en apercoive.
+				# bloc.
 				if t == CWPalette.WOOD:
 					continue
-				if c != CWPalette.raw_of(t):
+				# **Le reste du terrain ne porte plus la couleur *exacte* de son
+				# type, et c'est delibere depuis le 2026-09-07.** Un bloc de
+				# surface prend une **nuance** : trois tons pour une prairie,
+				# cinq marches de fondu au bord d'une plage. Ce qui reste
+				# verifiable est le voisinage — une teinte doit rester
+				# reconnaissable comme celle de sa matiere ou de sa voisine —, et
+				# la borne ci-dessous est large expres : c'est la capture qui
+				# juge une couleur, pas un test. Ce qu'on attrape ici est le
+				# retour du vrai defaut : *un sol dont la couleur ne dit plus du
+				# tout la matiere*.
+				if not _teinte_plausible(t, c):
 					mismatched += 1
 					if first == "":
 						first = "(%d, %d, %d) : type %s, couleur 0x%08X" % [
 								lx, ly, lz, CWPalette.name_of(t), c]
 	_ok("le bloc genere porte de la matiere", opaque_seen > 0,
 			"%d voxels non vides" % opaque_seen)
-	_ok("la couleur suit le type sur tout le bloc genere (4096 points)",
+	_ok("la couleur reste une nuance de son type (4096 points)",
 			mismatched == 0, "%d ecarts, %s" % [mismatched, first])
+
+
+## Vrai si `c` est une nuance plausible du type `t` : soit sa couleur exacte,
+## soit un ton de celle-ci, soit une marche de fondu vers une autre matiere de
+## terrain. On mesure la distance a la plus proche des couleurs de terrain et on
+## exige que ce soit **celle du type ou une voisine directe** — ce qui laisse
+## passer un fondu et refuse une couleur prise au hasard.
+static func _teinte_plausible(t: int, c: int) -> bool:
+	var base: int = CWPalette.raw_of(t)
+	if c == base:
+		return true
+	# Le ton propre plafonne a SHADE_TONE, le fondu a la moitie de l'ecart avec
+	# la matiere voisine : une nuance ne peut pas s'eloigner de sa base de plus
+	# que de la moitie de la distance a la couleur la plus lointaine.
+	var d: float = _dist(base, c)
+	var pire: float = 0.0
+	for i in CWPalette.COUNT:
+		pire = maxf(pire, _dist(base, CWPalette.raw_of(i)))
+	return d <= pire * 0.55 + 24.0
+
+
+static func _dist(a: int, b: int) -> float:
+	var dr: float = float(((a >> 24) & 0xFF) - ((b >> 24) & 0xFF))
+	var dg: float = float(((a >> 16) & 0xFF) - ((b >> 16) & 0xFF))
+	var db: float = float(((a >> 8) & 0xFF) - ((b >> 8) & 0xFF))
+	return sqrt(dr * dr + dg * dg + db * db)

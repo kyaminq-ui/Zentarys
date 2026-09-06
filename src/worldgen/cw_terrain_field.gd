@@ -89,12 +89,16 @@ const LIFT_RADIUS_MARGIN: float = 256.0
 var _p: CWWorldParams
 var _sites: CWRegionSiteGrid
 var _features: CWTileFeatureGrid
+var _mesas: CWMesaGrid
+var _paths: CWPathNetwork
 
 
 func _init(world_params: CWWorldParams, site_grid: CWRegionSiteGrid = null) -> void:
 	_p = world_params
 	_sites = site_grid if site_grid != null else CWRegionSiteGrid.new(world_params)
 	_features = CWTileFeatureGrid.new(world_params)
+	_mesas = CWMesaGrid.new(world_params)
+	_paths = CWPathNetwork.new(world_params)
 
 
 func sites() -> CWRegionSiteGrid:
@@ -103,6 +107,47 @@ func sites() -> CWRegionSiteGrid:
 
 func features() -> CWTileFeatureGrid:
 	return _features
+
+
+## La grille de surplombs (jalon 1.15). Posee **au-dessus** du champ, jamais
+## dedans : rien de ce qui suit ne la consulte, et c'est ce qui la dispense de
+## la garde de reentrance de `CWTileFeatureGrid`.
+func mesas() -> CWMesaGrid:
+	return _mesas
+
+
+## Le reseau de chemins (jalon 1.16). Pose lui aussi **au-dessus** du champ :
+## un chemin tranche une colonne, il ne deforme pas l'altitude.
+func paths() -> CWPathNetwork:
+	return _paths
+
+
+## Pente locale d'une colonne, en blocs par bloc, mesuree par difference **avant**
+## sur un bloc.
+##
+## -- Pourquoi une difference avant, et pas centree ---------------------------
+##
+## Le meme nombre doit sortir de deux chemins qui n'ont pas la meme forme : le
+## bloc genere, qui echantillonne une empreinte d'un seul coup, et la requete
+## ponctuelle, qui ne connait qu'un point. Une difference avant se calcule des
+## deux cotes avec le meme pochoir, aligne sur la grille du monde et non sur
+## celle du bloc ; une difference centree demanderait une couronne des deux
+## cotes, et un pochoir dependant de la position dans le bloc ferait diverger
+## les deux chemins d'une colonne sur seize — l'invariant n. 18 les compare.
+##
+## Ce chemin-ci est le **froid** : deux echantillons de colonne de plus. Le
+## chemin chaud lit la couronne deja presente dans son empreinte.
+func slope_at(x: int, z: int) -> float:
+	var h: float = sample_column_full(x, z).x
+	return slope_from(h, sample_column_full(x + 1, z).x,
+			sample_column_full(x, z + 1).x)
+
+
+## La pente, une fois les trois altitudes connues. Point unique de la formule :
+## les deux consommateurs passent par ici.
+static func slope_from(h: float, hx: float, hz: float,
+		step: float = 1.0) -> float:
+	return maxf(absf(hx - h), absf(hz - h)) / step
 
 
 func params() -> CWWorldParams:

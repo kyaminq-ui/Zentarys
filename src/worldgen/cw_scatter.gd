@@ -372,6 +372,20 @@ func _build_cell(cx: int, cz: int) -> Array:
 	@warning_ignore("integer_division")
 	var mid: int = cell_size / 2
 	var centre: Vector3 = _field.sample_column(base_x + mid, base_z + mid)
+	# La fenetre de surplombs de la cellule, prise une fois. Une cellule de
+	# dispersion est bien plus petite qu'une cellule de surplombs (16 blocs
+	# contre 512), donc le voisinage 3 x 3 du centre couvre tout candidat de la
+	# cellule — le rayon maximum d'un surplomb, 176 blocs, y tient largement.
+	var mesas: Array[CWMesa] = _field.mesas().mesas_at(
+			base_x + mid, base_z + mid, _field)
+	# Le reseau de chemins, une fois par cellule pour la meme raison : une
+	# cellule d'index fait 256 unites, une cellule de dispersion 16, et les deux
+	# sont alignees.
+	var road_zone: CWPathNetwork.Zone = _field.paths().zone_at(
+			base_x + mid, base_z + mid, _field)
+	var road_cells: PackedInt32Array = road_zone.index.get(
+			CWPathNetwork.cell_key(base_x + mid, base_z + mid),
+			PackedInt32Array())
 	# La densite se lit sur le **biome**, pas sur la matiere du centre : une
 	# cellule de prairie dont le centre tombe sur un rocher garde la densite de
 	# sa prairie, et ce sont ses candidats, un a un, que le filtre de matiere
@@ -421,8 +435,9 @@ func _build_cell(cx: int, cz: int) -> Array:
 		# climat ne doit pas y semer sa prairie.
 		var c: Vector4 = _field.sample_column_full(x, z)
 		var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
-		var surface: int = CWPalette.surface_of(biome, c.x - float(sea),
-				c.y, c.z, x, z)
+		var surface: int = CWPalette.surface_of(
+				CWBiome.at_dithered(c.x, c.y, c.z, sea, x, z),
+				c.x - float(sea), c.y, c.z, x, z)
 		# L'etang du jalon 1.14. Deux choses en dependent, et la seconde ne se
 		# voit qu'en jeu : le **sol** sur lequel la plante se pose, qui est
 		# creuse dans une mare, et le fait qu'une mare **ne se garnit pas**.
@@ -430,14 +445,40 @@ func _build_cell(cx: int, cz: int) -> Array:
 		# niveau de la mer ne dit plus rien ici, une mare etant au-dessus de
 		# lui.
 		var prof: Vector3i = CWTerrainField.column_profile(c.x, c.w, sea, biome)
-		if prof.y <= prof.z:
-			continue
-		# Sous l'eau, seul le fond marin se garnit : le reste de la flore
-		# n'aurait pas de sens et se verrait de loin a travers l'eau.
-		if c.x < float(sea) and surface != CWPalette.GRAVEL:
-			continue
-		surface = CWVoxelGenerator.pond_surface(surface, biome, prof,
-				CWTerrainField.pond_gate(c.x, c.w, sea, biome))
+		# Le surplomb (jalon 1.15). Quand la colonne est sous un chapeau, la
+		# plante pousse **sur le chapeau** et non sur le sol qu'il ensevelit ou
+		# qu'il ombrage : l'eau, la plage et la rive de la colonne ne la
+		# concernent plus, elle est quatre-vingts blocs plus haut.
+		var rel: Vector4i = Vector4i(1, 0, 1, 0)
+		if not mesas.is_empty():
+			rel = CWMesaGrid.relief(mesas, x, z, prof.x)
+		var on_cap: bool = rel.y >= rel.x
+		if on_cap:
+			surface = CWVoxelGenerator.standing_surface(rel, surface, biome,
+					c.y, c.z, x, z, sea)
+		else:
+			if prof.y <= prof.z:
+				continue
+			# Une grotte qui perce le sol emporte le bloc qui aurait porte la
+			# plante.
+			if CWVoxelGenerator.cave_breaks(rel, prof.x):
+				continue
+		# Le chemin (jalon 1.16). Rien ne pousse sur la chaussee — c'est ce qui
+		# la rend lisible de loin —, et l'accotement suit le terrain **remodele**
+		# par le chemin, sans quoi la premiere touffe de bord de route flotte ou
+		# s'enterre de trois blocs. Meme piege qu'au creusement des etangs.
+			if not road_cells.is_empty():
+				var road: Vector2 = CWPathNetwork.nearest(
+						road_zone, road_cells, float(x), float(z))
+				if CWPathNetwork.on_roadway(road):
+					continue
+				prof.x = CWPathNetwork.shaped_top(prof.x, road)
+			# Sous l'eau, seul le fond marin se garnit : le reste de la flore
+			# n'aurait pas de sens et se verrait de loin a travers l'eau.
+			if c.x < float(sea) and surface != CWPalette.GRAVEL:
+				continue
+			surface = CWVoxelGenerator.pond_surface(surface, biome, prof,
+					CWTerrainField.pond_gate(c.x, c.w, sea, biome))
 		# Scorie, coulee de lave, neige hors Snowlands : rien n'y pousse. C'est
 		# le filtre qui remplace l'ancienne table par matiere — voir
 		# `CWDecorRules.decor_allowed`.
@@ -460,7 +501,7 @@ func _build_cell(cx: int, cz: int) -> Array:
 		# Le sol est celui **d'apres** creusement (jalon 1.14) : sur la rive
 		# d'une mare, la colonne a ete tranchee de quelques blocs, et une plante
 		# posee a la hauteur brute du champ y flotterait.
-		var ground: int = prof.x + 1
+		var ground: int = CWVoxelGenerator.standing_top(rel, prof.x) + 1
 		if not _supported(x, z, ground):
 			continue
 

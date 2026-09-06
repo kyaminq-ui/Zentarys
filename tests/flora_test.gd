@@ -311,10 +311,22 @@ func _test_scatter() -> void:
 				var prof: Vector3i = CWTerrainField.column_profile(
 						c.x, c4.w, p.sea_level,
 						CWBiome.at(c.x, c.y, c.z, p.sea_level))
-				if pl.y != prof.x + 1:
+				# **Et le massif, depuis le jalon 1.15** : quand une masse de
+				# roche couvre la colonne, la plante pousse sur *son* dessus et
+				# non sur le sol qu'elle ensevelit. Comparer au sol brut faisait
+				# sortir 83 plantes « flottantes » qui sont parfaitement posees,
+				# trente blocs plus haut. C'est le meme piege que le creusement
+				# des etangs, pris une seconde fois — et c'est pour cela que le
+				# dessus praticable d'une colonne a un point unique,
+				# `CWVoxelGenerator.standing_top` (invariant n. 42).
+				var rel: Vector4i = CWMesaGrid.relief(
+						f.mesas().mesas_at(pl.x, pl.z, f), pl.x, pl.z, prof.x)
+				if pl.y != CWVoxelGenerator.standing_top(rel, prof.x) + 1:
 					off_ground += 1
 				# Et l'autre moitie de la meme regle : aucune plante dans l'eau.
-				if prof.y <= prof.z:
+				# Sous un massif la question ne se pose pas : la plante est sur
+				# la roche, pas dans la mare qu'elle recouvre.
+				if prof.y <= prof.z and rel.y < rel.x:
 					noyees += 1
 				var biome: int = CWBiome.at(c.x, c.y, c.z, p.sea_level)
 				if not sc.library().for_biome(biome).has(pl.model):
