@@ -5,6 +5,36 @@ il contient des décisions qui coûtent cher à redécouvrir.
 
 ---
 
+## 0. Demain, la première chose à faire
+
+**Une lecture, et elle débloque les lacs.** Tout le reste du portage est écrit et
+attend : plan en sept points en §7bis.2, algorithme complet en
+`docs/systems/02` §10.2, porte mesurée à 3,4 % des terres.
+
+> **Que rend `terrain_generateColumnColor` ?** On sait déjà que ce n'est pas une
+> couleur mais une **hauteur de colonne** (c'est le quatrième des noms trompeurs,
+> `docs/ROADMAP.md` §1.7). Ce qu'on ne sait pas est *laquelle* : la hauteur
+> **finale** de la colonne, ou son **ossature continentale** avant les octaves de
+> détail. C'est le niveau de l'eau, et l'écart se voit en jeu — avec la finale,
+> l'étang se creuse dans le sol ; avec l'ossature, il se pose au fond de la
+> vallée telle qu'elle est taillée.
+
+Où chercher : la fonction est appelée en trois endroits de
+`WorldInfo_generateBiomeContent` (`cube/world/WorldInfo.cpp`, lignes 1606, 2562
+et 2706) et son corps est dans le dépôt d'analyse. Le point décisif est de savoir
+si elle consulte la **porte des chenaux** — si oui, c'est la hauteur finale ;
+sinon, l'ossature.
+
+**Ne pas deviner.** Le champ d'altitude porte l'identité de tous les mondes déjà
+explorés, et une passe qui le creuse en pariant sur la mauvaise hauteur poserait
+des mares au mauvais endroit sans que rien ne le signale.
+
+Ensuite, dans l'ordre : les sept points de §7bis.2. Le piège nommé est le n° 5 —
+les deux chemins rapides de `_generate_block` s'appuient sur `patch.lowest`, et
+le creusement des berges l'invalide.
+
+---
+
 ## 1. Où sont les choses
 
 | quoi | chemin |
@@ -143,6 +173,9 @@ biome, **Échap** rend la souris puis quitte.
 >
 > **Restent donc les lacs — à écrire, plan en main — et la collision, objet par
 > objet (§7bis.3).** 2.6, l'apparition, reste l'autre porte ouverte.
+>
+> **La première chose à faire demain est en §0**, en tête de ce fichier : une
+> lecture, et les lacs se débloquent.
 
 Jalon 1 (le monde) : **1.1 à 1.13 sont portés, testés et vus en jeu**. Suite de
 validation : **332 vérifications, 0 échec**, ~20 s.

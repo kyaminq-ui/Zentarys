@@ -27,8 +27,9 @@ Statuts : ✅ fait · 🔶 partiel · ⬜ à faire · ⛔ hors périmètre
 Le terrain conditionne tout le reste : physique, rendu, placement des créatures
 et des structures.
 
-**Les treize systèmes du monde sont portés et vérifiés.** Le monde se génère,
-se creuse, se sauvegarde, s'éclaire, se garnit, se cartographie et se boise :
+**Les treize premiers systèmes du monde sont portés et vérifiés**, le
+quatorzième est analysé et attend d'être écrit. Le monde se génère, se creuse,
+se sauvegarde, s'éclaire, se garnit, se cartographie et se boise :
 
 - **1.1 à 1.10**, le terrain ;
 - **1.11**, la grande végétation — un lot d'assets, une seconde couche de
@@ -42,11 +43,20 @@ se creuse, se sauvegarde, s'éclaire, se garnit, se cartographie et se boise :
   d'origine, qui rend au relief la roche que 1.12 lui avait retirée, et la lui
   rend **sur la pente et non sur l'altitude**. **Fait le 2026-09-06.**
 
-**Le jalon 1 est clos.** Ce qui reste est de la finition, listée en dette
-technique, plus les questions d'analyse encore pendantes de `docs/systems/02`,
-§9 — dont les deux qui restent devant : `World_generateWaterOrPathFeature`,
-d'où sortiront les lacs et les chemins, et la collision, objet par objet. La
-porte suivante côté entités est **2.6, l'apparition**.
+**Le jalon 1 est clos**, et **1.14 — les lacs** est le seul système du monde
+encore devant. Son analyse est faite (`docs/systems/02`, §10) et elle a corrigé
+deux erreurs de ce dépôt : `World_generateWaterOrPathFeature` **ne fait ni eau
+ni chemin** — c'est le douzième nom trompeur — et l'élément de tuile 12 n'est
+donc pas un plan d'eau. L'eau est écrite dans `generateBiomeContent`, et **sa
+porte est le champ de chenaux porté au jalon 1.4** : il ne manquait pas un
+champ, il manquait un seuil.
+
+Il reste ensuite la **collision**, objet par objet (`nextsteps.md`, §7bis.3), la
+finition listée en dette technique, et les questions d'analyse pendantes de
+`docs/systems/02`, §9. **Les chemins sortent du périmètre** : la source n'a pas
+de réseau de routes, ce qui confirme la correction du jalon 1.6 ; en faire un
+serait une création de ce projet, à décider comme telle. La porte suivante côté
+entités est **2.6, l'apparition**.
 
 | # | Système | Source analysée | Statut | Note |
 |---|---|---|---|---|
@@ -63,6 +73,7 @@ porte suivante côté entités est **2.6, l'apparition**.
 | 1.11 | **Arbres et grande végétation** | voie des entités, `docs/systems/02` §5.2 | ✅ | assets, dispersion, montage, et **le tronc écrit dans le terrain** ; reste la pose des filons, qui appartient à 2.6 |
 | 1.12 | **Les six biomes** | climat de 1.3 + biomes de l'alpha 2013 | ✅ | couche `CWBiome` au-dessus des matières, Lava Lands et ses coulées, **42 modèles de flore et 24 d'arbres regénérés** (la flore a été refaite le soir même : 38 modèles, à 4 voxels par bloc et 6 pour les petits props) |
 | 1.13 | **La falaise** | `terrain_surfaceColor_blend` @005c56e0, 5ᵉ branche | ✅ | seuil relevé (0,5), pente mesurée sur un treillis de 4 blocs ; 4,4 % des terres en roche nue |
+| 1.14 | **Les lacs** | `WorldInfo_generateBiomeContent` @005e4850, seconde passe | 🔶 | **analysé**, `docs/systems/02` §10 : porte = champ de chenaux à 0,02 (3,4 % des terres, mesuré), niveau quantifié au pas de 5, berges creusées. Reste à écrire — plan en sept points, `nextsteps.md` §7bis.2 |
 
 ### 1.6 — Éléments de tuile (fait)
 
