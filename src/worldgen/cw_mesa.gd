@@ -1,9 +1,8 @@
 class_name CWMesa
 extends RefCounted
 
-## Un **massif** : une masse de roche arrondie et irreguliere, posee au-dessus
-## du champ d'altitude, qui donne au paysage un relief que le champ ne sait pas
-## produire.
+## Un **massif** : une masse de roche deformee, posee au-dessus du champ
+## d'altitude, qui donne au paysage un relief que le champ ne sait pas produire.
 ##
 ## -- Pourquoi cette couche existe --------------------------------------------
 ##
@@ -19,35 +18,58 @@ extends RefCounted
 ## mot pour mot ce qu'il etait, et le monde garde son ossature — elle **ajoute**
 ## une seconde nappe de matiere par-dessus, decrite elle aussi par colonne.
 ##
-## -- La forme : arrondie, irreguliere, et **escaladable** --------------------
+## -- La forme : abstraite, exageree, et **pas escaladable** ------------------
 ##
-## La premiere version (2026-09-07) etait un **chapeau plat sur un socle
-## etroit** : une mesa au sens propre, avec sa paroi verticale et son
-## porte-a-faux. Elle a ete refaite le lendemain, sur une objection qui ne se
-## discute pas — *le joueur doit pouvoir y monter*. Un chapeau qui deborde de son
-## socle n'est pas escaladable : il est fait pour ne pas l'etre.
+## Trois formes se sont succede, et la troisieme est un renversement assume.
 ##
-## La forme est donc devenue un **champ de bosses** :
+## 1. **Un chapeau plat sur un socle etroit** (2026-09-07) : une mesa au sens
+##    propre, avec sa paroi verticale et son porte-a-faux. Retiree le lendemain
+##    sur une objection qui ne se discutait pas — *le joueur doit pouvoir y
+##    monter* ;
+## 2. **un champ de bosses escaladable** (2026-09-08) : `1 - u²` deforme par deux
+##    bruits, eleve au carre pour rejoindre le sol tangentiellement, et
+##    l'amplitude des bruits **rabattue** des que la marche depassait deux blocs.
+##    Le contrat etait tenu, mesure, et verifie ;
+## 3. **la forme actuelle** (2026-09-09), demandee apres la session de jeu qui a
+##    juge la precedente : *ils ressemblent trop a des domes, il faut que ce soit
+##    plus abstrait et exagere dans leur deformation, ne plus tenir compte de
+##    l'escalade du personnage*.
 ##
-##     f(x, z) = (1 - u²) + bruit lent + bruit fin
-##     dessus  = sol + hauteur × max(0, f)
+## > **Le contrat d'escalade est retire, et c'est la seule facon de tenir la
+## > demande.** Il ne bornait pas un detail : il bornait *tout*. La hauteur
+## > relative, l'amplitude des bruits, l'exposant du profil — chacun des trois
+## > leviers qui font qu'une masse n'est pas un dome sortait de la borne de
+## > marche, et `CWMesaGrid` rabattait la rugosite tiree plutot que de poser une
+## > masse trop raide. Un relief escaladable partout **est** un dome ; on ne
+## > pouvait pas garder l'un en demandant l'autre.
 ##
-## — un dome radial, deforme par deux bruits, qui **retombe a zero sur son
-## contour**. Il n'y a donc plus ni bord franc ni dessous : la masse sort du sol
-## et y retourne, et on la gravit par n'importe quel cote.
+## Ce qui remplace le dome, dans l'ordre ou ca se voit :
 ##
-## > **La pente est le contrat, et elle se mesure.** Une masse escaladable est
-## > une masse dont le dessus ne monte jamais de plus d'un bloc par bloc — sinon
-## > elle porte une marche qu'on ne franchit pas. Les trois amplitudes ci-dessous
-## > sont choisies pour ca, et `tests/relief_test.gd` **mesure la pente reelle**
-## > sur des masses tirees au hasard plutot que de faire confiance au calcul :
-## > la deformation du contour et les deux bruits s'additionnent, et leur somme
-## > n'a pas de borne evidente.
+## * **une deformation du domaine.** On ne deforme plus le contour, on **deplace
+##   le point** avant de le mesurer : `q = p + bruit(p) x amp_warp x rayon`. Un
+##   bruit additif fait onduler un cercle ; un bruit de domaine le **plie**, lui
+##   fait des golfes, des caps et des pincements. C'est la difference entre une
+##   silhouette bruitee et une silhouette *dessinee*, et c'est le levier qui
+##   compte le plus. Il remplace aussi le bruit lent d'avant, qui faisait moins
+##   bien la meme chose pour le meme prix ;
+## * **une ellipse tournee.** Le terme radial n'est plus `1 - u²` sur un cercle
+##   mais sur une ellipse d'allongement et d'orientation tires par massif : des
+##   cretes et des buttes la ou il n'y avait que des ronds ;
+## * **des lobes angulaires**, `cos(k x theta)` avec `k` de deux a six : des
+##   doigts de roche qui partent du coeur. Le terme est amorti pres du centre,
+##   ou l'angle n'a pas de sens ;
+## * **un exposant de profil par massif.** `f^p` et non plus `f²`. C'est la
+##   reponse directe au mot « dome » : a `p = 2` la masse rejoint le sol
+##   tangentiellement, ce qui **est** un dome ; a `p = 0,4` elle a un dessus
+##   presque plat et des flancs qui tombent — la mesa qu'on avait retiree, mais
+##   sans son porte-a-faux ;
+## * **des strates.** Un massif sur deux quantifie sa hauteur par paliers de
+##   trois a neuf blocs. C'est ce qui donne l'abstraction demandee : la masse
+##   monte par gradins, comme un dessin de roche plutot que comme un tas.
 ##
-## Le seul endroit ou la matiere surplombe encore du vide est le **porche** d'une
-## grotte : autour de chaque entree, le dessous de la masse se souleve, ce qui
-## creuse un abri au-dessus du trou et le rend visible de loin. C'est un
-## surplomb local, choisi, et il ne barre aucun chemin.
+## Le seul endroit ou la matiere surplombe encore du vide reste le **porche**
+## d'une grotte : autour de chaque entree, le dessous de la masse se souleve, ce
+## qui creuse un abri au-dessus du trou et le rend visible de loin.
 ##
 ## -- Ce qui n'est pas de la source -------------------------------------------
 ##
@@ -62,72 +84,28 @@ extends RefCounted
 ## champ, et leur altitude se lit *dans* le champ. Rien de tel ici, parce que la
 ## couche est posee **au-dessus** du champ et jamais dedans.
 
-# -- Deformation du contour ---------------------------------------------------
+# -- Le caractere d'un massif : sept nombres, tires un par un ------------------
 #
-# Deux bruits, lent puis fin. **Leurs frequences sont relatives au rayon du
-# massif**, et non absolues : un bruit a frequence fixe donne dix lobes a une
-# grosse masse et un demi-lobe a une petite, donc deux formes qui n'ont rien a
-# voir — et surtout, sur la grosse, une **pente proportionnelle a la hauteur**
-# qui finit par depasser le bloc par bloc. En posant la longueur d'onde en
-# multiples du rayon, la silhouette et la pente sont les memes a toutes les
-# tailles, ce qui est la seule facon de garantir l'escalade sans borner les
-# tailles.
-const SHAPE_WAVES_SLOW: float = 0.85    ## lobes par rayon
-const SHAPE_WAVES_FINE: float = 2.6
-
-## Amplitudes de reference. Elles ne servent plus a dessiner : **chaque massif
-## tire les siennes** (`amp_slow`, `amp_fine`, tirees d'un seul caractere de
-## rugosite par `CWMesaGrid`), et ces deux-ci ne restent que comme milieu de la
-## fourchette et comme reperes de lecture.
-##
-## -- Pourquoi par massif, et ce que ca change au contrat ---------------------
-##
-## Avec deux constantes partagees, tous les massifs du monde avaient la meme
-## borne de marche — deux blocs — et surtout la **meme silhouette a l'echelle
-## pres**. Un paysage n'a pas cette regularite : il porte des masses lisses,
-## presque des domes, et des masses decoupees en lobes. Le caractere se tire
-## donc par massif.
-##
-## Le contrat d'escalade devient alors **parametre** : ce n'est plus « jamais
-## plus de deux blocs » mesure contre une constante, c'est « jamais plus que la
-## borne de *ce* massif », et cette borne se calcule de ses propres nombres
-## (`max_step`). C'est elle que `tests/relief_test.gd` mesure.
-const SHAPE_AMP_SLOW: float = 0.22
-const SHAPE_AMP_FINE: float = 0.055
-
-# -- La borne de marche d'un massif -------------------------------------------
+# Chacun a une plage, et **la plage est l'eventail du paysage**. Les bornes
+# ci-dessous ne sont pas des garde-fous : ce sont les deux extremes qu'on
+# accepte de voir cote a cote dans un meme pays.
 #
-# Le dessus d'un massif vaut `plancher(sol) + plancher(hauteur x f²)`. Sa
-# derivee le long d'un rayon est `hauteur x 2f x df/dl`, et `f` a trois termes :
-#
-#   * le terme radial `1 - u²`, de derivee `2u/R`. Le produit `2f x 2u/R` avec
-#     `f = 1 - u²` vaut `4u(1-u²)/R`, maximal a `u = 1/sqrt(3)` : **0,77 / R** ;
-#   * les deux bruits, de longueur d'onde `R / ondes`. La pente d'un bruit de
-#     valeur ne depasse pas ~1,5 par longueur d'onde, d'ou `1,5 x ondes x
-#     amplitude / R` chacun, multiplie par `2f`.
-#
-# D'ou la borne ci-dessous. Elle est **conservatrice par construction** — elle
-# suppose les trois termes maximaux au meme point, ce qui n'arrive pas — et
-# c'est voulu : une borne qu'on depasse ne vaut rien, et le balayage de
-# `relief_test` mesure la marche reelle contre elle.
+# Tout se tire par massif depuis le 2026-09-09, et plus rien n'est rabattu :
+# il n'y a plus de contrat d'escalade a tenir, donc plus de raison de refuser le
+# haut d'une plage.
 
-## Pente maximale du terme radial, en multiples de `hauteur / rayon`.
-const SLOPE_RADIAL: float = 0.77
+## Longueur d'onde de la deformation du domaine, en lobes par rayon. Basse :
+## un warp a courte longueur d'onde fait de la dentelle, pas des caps.
+const WARP_WAVES: float = 0.55
 
-## Pente maximale d'un bruit de valeur, par longueur d'onde.
-const NOISE_SLOPE: float = 1.5
+## Longueur d'onde du bruit de peau, en lobes par rayon. **Relative au rayon**,
+## et non absolue : un bruit a frequence fixe donnerait dix lobes a une grosse
+## masse et un demi-lobe a une petite, donc deux formes qui n'ont rien a voir.
+const SKIN_WAVES: float = 2.6
 
-## Ce que le terrain lui-meme ajoute a la marche : les deux planchers de la
-## formule ont chacun le droit de changer d'une unite d'une colonne a la
-## suivante, et le terrain seul en fait deja un.
-const STEP_TERRAIN: int = 1
-
-## Marche maximale toleree, tous massifs confondus. **C'est le contrat
-## d'escalade du 2026-09-08**, et il ne se negocie pas : `CWMesaGrid` rabat la
-## rugosite d'un massif qui le depasserait plutot que de poser une masse qu'on
-## ne peut pas gravir. Le caractere varie librement jusqu'a cette limite, et la
-## limite gagne.
-const CLIMB_MAX_STEP: int = 2
+## Amplitude du bruit de peau, en fraction du rayon. Reference de lecture : les
+## massifs tirent la leur.
+const SKIN_AMP: float = 0.06
 
 ## Epaisseur, en blocs, jusqu'a laquelle le dessus d'un massif garde la matiere
 ## du pre qu'il traverse, puis largeur de la bande sur laquelle il devient de la
@@ -247,7 +225,7 @@ class Cave extends RefCounted:
 
 var x: float = 0.0
 var z: float = 0.0
-## Rayon nominal : la distance a laquelle le terme radial du champ s'annule.
+## Rayon nominal : le demi-axe moyen de l'ellipse de contour.
 var radius: float = 70.0
 ## Sol de reference, releve au centre au placement.
 var base_y: int = 0
@@ -255,67 +233,119 @@ var base_y: int = 0
 var height: float = 24.0
 var warp_ox: float = 0.0
 var warp_oz: float = 0.0
-## Le caractere de la masse : amplitudes des deux bruits de contour, tirees par
-## massif. Faibles, la masse est un dome ; fortes, elle est decoupee en lobes.
-## Voir la note de `SHAPE_AMP_SLOW`.
-var amp_slow: float = SHAPE_AMP_SLOW
-var amp_fine: float = SHAPE_AMP_FINE
-## Vrai si le contrat d'escalade a rabattu la rugosite tiree. Sert aux mesures :
-## un monde ou la moitie des masses est rabattue dit que la fourchette de tirage
-## est trop large, et l'eventail pose n'est plus celui qu'on croit tirer.
-var damped: bool = false
+
+# -- Le caractere. Voir l'en-tete pour ce que chacun fait a la silhouette. -----
+
+## Amplitude de la deformation du domaine, en fraction du rayon.
+var amp_warp: float = 0.25
+## Amplitude du bruit de peau, en fraction du rayon.
+var amp_fine: float = SKIN_AMP
+## Allongement de l'ellipse : demi-grand axe `rayon x stretch`, demi-petit axe
+## `rayon / stretch`. Un vaut un cercle.
+var stretch: float = 1.0
+## Orientation du grand axe, et son cosinus/sinus tenus a jour par `set_axes`.
+var angle: float = 0.0
+var _ca: float = 1.0
+var _sa: float = 0.0
+## Lobes angulaires : leur nombre, leur phase, leur amplitude.
+var lobes: int = 3
+var lobe_phase: float = 0.0
+var amp_lobe: float = 0.0
+## Exposant du profil. Deux rejoint le sol tangentiellement — c'est le dome ;
+## sous un, le dessus s'aplatit et les flancs tombent.
+var profile_pow: float = 2.0
+## Epaisseur d'un gradin, en blocs, et part de la quantification appliquee.
+## Zero veut dire pas de strates.
+var strata: float = 0.0
+var strata_mix: float = 0.0
+
 var caves: Array[Cave] = []
 
 
-## La pente maximale du dessus de cette masse, en blocs par bloc, telle que la
-## derivation de l'en-tete la borne. Conservatrice.
-func slope_bound() -> float:
-	# `2f` avec f au plus `1 + les deux amplitudes` : le facteur du produit
-	# derive, pris a son maximum.
-	var f_max: float = 1.0 + amp_slow + amp_fine
-	return height / radius * (SLOPE_RADIAL + 2.0 * f_max * NOISE_SLOPE
-			* (amp_slow * SHAPE_WAVES_SLOW + amp_fine * SHAPE_WAVES_FINE))
+## Pose l'ellipse. Le cosinus et le sinus sont gardes parce que `shape` les
+## emploie a chaque colonne du voisinage du massif.
+func set_axes(s: float, a: float) -> void:
+	stretch = maxf(1.0, s)
+	angle = a
+	_ca = cos(a)
+	_sa = sin(a)
 
 
-## La marche maximale de **ce** massif, en blocs : sa propre pente, plus ce que
-## le terrain ajoute. C'est contre ce nombre que la mesure d'escalade de
-## `tests/relief_test.gd` se fait — et non contre une constante partagee.
-func max_step() -> int:
-	return STEP_TERRAIN + ceili(slope_bound())
+## Rayon normalise maximal du contour : ce que valent au plus les lobes et la
+## peau ajoutes au terme radial.
+func silhouette() -> float:
+	return sqrt(maxf(1.0, 1.0 + amp_lobe + amp_fine))
 
 
-## Rayon au-dela duquel la colonne ne peut plus etre concernee, deformation
-## comprise. Sert au rejet rapide, avant tout echantillon de bruit.
+## Rayon **circulaire** au-dela duquel la colonne ne peut plus etre concernee,
+## allongement et deformation du domaine compris.
+##
+## Il sert a deux choses qui ne demandent pas la meme finesse : dimensionner la
+## fenetre de cellules, et **partir de l'exterieur** quand on cherche le contour
+## de la masse le long d'une direction (les grottes). Le rejet rapide par
+## colonne, lui, passe par `near`, qui teste l'ellipse.
 func reach() -> float:
-	return radius * sqrt(1.0 + amp_slow + amp_fine) + 2.0
+	return radius * (stretch * silhouette() + amp_warp) + 2.0
 
 
+## Rejet rapide, **sur l'ellipse** et non sur son cercle circonscrit. La
+## difference n'est pas cosmetique : `shape` echantillonne trois bruits, et
+## l'aire d'un disque de rayon `radius x stretch` vaut `stretch²` fois celle de
+## l'ellipse. A `stretch = 1,45`, c'est deux fois trop de colonnes payees.
+##
+## La marge du warp est prise sur le **petit** axe, ou elle pese le plus en
+## unites normalisees : conservateur des deux cotes.
 func near(cx: int, cz: int) -> bool:
 	var dx: float = float(cx) - x
 	var dz: float = float(cz) - z
-	var r: float = reach()
-	return dx * dx + dz * dz <= r * r
+	var rx: float = (dx * _ca + dz * _sa) / (radius * stretch)
+	var rz: float = (dz * _ca - dx * _sa) * stretch / radius
+	var b: float = silhouette() + amp_warp * stretch
+	return rx * rx + rz * rz <= b * b
 
 
 ## Le champ de forme de la masse en cette colonne : `1` au coeur, `0` sur le
 ## contour, negatif au-dela. Rend `-1` sans echantillonner si la colonne est
 ## loin.
 ##
-## Deux echantillons de bruit, payes par les seules colonnes du voisinage d'un
-## massif — quelques pourcents des terres.
+## Trois echantillons de bruit — deux pour le warp, un pour la peau —, payes par
+## les seules colonnes du voisinage d'un massif. La version d'avant en prenait
+## deux ; le troisieme achete la deformation du domaine, qui est ce qui fait la
+## silhouette, et le bruit lent qu'il remplace ne faisait pas mieux.
 func shape(cx: int, cz: int) -> float:
 	if not near(cx, cz):
 		return -1.0
 	var fx: float = float(cx)
 	var fz: float = float(cz)
-	var dx: float = fx - x
-	var dz: float = fz - z
-	var u2: float = (dx * dx + dz * dz) / (radius * radius)
-	var fs: float = SHAPE_WAVES_SLOW / radius
-	var ff: float = SHAPE_WAVES_FINE / radius
-	var slow: float = CWValueNoise.sample(fx * fs + warp_ox, fz * fs + warp_oz)
+
+	# 1. La deformation du domaine. On deplace le point, puis on mesure.
+	var wf: float = WARP_WAVES / radius
+	var w: float = amp_warp * radius
+	var qx: float = fx + CWValueNoise.sample(
+			fx * wf + warp_ox, fz * wf + warp_oz) * w
+	var qz: float = fz + CWValueNoise.sample(
+			fx * wf + warp_oz, fz * wf - warp_ox) * w
+
+	# 2. L'ellipse tournee, en coordonnees normalisees.
+	var dx: float = qx - x
+	var dz: float = qz - z
+	var rx: float = (dx * _ca + dz * _sa) / (radius * stretch)
+	var rz: float = (dz * _ca - dx * _sa) * stretch / radius
+	var u2: float = rx * rx + rz * rz
+
+	# 3. Les lobes angulaires, amortis pres du centre : l'angle n'y a pas de
+	#    sens, et un `cos(k x theta)` non amorti y ferait tourner la matiere
+	#    d'un bloc a l'autre. Le nombre de lobes etant entier, le terme reste
+	#    continu de part et d'autre de la coupure de `atan2`.
+	var lobe: float = 0.0
+	if amp_lobe > 0.0:
+		lobe = cos(float(lobes) * atan2(rz, rx) + lobe_phase) * amp_lobe \
+				* clampf(u2 * 3.0, 0.0, 1.0)
+
+	# 4. La peau.
+	var ff: float = SKIN_WAVES / radius
 	var fine: float = CWValueNoise.sample(fx * ff + warp_oz, fz * ff + warp_ox)
-	return 1.0 - u2 + slow * amp_slow + fine * amp_fine
+	return 1.0 - u2 + lobe + fine * amp_fine
 
 
 ## Intervalle de matiere ajoute par la masse dans cette colonne, bornes
@@ -325,26 +355,50 @@ func slab(cx: int, cz: int, ground_top: int) -> Vector2i:
 	return slab_from_shape(shape(cx, cz), ground_top, cx, cz)
 
 
-## L'epaisseur de la masse au-dessus du terrain, en blocs.
+## L'elevation de la masse au-dessus du sol, en blocs, pour une valeur de forme.
 ##
-## **Deux choses ici valent le detour, et les deux viennent d'une capture.**
+## **C'est le point unique du profil** : `slab_from_shape` et `thickness` en
+## sortent tous les deux, et il le faut — le placement des grottes lit
+## l'epaisseur, le generateur lit la dalle, et deux formules ecrites cote a cote
+## finissent par diverger.
 ##
-## *Le dessus est mesure depuis le sol de la colonne*, pas depuis celui du
+## Deux choses le composent.
+##
+## *L'exposant est tire par massif*, `f^p` et non plus `f²`. A `p = 2` la masse
+## rejoint le sol tangentiellement — sa pente s'annule sur son contour —, et
+## c'est precisement ce qui fait un dome. Sous un, le dessus s'aplatit et les
+## flancs tombent : c'est la butte a paroi qu'on cherchait, et elle n'a pas le
+## porte-a-faux de la version du 2026-09-07 parce que le contour reste celui du
+## champ, pas un chapeau pose dessus.
+##
+## *Les strates quantifient la hauteur* par paliers de `strata` blocs, melangees
+## a la hauteur lisse dans la proportion `strata_mix`. C'est l'abstraction
+## demandee : la masse monte par gradins. Un gradin est une marche verticale de
+## trois a neuf blocs, donc infranchissable — c'est voulu, et c'est le contrat
+## d'escalade qu'on a retire pour l'obtenir.
+func rise(f: float) -> int:
+	if f <= 0.0:
+		return 0
+	var h: float = height * pow(f, profile_pow)
+	if strata >= 1.0:
+		h = lerpf(h, floorf(h / strata) * strata, strata_mix)
+	return floori(h)
+
+
+## L'intervalle de matiere de la masse dans cette colonne.
+##
+## **Le dessus est mesure depuis le sol de la colonne**, pas depuis celui du
 ## centre du massif. Une masse posee sur un flanc dont le sol descend de douze
 ## blocs entre son centre et son bord finissait sinon par une **marche de douze
 ## blocs** sur tout son contour : la masse s'arretait a l'altitude de son
 ## centre, le terrain etait ailleurs. Mesure avant correction : 12 blocs de
-## marche sur un massif de 16 de haut.
-##
-## *Le profil est au carre*, `f²` et non `f`. C'est ce qui fait que la masse
-## rejoint le sol **tangentiellement** : sa pente s'annule sur son contour au
-## lieu d'y valoir son maximum. Sans cela, le raccord au terrain est un ressaut
-## d'un ou deux blocs tout autour, et c'est exactement ce qu'on ne veut pas
-## d'un relief qu'on doit pouvoir gravir.
+## marche sur un massif de 16 de haut. C'est la seule chose que la refonte du
+## 2026-09-09 n'a pas touchee, et pour cause : elle ne tenait pas a l'escalade,
+## elle tenait a la justesse du raccord.
 func slab_from_shape(f: float, ground_top: int, cx: int, cz: int) -> Vector2i:
 	if f <= 0.0:
 		return Vector2i(1, 0)
-	var hi: int = ground_top + floori(height * f * f)
+	var hi: int = ground_top + rise(f)
 	var lo: int = ground_top - ROOT_DEPTH + porch(cx, cz)
 	if lo > hi:
 		return Vector2i(1, 0)
@@ -353,10 +407,7 @@ func slab_from_shape(f: float, ground_top: int, cx: int, cz: int) -> Vector2i:
 
 ## Epaisseur de la masse au-dessus du sol, en blocs, sans la construire.
 func thickness(cx: int, cz: int) -> int:
-	var f: float = shape(cx, cz)
-	if f <= 0.0:
-		return 0
-	return floori(height * f * f)
+	return rise(shape(cx, cz))
 
 
 ## Soulevement du dessous de la masse autour d'une entree de grotte : c'est le
@@ -455,5 +506,7 @@ func _tube(c: Cave, px: float, pz: float) -> Vector3:
 
 
 func _to_string() -> String:
-	return "CWMesa(pos=(%.0f, %.0f), r=%.0f, sol=%d, haut=%.0f, grottes=%d)" % [
-			x, z, radius, base_y, height, caves.size()]
+	return ("CWMesa(pos=(%.0f, %.0f), r=%.0f, sol=%d, haut=%.0f, allonge=%.2f,"
+			+ " p=%.2f, lobes=%d x %.2f, warp=%.2f, gradins=%.0f, grottes=%d)") % [
+			x, z, radius, base_y, height, stretch, profile_pow, lobes,
+			amp_lobe, amp_warp, strata, caves.size()]

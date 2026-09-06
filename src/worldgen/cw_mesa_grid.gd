@@ -58,14 +58,13 @@ const RADIUS_SPAN: int = 80
 
 ## Hauteur de la masse, en fraction de son rayon.
 ##
-## **C'est la constante qui decide si le massif est escaladable.** Le dessus
-## suit `1 - u²` : sa pente radiale vaut `2 x hauteur / rayon` au bord, donc a
-## 0,34 elle plafonne a 0,68 bloc par bloc avant les deux bruits de forme.
-## Au-dela de 0,45, la masse porte des marches qu'on ne franchit pas, et une
-## verification mesure la pente reelle plutot que de faire confiance a ce
-## calcul — les bruits s'y ajoutent.
-const HEIGHT_PER_RADIUS_MIN: float = 0.34
-const HEIGHT_PER_RADIUS_SPAN: float = 0.20
+## C'etait **la constante qui decidait si le massif etait escaladable**, et elle
+## plafonnait a 0,54 pour cette raison. Le contrat d'escalade ayant ete retire le
+## 2026-09-09, elle ne repond plus qu'a une question de paysage : *a partir de
+## quand une masse cesse d'etre une bosse ?* La fourchette est donc montee a
+## 0,40-0,80, ce qui donne des masses de 18 a 91 blocs de haut selon leur rayon.
+const HEIGHT_PER_RADIUS_MIN: float = 0.40
+const HEIGHT_PER_RADIUS_SPAN: float = 0.40
 ## Plancher de hauteur, en blocs : un massif de rayon 26 ne doit pas etre une
 ## bosse de sept blocs qu'on ne remarque pas.
 const HEIGHT_MIN: int = 18
@@ -113,6 +112,14 @@ const CAVE_CLEARANCE_SWING: float = 0.35
 ## quatre de haut sont le minimum pour qu'un couloir se parcoure.
 const CAVE_SECTION_FLOOR: float = 3.0
 const CAVE_CLEARANCE_FLOOR: float = 4.0
+
+## Nombre de directions essayees pour percer une bouche.
+##
+## **Douze depuis le 2026-09-09**, contre huit. Deux choses en demandaient plus :
+## la silhouette porte maintenant des bras et des golfes, donc un cote sur trois
+## ne mene nulle part ; et la condition de debouche est devenue exacte, donc plus
+## severe. A huit directions, le monde perdait un cinquieme de ses galeries.
+const ESSAIS: int = 12
 
 ## Chance, sur cent, qu'une galerie porte un embranchement court, et longueur de
 ## celui-ci en fraction de la galerie. Un embranchement ne debouche pas : il
@@ -172,8 +179,10 @@ func get_cell(cx: int, cz: int, field: CWTerrainField) -> Array[CWMesa]:
 
 
 ## Les surplombs dont l'emprise peut atteindre la colonne : le voisinage 3 x 3
-## de sa cellule. Le rayon maximum d'un surplomb, deformation comprise, vaut
-## 176 unites — bien moins qu'une cellule —, donc trois cellules suffisent.
+## de sa cellule. Le rayon maximum d'un surplomb, allongement et deformation du
+## domaine compris, vaut **270 unites** depuis le 2026-09-09 — contre 176 avant
+## la refonte de la forme, et toujours bien moins qu'une cellule de 512 —, donc
+## trois cellules suffisent.
 ##
 ## **A appeler une fois par cellule traversee, pas une fois par colonne.** Les
 ## 256 colonnes d'un bloc tombent dans une ou deux cellules ; c'est la meme
@@ -257,33 +266,47 @@ func _build_cell(cx: int, cz: int, field: CWTerrainField) -> Array[CWMesa]:
 	m.z = float(mz)
 	m.radius = float(RADIUS_MIN + rng.mod(RADIUS_SPAN))
 	m.base_y = floori(ground)
-	# `f²` divise la hauteur utile par deux au coeur : la constante est prise
-	# sur la hauteur **nominale**, celle qu'atteindrait un dome sans son raccord
-	# tangentiel, et le massif reel monte moins haut.
+	# La constante est prise sur la hauteur **nominale** : le profil `f^p` la
+	# ramene au coeur des que `p` depasse un, et le massif reel monte alors
+	# moins haut que ce nombre-la.
 	m.height = maxf(float(HEIGHT_MIN), m.radius * (HEIGHT_PER_RADIUS_MIN
 			+ rng.unit() * HEIGHT_PER_RADIUS_SPAN))
 	m.warp_ox = float(rng.next() * 32768 + rng.next())
 	m.warp_oz = float(rng.next() * 32768 + rng.next())
-	_tire_rugosite(m, rng)
+	_tire_caractere(m, rng)
 
 	_add_caves(m, rng, field)
 	out.append(m)
 	return out
 
 
+## Le pas d'un sondage radial : combien de points entre `reach()` et le centre.
+##
+## **En distance absolue, et non en multiples du rayon.** Les sondages partaient
+## de `1,15 x rayon` : c'etait juste tant que le contour etait un cercle a peine
+## bosselle, et c'est faux depuis que la forme porte un allongement et une
+## deformation du domaine — le contour sort alors jusqu'a `2,3 x rayon`, un
+## sondage qui commence a 1,15 commence **dans la masse**, ne voit jamais le
+## dehors, et aucune galerie n'est plus posee. C'est le genre de regression qui
+## ne casse aucune verification de forme et vide le monde de ses grottes.
+const SONDE_PAS: int = 80
+
+
+## Le k-ieme point d'un sondage radial, du dehors vers le dedans.
+static func _sonde(m: CWMesa, dir: Vector2, k: int) -> Vector2:
+	var d: float = m.reach() * (1.0 - float(k) / float(SONDE_PAS))
+	return Vector2(m.x, m.z) + dir * d
+
+
 ## Le **seuil** dans une direction : la ou la masse cesse, en partant du dehors.
 ##
 ## C'est de la que part — ou la qu'arrive — une galerie, et c'est ce qui garantit
-## qu'elle debouche. Le contour etant deforme par deux bruits, on ne le calcule
-## pas : on le rencontre.
-func _seuil(m: CWMesa, dir: Vector2) -> Vector2:
-	var centre := Vector2(m.x, m.z)
-	var out: Vector2 = centre + dir * m.reach()
-	for k in range(0, 60):
-		var t: float = 1.15 - float(k) * 0.02
-		if t <= 0.1:
-			break
-		var q: Vector2 = centre + dir * (m.radius * t)
+## qu'elle debouche. Le contour etant deforme, on ne le calcule pas : on le
+## rencontre.
+static func _seuil(m: CWMesa, dir: Vector2) -> Vector2:
+	var out: Vector2 = _sonde(m, dir, 0)
+	for k in SONDE_PAS:
+		var q: Vector2 = _sonde(m, dir, k)
 		if m.thickness(int(q.x), int(q.y)) <= 0:
 			out = q
 			continue
@@ -337,43 +360,78 @@ func _ajoute_embranchement(m: CWMesa, parent: CWMesa.Cave,
 	m.caves.append(b)
 
 
-## Le caractere de la masse : lisse ou decoupee.
+# -- Le caractere d'une masse : sept nombres ----------------------------------
+#
+# **Un seul tirage pour la rugosite, et c'est le point.** Le warp et la peau
+# pourraient se tirer independamment ; ils ne le sont pas. Une masse dont les
+# grands caps sont doux mais la peau rugueuse ne ressemble a rien de naturel —
+# les deux echelles d'une erosion vont ensemble. Un seul nombre les pilote donc
+# toutes les deux.
+#
+# **Tout le reste se tire librement, et rien n'est rabattu.** La version du
+# 2026-09-08 divisait les amplitudes jusqu'a ce que la marche du massif rentre
+# dans le contrat d'escalade ; le contrat est retire, donc le rabattement l'est
+# aussi. Ce qui sort du tirage est ce qui se pose.
+
+## Deformation du domaine : c'est elle qui fait la silhouette. Le bas de la
+## plage donne un galet, le haut un objet a caps et a golfes.
+const WARP_MIN: float = 0.14
+const WARP_SPAN: float = 0.40
+
+## Peau : le grain du contour, tire du meme nombre que le warp.
+const SKIN_MIN: float = 0.030
+const SKIN_SPAN: float = 0.070
+
+## Allongement de l'ellipse. A 1,55, le grand axe fait 2,4 fois le petit.
+const STRETCH_SPAN: float = 0.55
+
+## Lobes angulaires : leur nombre, puis leur amplitude. Zero est dans la plage,
+## et il le faut — toutes les masses ne sont pas des etoiles.
 ##
-## -- Un seul tirage pour deux amplitudes, et c'est le point -------------------
-##
-## Les deux bruits de contour pourraient se tirer independamment. Ils ne le sont
-## pas : une masse dont les grands lobes sont doux mais la peau rugueuse ne
-## ressemble a rien de naturel — les deux echelles d'une erosion vont ensemble.
-## Un seul nombre, `rugosite`, les pilote donc toutes les deux, et il donne des
-## domes a une extremite et des masses decoupees en lobes a l'autre.
-##
-## -- Puis le contrat d'escalade reprend la main ------------------------------
-##
-## La rugosite tiree peut porter la marche du massif au-dela de
-## `CWMesa.CLIMB_MAX_STEP`, et alors elle est **rabattue** : les deux amplitudes
-## sont divisees jusqu'a ce que `max_step` rentre dans le contrat. On ne refuse
-## pas la masse, et on ne relance pas le tirage — l'un ferait des trous dans la
-## repartition, l'autre coûterait la reproductibilite du flux de nombres.
-##
-## La borne etant lineaire en les amplitudes a `f_max` pres, deux passes de
-## rabattement suffisent largement ; la boucle est bornee pour ne pas dependre
-## de cet argument.
-const RUGOSITE_SLOW_MIN: float = 0.12
-const RUGOSITE_SLOW_SPAN: float = 0.16
-const RUGOSITE_FINE_MIN: float = 0.028
-const RUGOSITE_FINE_SPAN: float = 0.042
+## **L'amplitude ne se lit pas comme un rayon.** Le terme s'ajoute a `1 - u²`,
+## donc un lobe d'amplitude A deplace le contour de `sqrt(1 + A)` : a 0,34 —
+## la premiere valeur essayee — cela faisait **+16 % de rayon**, invisible a
+## cote du warp, et la silhouette restait une patate. A 0,80, le cap est a
+## +34 % et le golfe a **-55 %** : la masse devient un objet a bras, ce qui est
+## l'abstraction demandee.
+const LOBES_MIN: int = 2
+const LOBES_SPAN: int = 5
+const LOBE_SPAN: float = 0.80
+
+## Exposant du profil. **C'est le levier qui repond au mot « dome ».** A 2, la
+## masse rejoint le sol tangentiellement et c'est exactement un dome ; a 0,35,
+## elle a un dessus presque plat et des flancs qui tombent.
+const POW_MIN: float = 0.35
+const POW_SPAN: float = 1.75
+
+## Strates : la chance qu'un massif monte par gradins, l'epaisseur d'un gradin
+## en blocs, et la part de quantification appliquee. A 1, les paliers sont
+## francs ; a 0,45, ils marquent le flanc sans l'escalier.
+const STRATA_CHANCE: int = 48
+const STRATA_MIN: int = 3
+const STRATA_SPAN: int = 7
+const STRATA_MIX_MIN: float = 0.45
+const STRATA_MIX_SPAN: float = 0.55
 
 
-func _tire_rugosite(m: CWMesa, rng: CWRand) -> void:
+func _tire_caractere(m: CWMesa, rng: CWRand) -> void:
 	var r: float = rng.unit()
-	m.amp_slow = RUGOSITE_SLOW_MIN + r * RUGOSITE_SLOW_SPAN
-	m.amp_fine = RUGOSITE_FINE_MIN + r * RUGOSITE_FINE_SPAN
-	for _i in 8:
-		if m.max_step() <= CWMesa.CLIMB_MAX_STEP:
-			return
-		m.amp_slow *= 0.85
-		m.amp_fine *= 0.85
-		m.damped = true
+	m.amp_warp = WARP_MIN + r * WARP_SPAN
+	m.amp_fine = SKIN_MIN + r * SKIN_SPAN
+	m.set_axes(1.0 + rng.unit() * STRETCH_SPAN, rng.unit() * PI)
+	m.lobes = LOBES_MIN + rng.mod(LOBES_SPAN)
+	m.lobe_phase = rng.unit() * TAU
+	m.amp_lobe = rng.unit() * LOBE_SPAN
+	m.profile_pow = POW_MIN + rng.unit() * POW_SPAN
+	# Le tirage des strates est fait **dans tous les cas**, y compris quand la
+	# masse n'en portera pas : deux nombres consommes ou non deplaceraient tout
+	# le flux, et une cellule voisine changerait de massif sans qu'on l'ait
+	# demande. Meme regle que partout ailleurs dans ce projet.
+	var ep: int = STRATA_MIN + rng.mod(STRATA_SPAN)
+	var mix: float = STRATA_MIX_MIN + rng.unit() * STRATA_MIX_SPAN
+	if rng.mod(100) < STRATA_CHANCE:
+		m.strata = float(ep)
+		m.strata_mix = mix
 
 
 ## Perce la masse d'une a deux galeries.
@@ -401,20 +459,36 @@ func _tire_rugosite(m: CWMesa, rng: CWRand) -> void:
 ## pas de six : si l'un d'eux est plus haut que le seuil, la galerie donnerait
 ## sur un talus.
 static func _debouche(m: CWMesa, dir: Vector2, field: CWTerrainField) -> bool:
-	var centre := Vector2(m.x, m.z)
-	var seuil: Vector2 = centre + dir * m.reach()
-	for k in range(0, 60):
-		var t: float = 1.15 - float(k) * 0.02
-		if t <= 0.1:
-			return false
-		var q: Vector2 = centre + dir * (m.radius * t)
+	var seuil: Vector2 = _sonde(m, dir, 0)
+	var touche: bool = false
+	for k in SONDE_PAS:
+		var q: Vector2 = _sonde(m, dir, k)
 		if m.thickness(int(q.x), int(q.y)) > 0:
+			touche = true
 			break
 		seuil = q
-	var h0: float = field.sample_column(int(seuil.x), int(seuil.y)).x
-	for d in [6, 12, 18, 24]:
+	# Une direction ou la masse n'a aucune epaisseur ne debouche pas : il n'y a
+	# rien a percer de ce cote-la.
+	if not touche:
+		return false
+	# -- Le test se fait **en blocs**, et c'est ce qui a manque ---------------
+	#
+	# Il comparait des altitudes flottantes a `h0 + 0,5`. Or le plancher d'une
+	# galerie vaut `plancher(h0) + 1`, et le sol d'une colonne occupe le bloc
+	# `plancher(altitude)` : un terrain a `h0 + 0,45` passait le test flottant et
+	# **bouchait** la sortie, son bloc de surface tombant exactement sur le
+	# plancher du tube. Le decalage etait de quelques dixiemes de bloc, donc il
+	# ne se voyait qu'a une bouche sur quatre — et pas du tout tant que le
+	# contour etait un cercle, ou les bouches tombaient loin des ressauts.
+	#
+	# La condition est donc celle que la verification exerce, mot pour mot : le
+	# bloc de surface reste **sous** le plancher du tube. Et le pas descend a
+	# quatre blocs, la verification marchant de cinq en cinq sur vingt-cinq.
+	var plancher: int = floori(field.sample_column(
+			int(seuil.x), int(seuil.y)).x) + 1
+	for d in [4, 8, 12, 16, 20, 24, 28]:
 		var q: Vector2 = seuil + dir * float(d)
-		if field.sample_column(int(q.x), int(q.y)).x > h0 + 0.5:
+		if floori(field.sample_column(int(q.x), int(q.y)).x) >= plancher:
 			return false
 	return true
 
@@ -425,7 +499,7 @@ func _add_caves(m: CWMesa, rng: CWRand, field: CWTerrainField) -> void:
 	var base: float = rng.unit() * TAU
 	for i in n:
 		var theta: float = base + (PI + (rng.unit() - 0.5) * 1.4) * float(i)
-		# **Huit directions essayees, la premiere qui debouche est gardee.**
+		# **`ESSAIS` directions essayees, la premiere qui debouche est gardee.**
 		# Sortir de la masse ne suffit pas a voir le ciel : un massif pose au
 		# pied d'un versant a des cotes ou le terrain *remonte* des qu'on le
 		# quitte, et une galerie percee de ce cote-la est murée par la colline
@@ -433,13 +507,13 @@ func _add_caves(m: CWMesa, rng: CWRand, field: CWTerrainField) -> void:
 		# est de choisir le cote plutot que de l'esperer.
 		var dir := Vector2(cos(theta), sin(theta))
 		var essai: int = 0
-		while essai < 8:
+		while essai < ESSAIS:
 			if _debouche(m, dir, field):
 				break
 			essai += 1
-			theta += TAU / 8.0
+			theta += TAU / float(ESSAIS)
 			dir = Vector2(cos(theta), sin(theta))
-		if essai >= 8:
+		if essai >= ESSAIS:
 			continue
 		# L'entree : sur le contour de la masse, la ou son dessus rejoint le sol.
 		# On la cherche vers l'exterieur plutot que de la calculer, le contour
@@ -456,24 +530,36 @@ func _add_caves(m: CWMesa, rng: CWRand, field: CWTerrainField) -> void:
 		#   * la **face**, la premiere colonne assez epaisse pour porter une
 		#     galerie. C'est elle qui decide de la hauteur libre.
 		#
-		# Le contour etant deforme par deux bruits, on ne les calcule pas : on
-		# les rencontre.
+		# Le contour etant deforme, on ne les calcule pas : on les rencontre.
 		var besoin: int = CAVE_HEIGHT_MIN + CAVE_HEADROOM_MIN
-		var centre := Vector2(m.x, m.z)
-		var seuil: Vector2 = centre + dir * m.reach()
+		var seuil: Vector2 = _sonde(m, dir, 0)
 		var face: Vector2 = seuil
 		var trouve: bool = false
 		var vu_dehors: bool = false
-		for k in range(0, 60):
-			var t: float = 1.15 - float(k) * 0.02
-			if t <= 0.1:
-				break
-			var q: Vector2 = centre + dir * (m.radius * t)
+		# -- Le seuil est le **premier** contour rencontre, et pas le dernier --
+		#
+		# La boucle ne s'arrete pas a la premiere colonne pleine : une colonne
+		# trop mince ne peut pas porter de galerie, donc on continue vers le
+		# coeur. Elle continuait aussi a **deplacer le seuil** a chaque colonne
+		# vide rencontree ensuite — ce qui etait sans effet tant que le contour
+		# etait un cercle a peine bosselle, et qui est faux depuis que la masse
+		# porte des bras : entre deux bras il y a un golfe, et le seuil finissait
+		# **dans le golfe**. La galerie s'y ouvrait alors sur un couloir ferme
+		# par le bras d'a cote, pendant que `_debouche` avait valide le contour
+		# exterieur, lui, et l'avait trouve degage.
+		#
+		# Les trois lectures du contour disent donc maintenant la meme chose :
+		# `_seuil`, `_debouche` et celle-ci gardent la **premiere** rencontre.
+		var touche: bool = false
+		for k in SONDE_PAS:
+			var q: Vector2 = _sonde(m, dir, k)
 			var e: int = m.thickness(int(q.x), int(q.y))
 			if e <= 0:
-				seuil = q
-				vu_dehors = true
+				if not touche:
+					seuil = q
+					vu_dehors = true
 				continue
+			touche = true
 			if e >= besoin and vu_dehors:
 				face = q
 				trouve = true
@@ -490,13 +576,13 @@ func _add_caves(m: CWMesa, rng: CWRand, field: CWTerrainField) -> void:
 		var sortie := Vector2(-dir.x, -dir.y)
 		var essai2: int = 0
 		var theta2: float = theta + PI
-		while essai2 < 8:
+		while essai2 < ESSAIS:
 			if _debouche(m, sortie, field):
 				break
 			essai2 += 1
-			theta2 += TAU / 8.0
+			theta2 += TAU / float(ESSAIS)
 			sortie = Vector2(cos(theta2), sin(theta2))
-		if essai2 >= 8:
+		if essai2 >= ESSAIS:
 			continue
 		var seuil2: Vector2 = _seuil(m, sortie)
 

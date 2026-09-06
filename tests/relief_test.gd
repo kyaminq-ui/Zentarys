@@ -86,28 +86,45 @@ func _test_surplombs() -> void:
 	var loin: Vector2i = m.slab(int(m.x + m.reach() + 8.0), int(m.z), m.base_y)
 	_ok("hors de portee, la masse ne pose rien", loin.x > loin.y)
 
-	# -- **Escaladable** : le contrat de la refonte du 2026-09-08 --------------
+	# -- **Deformee**, et c'est ce qui se mesure (2026-09-09) -----------------
 	#
-	# Une masse escaladable est une masse dont le dessus ne monte jamais de plus
-	# d'un bloc par bloc. On ne s'en remet pas au calcul — les deux bruits de
-	# forme s'ajoutent au terme radial et leur somme n'a pas de borne evidente —
-	# on **balaie** la masse en croix et on releve la plus grande marche.
+	# Le contrat d'escalade est retire : la demande est *plus abstrait, plus
+	# exagere dans la deformation, ne plus tenir compte de l'escalade du
+	# personnage*. Une marche de dix blocs n'est donc plus un defaut, c'est le
+	# but, et la verification qui la refusait est retiree avec elle.
+	#
+	# Ce qui la remplace mesure la chose qu'on a demandee : **la silhouette
+	# n'est plus un cercle**. On balaie la masse en croix sur vingt-quatre
+	# rayons, on releve la distance a laquelle son contour se trouve dans
+	# chacun, et on compare la plus grande a la plus petite. Un dome rendrait un
+	# rapport voisin de 1 ; l'allongement, la deformation du domaine et les
+	# lobes doivent le porter bien au-dela.
+	#
+	# La marche, elle, reste **relevee et imprimee** — c'est ce qui dit de quoi
+	# la masse a l'air —, et bornee par la seule chose qui reste vraie : une
+	# masse ne peut pas faire une marche plus haute qu'elle.
 	var pire_marche: int = 0
 	var ou: String = ""
+	var contours: Array[float] = []
 	for a in range(0, 24):
 		var ang: float = float(a) * TAU / 24.0
 		var prev: int = 0
 		var dans: bool = false
+		var contour: float = 0.0
 		for d in range(int(m.reach()) + 2, -1, -1):
 			var px: int = int(m.x + cos(ang) * float(d))
 			var pz: int = int(m.z + sin(ang) * float(d))
 			var sol: int = floori(f.sample_column(px, pz).x)
 			var sl: Vector2i = m.slab(px, pz, sol)
 			var h: int = maxi(sl.y, sol) if sl.y >= sl.x else sol
+			if sl.y >= sl.x and contour == 0.0:
+				# La plus grande distance a laquelle la masse existe encore
+				# dans cette direction : c'est son contour.
+				contour = float(d)
 			# Le **porche** d'une grotte est un surplomb voulu : il souleve le
 			# dessous de la masse, donc il fait sauter la colonne. Il ne barre
 			# aucun chemin — on en fait le tour en trois pas — et il n'a rien a
-			# faire dans une mesure d'escalade.
+			# faire dans une mesure de silhouette.
 			if m.porch(px, pz) > 0:
 				dans = false
 				continue
@@ -118,30 +135,30 @@ func _test_surplombs() -> void:
 					ou = "(%d, %d)" % [px, pz]
 			prev = h
 			dans = true
-	# **Deux blocs, et pas un**, parce que deux entiers arrondis se suivent :
-	# le dessus d'un massif vaut `plancher(sol) + plancher(hauteur x f²)`, et
-	# chacun des deux termes a le droit de changer d'une unite d'une colonne a la
-	# suivante. Le terrain seul en fait deja un ; la masse en ajoute au plus un.
-	# Une marche de deux blocs se monte ; une marche de douze — ce que rendait la
-	# premiere version, qui mesurait sa hauteur depuis le sol de son *centre* —
-	# ne se monte pas.
-	#
-	# **Et la borne est celle de ce massif-la** (2026-09-09). Depuis que chaque
-	# masse tire son propre caractere — des domes lisses, des masses decoupees en
-	# lobes —, la marche maximale n'est plus une constante partagee : elle se
-	# calcule des nombres du massif (`CWMesa.max_step`, derivee dans son en-tete).
-	# C'est contre elle que la mesure se fait. Le contrat global n'a pas disparu
-	# pour autant : `CWMesaGrid` rabat la rugosite d'une masse qui depasserait
-	# `CLIMB_MAX_STEP`, et la verification suivante le tient.
-	_ok("la masse s'escalade : jamais plus que sa propre borne",
-			pire_marche <= m.max_step(),
-			"%d blocs en %s, borne %d" % [pire_marche, ou, m.max_step()])
-	_ok("et sa borne tient le contrat d'escalade",
-			m.max_step() <= CWMesa.CLIMB_MAX_STEP,
-			"borne %d" % m.max_step())
-	print("     massif : rayon %.0f, hauteur %.0f, rugosite %.3f/%.3f, marche %d (borne %d)"
-			% [m.radius, m.height, m.amp_slow, m.amp_fine, pire_marche,
-			m.max_step()])
+		if contour > 0.0:
+			contours.append(contour)
+	_ok("le contour est trouve dans la plupart des directions",
+			contours.size() >= 16, "%d sur 24" % contours.size())
+	var proche: float = INF
+	var lointain: float = 0.0
+	for c in contours:
+		proche = minf(proche, c)
+		lointain = maxf(lointain, c)
+	# **Un cercle rendrait 1.** On demande la moitie en plus, ce qui n'est pas
+	# atteignable par le seul bruit de peau (0,10 du rayon au plus) : il faut
+	# que l'allongement, le warp ou les lobes aient travaille.
+	_ok("la silhouette n'est pas un cercle",
+			contours.size() >= 16 and lointain > proche * 1.5,
+			"contour de %.0f a %.0f blocs" % [proche, lointain])
+	# La seule borne qui reste : une masse ne fait pas une marche plus haute
+	# qu'elle. Elle n'est pas la pour garder une pente, elle est la pour
+	# attraper une forme partie en vrille.
+	_ok("aucune marche plus haute que la masse elle-meme",
+			pire_marche <= ceili(m.height) + 2,
+			"%d blocs en %s, hauteur %.0f" % [pire_marche, ou, m.height])
+	print("     massif : %s" % str(m))
+	print("       contour de %.0f a %.0f blocs (rapport %.2f), plus grande marche %d"
+			% [proche, lointain, lointain / maxf(1.0, proche), pire_marche])
 
 	_caracteres(f)
 
@@ -152,14 +169,18 @@ func _test_surplombs() -> void:
 			_accord(f, int(m.x), int(m.z)))
 
 
-## Le caractere varie d'un massif a l'autre, et chacun tient sa propre borne.
+## Le caractere varie d'un massif a l'autre, et l'eventail est celui du tirage.
 ##
 ## Un seul massif ne peut pas montrer ca : il faut un echantillon. On balaie
-## donc les cellules autour du depart, on releve les rugosites tirees, et on
-## verifie les deux moities du contrat de 2026-09-09 — **il y a bien un
-## eventail** (sans quoi le tirage par massif ne sert a rien), et **aucune masse
-## ne sort du contrat d'escalade** (sans quoi le rabattement de `CWMesaGrid` ne
-## marche pas).
+## donc les cellules autour du depart et on releve ce que chaque masse a tire.
+##
+## **Ce qui se verifie a change de nature le 2026-09-09.** Il y avait deux
+## moities : *un eventail existe* et *aucune masse ne sort du contrat
+## d'escalade*. La seconde n'a plus d'objet — le contrat est retire, et le
+## rabattement qu'elle gardait avec lui. Reste la premiere, elargie aux trois
+## leviers qui font qu'une masse n'est pas un dome : l'**exposant de profil**,
+## l'**allongement** et les **gradins**. Sans eventail sur ces trois-la, le
+## tirage par massif ne sert a rien et le paysage est regulier.
 func _caracteres(f: CWTerrainField) -> void:
 	var o: Vector2i = f.params().world_origin
 	var vus: Array[CWMesa] = []
@@ -176,27 +197,39 @@ func _caracteres(f: CWTerrainField) -> void:
 	if vus.size() < 12:
 		return
 
-	var lisse: float = INF
-	var rude: float = 0.0
-	var hors: int = 0
-	var au_dela: int = 0
+	var p_bas: float = INF
+	var p_haut: float = 0.0
+	var w_bas: float = INF
+	var w_haut: float = 0.0
+	var a_haut: float = 0.0
+	var gradins: int = 0
+	var buttes: int = 0
 	for m in vus:
-		lisse = minf(lisse, m.amp_slow)
-		rude = maxf(rude, m.amp_slow)
-		if m.max_step() > CWMesa.CLIMB_MAX_STEP:
-			hors += 1
-		if m.slope_bound() > float(CWMesa.CLIMB_MAX_STEP):
-			au_dela += 1
-	print("     caracteres : %d massifs, rugosite lente de %.3f a %.3f"
-			% [vus.size(), lisse, rude])
-	# Un eventail reel, et pas deux tirages qui se ressemblent : le plus rude
-	# doit porter au moins moitie plus d'amplitude que le plus lisse.
-	_ok("les massifs n'ont pas tous le meme caractere", rude > lisse * 1.5,
-			"de %.3f a %.3f" % [lisse, rude])
-	# Et le rabattement tient sur tout l'echantillon : c'est la moitie du
-	# contrat que le tirage par massif aurait pu casser.
-	_ok("aucun massif ne sort du contrat d'escalade", hors == 0,
-			"%d sur %d" % [hors, vus.size()])
+		p_bas = minf(p_bas, m.profile_pow)
+		p_haut = maxf(p_haut, m.profile_pow)
+		w_bas = minf(w_bas, m.amp_warp)
+		w_haut = maxf(w_haut, m.amp_warp)
+		a_haut = maxf(a_haut, m.stretch)
+		if m.strata >= 1.0:
+			gradins += 1
+		# Un exposant sous 1 aplatit le dessus et redresse les flancs : c'est
+		# une butte a paroi, l'oppose exact d'un dome.
+		if m.profile_pow < 1.0:
+			buttes += 1
+	print("     caracteres : %d massifs, warp de %.3f a %.3f, profil de %.2f a %.2f, allongement jusqu'a %.2f"
+			% [vus.size(), w_bas, w_haut, p_bas, p_haut, a_haut])
+	print("       %d a gradins, %d a paroi (profil < 1)" % [gradins, buttes])
+	# Un eventail reel, et pas deux tirages qui se ressemblent.
+	_ok("les massifs n'ont pas tous le meme grain", w_haut > w_bas * 1.5,
+			"de %.3f a %.3f" % [w_bas, w_haut])
+	# **Et la moitie de l'eventail n'est pas un dome.** C'est la demande du
+	# 2026-09-09, exprimee sur l'echantillon : s'il n'y a pas de buttes a paroi
+	# dans un paysage, l'exposant de profil ne sert a rien.
+	_ok("des massifs ont un dessus plat et des flancs qui tombent",
+			buttes * 5 >= vus.size(), "%d sur %d" % [buttes, vus.size()])
+	_ok("des massifs montent par gradins", gradins * 5 >= vus.size(),
+			"%d sur %d" % [gradins, vus.size()])
+	_ok("l'allongement sort du cercle", a_haut > 1.2, "%.2f au plus" % a_haut)
 
 
 ## Compare `_generate_block` et `generated_voxel` sur la colonne de blocs qui

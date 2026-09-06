@@ -7,10 +7,13 @@ il contient des décisions qui coûtent cher à redécouvrir.
 
 ## 0. Demain, la première chose à faire
 
-> **Six points relevés en jeu le 2026-09-08 au soir, à traiter à la reprise.**
-> Ils sont écrits ici et nulle part ailleurs : rien n'en est commencé, et c'est
-> délibéré. L'ordre ci-dessous est celui de ce qui se voit le plus, pas celui de
-> la difficulté.
+> **Six points relevés en jeu le 2026-09-08 au soir. Les six sont traités**
+> — §7octies pour les cinq premiers, §7octies.6 pour le sixième —, et une
+> seconde session de jeu, le 2026-09-09 au soir, en a ajouté trois autres qui
+> sont traités aussi : la chaussée creusée jusqu'en son milieu, les ponts
+> remplacés par des levées, et la forme des massifs refaite sans contrat
+> d'escalade (**§7nonies**). L'ordre ci-dessous est celui de ce qui se voyait le
+> plus, pas celui de la difficulté ; il est gardé tel quel comme trace.
 
 **1. Une matière de surface déborde dans le biome voisin.** *De l'herbe se
 retrouve dans le désert, et du sable de désert dans les Lava Lands.* C'est
@@ -115,6 +118,12 @@ profondes et sinueuses à l'entrée visible, des chemins toujours creusés d'un
 bloc et plus larges, un dégagement de tunnel proportionnel à la masse, et un
 **lot d'ouvrages** qui redessine les ponts à six voxels par bloc.
 
+> Deux de ces six ont été **défaits le lendemain soir**, et c'est écrit ici pour
+> qu'on ne les redécouvre pas : les massifs escaladables sont devenus des masses
+> délibérément infranchissables (§7nonies.3), et le lot d'ouvrages est retiré
+> avec les ponts (§7nonies.2). *Une décision juste le jour où elle est prise
+> peut être exactement ce qu'il faut retirer le lendemain.*
+
 Ce qu'ils laissent ouvert, par ordre de ce qui se verra le plus vite :
 
 - **le pied d'un massif rencontre l'herbe sans transition.** Moins qu'avant — le
@@ -124,7 +133,8 @@ Ce qu'ils laissent ouvert, par ordre de ce qui se verra le plus vite :
   hasard ;
 - **massifs et chemins ignorent les biomes** : même roche d'affleurement et même
   gravier de chaussée partout. Une ligne dans `CWPalette` chacun ;
-- **un pont n'a pas de piles.** Sur une rivière de six blocs ça ne se voit pas.
+- ~~**un pont n'a pas de piles.**~~ Sans objet : il n'y a plus de pont
+  (§7nonies.2).
 
 Et les deux portes d'avant, inchangées :
 
@@ -3521,6 +3531,130 @@ parcourt le meme axe en exigeant trois choses d'une levee — pas de marche a la
 culee, **le pied au-dessus de la surface libre**, et **ce qui porte le pied est
 du remblai et non le lit**. La lecon de la veille tient toujours : une marche ne
 se voit pas sur une colonne seule, elle se voit en marchant.
+
+---
+
+### 7nonies.3 « Ils ressemblent trop a des domes » — la forme des massifs
+
+*Il faut changer d'algorithme, ils ressemblent trop a des domes ; il faut que ce
+soit plus abstrait et exagere dans leur deformation, **ne plus tenir compte de
+l'escalade du personnage**.*
+
+**La parenthese n'est pas un detail, c'est la condition.** Le contrat d'escalade
+du 2026-09-08 ne bornait pas un reglage : il bornait *tout*. La hauteur relative
+plafonnait a 0,54 du rayon pour lui, l'amplitude des bruits etait **rabattue**
+des que la marche depassait deux blocs — sur la graine 1337, **24 massifs sur
+99** l'etaient —, et le profil etait au carre pour rejoindre le sol
+tangentiellement, ce qui *est* la definition d'un dome. Un relief escaladable
+partout est un dome ; on ne pouvait pas garder l'un en demandant l'autre.
+
+Le contrat part donc, et avec lui `CLIMB_MAX_STEP`, `slope_bound`, `max_step`,
+le drapeau `damped` et la boucle de rabattement de `CWMesaGrid`.
+
+#### Ce qui remplace le dome : cinq leviers, tires par massif
+
+| levier | ce qu'il fait | plage |
+|---|---|---|
+| **deformation du domaine** | deplace le point avant de le mesurer : des caps, des golfes, des pincements | 0,14 a 0,54 du rayon |
+| **ellipse tournee** | des cretes et des buttes la ou il n'y avait que des ronds | grand axe jusqu'a 2,4 fois le petit |
+| **lobes angulaires** | `cos(k x theta)`, k de 2 a 6 : des bras qui partent du coeur | 0 a 0,80 |
+| **exposant de profil** | `f^p` : a 2 un dome, sous 1 un dessus plat et des flancs qui tombent | 0,35 a 2,10 |
+| **strates** | la hauteur monte par gradins de 3 a 9 blocs | un massif sur deux |
+
+**Le warp est le levier qui compte le plus, et il remplace un bruit.** Un bruit
+additif fait *onduler* un cercle ; un bruit de domaine le **plie**. Il rend donc
+inutile le « bruit lent » de contour de la version precedente, qui faisait moins
+bien la meme chose pour le meme prix — le champ de forme prend trois echantillons
+au lieu de deux, et non quatre.
+
+> **Une amplitude de lobe ne se lit pas comme un rayon, et la premiere valeur
+> essayee etait invisible.** Le terme s'ajoute a `1 - u²`, donc un lobe
+> d'amplitude A deplace le contour de `sqrt(1 + A)` : a 0,34, cela faisait
+> **+16 % de rayon**, noye dans le warp, et les silhouettes restaient des
+> patates. A 0,80, le cap est a +34 % et le golfe a **-55 %** : la masse devient
+> un objet a bras. C'est le genre d'erreur qu'un dessin attrape en trois
+> secondes et qu'aucun nombre ne signale.
+
+#### Le prix : nul, et c'est l'ellipse qui le paie
+
+Le rejet rapide par colonne testait un **disque** de rayon `reach()`. La forme
+etant maintenant allongee, ce disque vaut `stretch²` fois l'aire de l'ellipse —
+a 1,55, c'est deux fois trop de colonnes qui paient trois echantillons de bruit
+pour rien. `near` teste donc **l'ellipse**, marge de warp comprise.
+
+Mesure amortie sur 590 000 colonnes autour du depart, fenetre de massifs prise
+une fois par cellule comme le fait le generateur :
+
+| | avant | apres |
+|---|---|---|
+| champ seul | 74,6 us/colonne | 74,6 us/colonne |
+| champ + massifs | 107,2 us/colonne | **104,3 us/colonne** |
+| couche de massifs | 32,6 us/colonne | **29,7 us/colonne** |
+
+La forme est plus riche et la couche ne coute pas plus cher : l'ellipse a paye
+le troisieme echantillon.
+
+#### Deux corrections que seule cette forme pouvait reveler
+
+**1. Les sondages radiaux partaient de l'interieur de la masse.** Les trois
+lectures du contour — le seuil d'une galerie, la verification de debouche, la
+recherche de la face — balayaient de `1,15 x rayon` vers le centre. C'etait juste
+tant que le contour etait un cercle a peine bosselle ; le contour va maintenant
+jusqu'a `2,3 x rayon`, donc le sondage **commencait dans la masse**, ne voyait
+jamais le dehors, et **aucune galerie n'etait plus posee**. Les sondages partent
+desormais de `reach()`, en distance absolue. C'est le genre de regression qui ne
+casse aucune verification de forme et vide le monde de ses grottes.
+
+**2. Le seuil d'une galerie pouvait tomber dans un golfe.** La recherche de la
+face ne s'arrete pas a la premiere colonne pleine — une colonne trop mince ne
+peut pas porter de galerie —, et elle continuait a **deplacer le seuil** a chaque
+colonne vide rencontree ensuite. Entre deux bras il y a un golfe : le seuil
+finissait dedans, la galerie s'y ouvrait sur un couloir ferme par le bras d'a
+cote, pendant que la verification de debouche avait valide le contour
+*exterieur* et l'avait trouve degage. Les trois lectures gardent maintenant la
+**premiere** rencontre.
+
+Et une troisieme, qui ne devait rien a la forme mais que la forme a mise au
+jour : **la condition de debouche se testait en flottants**. Elle comparait
+l'altitude du terrain a `h0 + 0,5` alors que le plancher d'une galerie vaut
+`plancher(h0) + 1` et que le sol occupe le bloc `plancher(altitude)`. Un terrain
+a `h0 + 0,45` passait le test et **bouchait** la sortie. Le decalage etait de
+quelques dixiemes de bloc, donc il ne se voyait qu'a une bouche sur quatre — et
+pas du tout tant que les bouches tombaient loin des ressauts. La condition est
+maintenant celle que la verification exerce, mot pour mot.
+
+Cette condition etant plus severe, le monde perdait un cinquieme de ses
+galeries. Le nombre de directions essayees pour percer une bouche passe donc de
+huit a **douze** : avec des bras et des golfes, un cote sur trois ne mene nulle
+part.
+
+#### Ce que ca rend, mesure sur la graine 1337
+
+| | avant | apres |
+|---|---|---|
+| hauteur mediane | 32 blocs | **43 blocs** |
+| massifs rabattus par le contrat | 24 sur 99 | **aucun contrat** |
+| marche maximale, par massif | 2 blocs pour les 99 | **7 blocs** sur le massif temoin |
+| rapport du contour (le plus loin / le plus pres) | — | **2,34** |
+| massifs a dessus plat (profil < 1) | — | **21 sur 74** |
+| massifs a gradins | — | **36 sur 74** |
+| galeries | 75 | 67 |
+| terres sous un massif | 1,37 % | 1,51 % |
+
+#### Et la verification a change de nature avec la forme
+
+Elle mesurait **la marche** et exigeait qu'elle tienne le contrat. Le contrat
+n'existe plus, et une marche de dix blocs n'est plus un defaut mais le but. Ce
+qui la remplace mesure la chose demandee : **la silhouette n'est plus un
+cercle**. On balaie la masse sur vingt-quatre rayons, on releve la distance a
+laquelle son contour se trouve dans chacun, et on compare la plus grande a la
+plus petite — un dome rendrait 1, on exige 1,5. La marche reste **relevee et
+imprimee**, bornee par la seule chose qui reste vraie : *une masse ne fait pas
+une marche plus haute qu'elle*.
+
+Et l'eventail se verifie sur l'echantillon, sur les trois leviers qui repondent
+au mot « dome » : il faut des massifs a paroi, des massifs a gradins, et de
+l'allongement. Sans eux, le tirage par massif ne sert a rien.
 
 ---
 
