@@ -216,12 +216,12 @@ func generated_voxel(x: int, y: int, z: int) -> int:
 	var wz: int = p.world_origin.y + z
 	var c: Vector4 = f.sample_column_full(wx, wz)
 	var sea: int = p.sea_level
-	var prof: Vector3i = CWTerrainField.column_profile(c.x, c.w, sea)
 	var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
+	var prof: Vector3i = CWTerrainField.column_profile(c.x, c.w, sea, biome)
 	var surface: int = CWPalette.surface_of(biome, c.x - float(sea),
 			c.y, c.z, wx, wz)
 	surface = pond_surface(surface, biome, prof,
-			CWTerrainField.pond_gate(c.x, c.w, sea))
+			CWTerrainField.pond_gate(c.x, c.w, sea, biome))
 	return voxel_of(y, prof.x, surface, subsurface_depth, sea, prof.y, prof.z)
 
 
@@ -487,17 +487,17 @@ func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,
 		# rapide. Prendre le minimum **apres** le profil est tout ce qu'il faut,
 		# et c'est la raison pour laquelle le creusement s'exprime ici en
 		# abaissement de colonne plutot qu'en passe separee.
-		var prof: Vector3i = CWTerrainField.column_profile(h, chan, sea)
+		var biome: int = CWBiome.at(h, raw[j + 1], raw[j + 2], sea)
+		var prof: Vector3i = CWTerrainField.column_profile(h, chan, sea, biome)
 		var ph: float = float(prof.x)
 		patch.heights[i] = ph
 		patch.ponds[i * 2] = prof.y
 		patch.ponds[i * 2 + 1] = prof.z
 
-		var biome: int = CWBiome.at(h, raw[j + 1], raw[j + 2], sea)
 		var surf: int = CWPalette.surface_of(biome, h - float(sea),
 				raw[j + 1], raw[j + 2], cx, cz)
 		patch.surfaces[i] = pond_surface(surf, biome, prof,
-				CWTerrainField.pond_gate(h, chan, sea))
+				CWTerrainField.pond_gate(h, chan, sea, biome))
 
 		patch.lowest = minf(patch.lowest, ph)
 		# `highest` borne le vide au-dessus du monde : c'est la **surface libre**

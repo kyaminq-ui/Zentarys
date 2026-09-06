@@ -28,15 +28,20 @@ serait une création de ce projet, à décider comme telle) et la falaise (port�
 puis retirée le 2026-09-06, §7ter.4 — elle attend un terme de relief, pas une
 règle de surface).
 
-**Deux petites choses laissées ouvertes par les lacs**, aucune bloquante :
+**Trois petites choses laissées ouvertes**, aucune bloquante :
 
 - **la rive n'est humide qu'en Jungles**, faute d'un roseau par biome (§7quater,
-  la réserve). C'est un besoin d'assets, pas de code ;
+  la réserve). C'est un besoin d'assets, pas de code — et c'est aussi le seul
+  endroit du monde où le marais subsiste depuis §7quinquies ;
 - **deux termes du champ de chenaux ne sont pas portés** : les bosses par type
   de cellule de région, qui *interdisent* l'eau près d'un bourg
   (`docs/systems/02` §10.2.1). Les porter déplacerait le lit des vallées
   existantes, donc c'est un travail à faire d'un bloc, avec une capture avant et
-  après.
+  après ;
+- **les provinces climatiques ont trois constantes réglées à l'œil sur une seule
+  graine** (§7quinquies.2) : fréquence, largeur du cœur, décalages de graine.
+  `tools/biome_stats.gd` mesure ce qu'elles rendent — répartition et voisinage —,
+  donc les bouger est cheap et vérifiable. Elles n'ont pas été balayées.
 
 ## 1. Où sont les choses
 
@@ -58,7 +63,7 @@ ne s'ouvre pas proprement (il est déclaré dans `project.godot`).
 ## 2. Commandes
 
 ```
-# Suite de validation (344 vérifications, ~20 s)
+# Suite de validation (346 vérifications, ~20 s)
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd
 
 # Réimport après ajout d'un class_name (sinon l'éditeur ne le voit pas)
@@ -164,9 +169,16 @@ biome, **Échap** rend la souris puis quitte.
 
 > **Le jalon 1 est clos.** Les lacs (§7quater) sont portés, et c'était le dernier
 > système du monde au périmètre. L'eau suit les fonds de vallée en rubans
-> ramifiés : **1,90 % des terres en eau, 1,35 % en rive**, profondeur 1 à 4
-> blocs. Sa porte était le champ de chenaux du jalon 1.4 — il ne manquait pas un
-> champ, il manquait un seuil.
+> ramifiés **continus**, qui s'élargissent en descendant : **2,77 % des terres en
+> eau, 0,58 % en rive**, profondeur 1 à 4 blocs, et rien dans les Deserts ni les
+> Lava Lands. Sa porte était le champ de chenaux du jalon 1.4 — il ne manquait
+> pas un champ, il manquait un seuil.
+>
+> **Cinq corrections vues en jeu ont suivi le portage** (§7quinquies), dont deux
+> qui touchent au monde entier : le **marais** n'est plus une matière de biome
+> mais la rive des cours d'eau, et le climat est passé en **provinces** — la
+> source tire l'extrême d'une zone indépendamment de ses voisines, d'où une
+> Snowlands contre un désert. Le relief, lui, n'a pas bougé d'un bloc.
 >
 > **La falaise, elle, a été portée puis retirée le même jour** (§7ter.4) : le
 > portage était fidèle et les tests verts, mais peindre de la roche sur un flanc
@@ -179,7 +191,7 @@ biome, **Échap** rend la souris puis quitte.
 
 Jalon 1 (le monde) : **1.1 à 1.12 et 1.14 sont portés, testés et vus en jeu** ;
 1.13, la falaise, a été portée puis retirée (§7ter.4). Suite de validation :
-**344 vérifications, 0 échec**, ~20 s.
+**346 vérifications, 0 échec**, ~20 s.
 
 **1.11 — le tronc en matière, fait** (2026-09-06, §7). Un feuillu se pose en
 deux temps : un tronc **écrit dans les données du monde** par
@@ -2121,6 +2133,152 @@ l'invariant n° 37.
   et donc **interdisent** l'eau près d'un bourg. Les porter déplacerait le lit
   des vallées existantes, donc c'est un travail à faire d'un bloc, avec une
   capture avant et après.
+
+## 7quinquies. Cinq corrections vues en jeu — **2026-09-06, fin de soiree**
+
+Demandees apres avoir regarde le monde des lacs. Aucune n'est un bogue : ce sont
+cinq endroits ou le portage fidele ne donne pas ce qu'on veut voir. Elles sont
+donc **toutes des creations de ce projet**, et la charte demande de le dire.
+
+### 7quinquies.1 Le marais quitte les biomes et devient une rive
+
+C'etait la derniere frange d'humidite — au-dessus de 0,92 en Jungles — et elle
+avait survecu aux deux retraits du 2026-09-06 au matin **parce qu'elle portait
+quelque chose** : `FAMILIES_SURFACE[SWAMP]` y fait pousser le roseau, seul modele
+du lot attache a une matiere.
+
+Ce qui l'a emportee est un troisieme motif, distinct des deux precedents :
+
+> Les franges d'humidite se **contredisaient** (« Greenlands » sur un sol kaki).
+> Les bandes d'altitude ne **portaient rien**. Le marais, lui, portait et ne se
+> contredisait pas — mais *une Jungles annoncee « jungle » sur un sol de marais
+> dit quand meme deux choses a la fois*. C'est la meme faute que l'herbe seche,
+> vue par le nom du biome et non par la couleur du sol.
+
+**Le marais n'a pas disparu du monde** : il est devenu la matiere de **rive** des
+cours d'eau (§7quater), ce qui est l'endroit ou un roseau se tient. Il passe de
+**6,5 % du monde a 0,1 %**, et surtout il passe d'une frange de climat a un
+**lieu** — la meme lecon que la plage, la seule bande d'altitude qui reste :
+*une matiere qui vaut la peine est celle qui nomme un endroit, pas celle qui
+nuance un gradient.*
+
+### 7quinquies.2 Les provinces climatiques
+
+**Le defaut, releve en jeu :** « un biome neige a cote du desert, c'est bizarre. »
+
+**La cause :** `World_generateRegionSite` tire le climat d'une zone avec un LCG
+graine sur `(rx, rz)`, **independamment de ses voisines**, et une fois sur deux
+il prend un extreme — froid sous 0,1, chaud au-dessus de 0,9. Deux zones cote a
+cote peuvent donc sortir 0,05 et 0,95.
+
+> **Le jalon 1.12 avait mesure la cause sans la reconnaitre.** Il notait que le
+> champ de climat est bimodal, « ses quatre coins portent 48 % des terres », et
+> l'avait lu comme une propriete du champ. C'en est un defaut, et il a fallu
+> marcher dedans pour le voir. *Une mesure ne dit pas toute seule si ce qu'elle
+> montre est voulu.*
+
+**Le remede** — creation de ce projet, la source n'a pas de provinces. Un bruit
+basse frequence sur la **grille de zones** decide, pour chaque zone qui tire un
+extreme, **lequel** (le signe) et **a quel point** (la valeur absolue) :
+
+- au **coeur** d'une province, l'extreme est celui de la source, intact ;
+- au **bord**, il glisse lineairement vers 0,5.
+
+> **La seconde moitie est celle qui compte, et c'est le piege du sujet.** Ne
+> prendre que le signe aurait regroupe les extremes en provinces et **laisse une
+> couture franche entre deux provinces voisines** — c'est-a-dire exactement le
+> defaut, seulement plus rare. En adoucissant au bord, un coeur froid et un
+> coeur chaud ne peuvent plus se toucher : entre les deux, le champ passe par le
+> tempere, et c'est une bande de Greenlands qui apparait la ou il y avait une
+> couture.
+
+**Le relief est identique au bloc pres, et c'est delibere.** `base_height` sort
+d'un bruit et non du LCG, et **tous les tirages du LCG sont conserves** :
+`rng.coin()` est toujours appele, sa valeur simplement ignoree au profit du
+champ. Le nombre de tirages ne bouge donc pas, les positions de sites (`rng.mod`
+plus bas dans la meme fonction) non plus, et le champ d'altitude non plus.
+**Verification** : la part d'ocean est inchangee **au chiffre pres**, 12 108
+colonnes sur 49 152 avant comme apres.
+
+| | avant | apres |
+|---|---|---|
+| Greenlands, des terres | 49,5 % | **57,7 %** |
+| Snowlands | 35,8 % | 13,9 % |
+| Deserts | **1,2 %** | **13,9 %** |
+| Jungles | 9,6 % | 11,6 % |
+| Lava Lands | 3,8 % | 2,9 % |
+| coin froid-sec du climat | 17,98 % | **0,00 %** |
+| paires neige/desert a 4 096 unites | 6 sur 50 083 | **0** |
+
+Les deux dernieres lignes sont la mesure qui compte. Le desert, lui, passe de
+1,2 % a 13,9 % des terres : il etait si rare qu'on ne pouvait pas juger de sa
+forme.
+
+> **La mesure de voisinage se prend a 4 096 unites, pas a 256.** Premiere
+> version : les cases adjacentes de la grille de sondage. Elle rendait **1 paire
+> sur 71 937 avant** et 0 apres, c'est-a-dire rien dans les deux cas — a 256
+> unites deux sondages tombent presque toujours dans le meme climat. Ce qu'on
+> veut savoir est si l'on **traverse du tempere** en allant de la neige au
+> desert, et ca se juge a l'echelle d'une marche. *Une mesure qui rend zero avant
+> comme apres ne mesure pas ce qu'on croit.*
+
+**Trois constantes reglees a l'oeil sur une seule graine** — `PROVINCE_FREQ`,
+`PROVINCE_CORE`, et les deux decalages de graine. Elles n'ont pas ete balayees ;
+`tools/biome_stats.gd` rend tout ce qu'il faut pour le faire.
+
+### 7quinquies.3 L'eau descend d'un bloc sous la rive
+
+Dans la source, l'eau monte jusqu'au palier `q` et la berge est tranchee au meme
+`q` : les deux affleurent. **Une nappe a ras bord ne se lit pas comme de l'eau**,
+elle se lit comme une matiere bleue posee a plat. Un bloc d'ecart
+(`POND_BANK_DROP`) suffit a lui donner un bord, et c'est immediat en capture.
+
+### 7quinquies.4 Les rivieres sont reliees, et finissent en lacs
+
+**Le decoupage venait de la rampe triangulaire**, qui ne laissait passer l'eau
+que sur 60 % d'un palier : un cours d'eau s'interrompait chaque fois que le
+terrain traversait un multiple de 5. La rampe garde le **fond** et perd la
+**presence** — il y a toujours au moins un bloc d'eau dans le lit
+(`POND_DEPTH_MIN`). Le trace redevient continu et la rampe garde son role : elle
+creuse les cuvettes et laisse les seuils peu profonds.
+
+**Pour les lacs, le seuil du chenal n'est plus constant** : 0,02 en altitude — la
+valeur de la source — et **0,055 au ras du niveau de la mer**, l'ecart se
+refermant sur les 90 premiers blocs.
+
+> Un reseau de chenaux **ne dit pas ou est un bassin** : il faudrait un
+> voisinage, donc un cout par colonne qu'on ne peut pas payer. Mais il dit
+> l'altitude, et *une riviere qui s'elargit en descendant est ce qu'on voit d'un
+> bassin*. C'est un lac obtenu par ou il arrive, et non par sa forme.
+
+Mesure : une fenetre de 64 blocs autour d'un point bas est a **27 % d'eau**,
+contre un ruban en altitude. Seul un quart des terres est sous 90 blocs, donc
+l'elargissement ne touche que le bas des vallees — ce qui est le but.
+
+### 7quinquies.5 Ni Deserts ni Lava Lands n'ont d'eau
+
+La source n'a pas de biomes — c'est une couche de ce projet, jalon 1.12 — donc
+cette regle non plus. Elle se defend seule : un desert est defini par l'absence
+d'eau, et une nappe au milieu des coulees demanderait une vapeur qu'on n'a pas.
+`column_profile` et `pond_gate` prennent donc le biome, et les six appelants
+l'avaient deja sous la main.
+
+### 7quinquies.6 Ce que le point 4 a casse, et qu'il a fallu rattraper
+
+**Avec de l'eau partout dans la porte, la rive disparaissait** — 100 % de la
+porte en eau a la premiere mesure. Et avec elle le sol humide, donc le roseau,
+donc un modele range sous un role inatteignable : le defaut que
+`tests/decor_test.gd` guette depuis le jalon 1.7.
+
+La rive redevient ce qu'elle est dans le paysage : **la bande exterieure du
+lit** (`POND_WATER_FRAC` = 0,82), celle ou le chenal est encore sous le seuil
+mais deja trop haut pour porter de l'eau. Elle a l'avantage d'etre **continue le
+long du cours d'eau**, la ou celle de la source apparaissait par plaques entre
+deux mares.
+
+*C'est la troisieme fois de la journee qu'une regle d'eau ou de matiere se
+verifie par « qu'est-ce qui pousse dessus ». Ce n'est plus une coincidence : dans
+ce projet, une matiere se juge par son decor.*
 
 ## 8. Assets voxels
 

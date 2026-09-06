@@ -309,7 +309,8 @@ func _test_scatter() -> void:
 				var c4: Vector4 = f.sample_column_full(pl.x, pl.z)
 				var c := Vector3(c4.x, c4.y, c4.z)
 				var prof: Vector3i = CWTerrainField.column_profile(
-						c.x, c4.w, p.sea_level)
+						c.x, c4.w, p.sea_level,
+						CWBiome.at(c.x, c.y, c.z, p.sea_level))
 				if pl.y != prof.x + 1:
 					off_ground += 1
 				# Et l'autre moitie de la meme regle : aucune plante dans l'eau.

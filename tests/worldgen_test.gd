@@ -296,57 +296,80 @@ func _test_terrain_field() -> void:
 	# de verrouiller la rampe triangulaire par ses valeurs remarquables plutot
 	# que par une mesure statistique, laquelle passerait encore si la rampe
 	# etait decalee d'un palier.
-	var sea_t: int = 0
 	var creux_ok: bool = true
 	var prof_max: int = 0
-	var eau_frac: int = 0
-	var pas: int = 0
+	var prof_min: int = 99
 	# Un palier entier, echantillonne au centieme.
 	for i in 500:
 		var above: float = float(i) * 0.01
 		var sp: Vector3i = CWTerrainField.pond_span(above)
-		pas += 1
-		if sp.y <= sp.z:
-			eau_frac += 1
-			prof_max = maxi(prof_max, sp.z - sp.y + 1)
-			# Le sol est toujours juste sous l'eau, et l'eau ne monte jamais
-			# au-dessus du palier.
-			if sp.x != sp.y - 1 or sp.z != (int(above) / 5) * 5:
-				creux_ok = false
-		elif sp.x < (int(above) / 5) * 5:
-			# A sec, le lit ne descend jamais sous son palier : il y reste, ou
-			# il remonte vers le terrain dans le dernier quart.
+		var d: int = sp.z - sp.y + 1
+		prof_max = maxi(prof_max, d)
+		prof_min = mini(prof_min, d)
+		# Le sol est toujours juste sous l'eau. C'est ce qui garantit qu'on ne
+		# voit pas le fond a travers un trou : le creusement et le remplissage
+		# sont la meme decision, prise une fois.
+		if sp.x != sp.y - 1:
 			creux_ok = false
-	_ok("l'eau est toujours posee juste au-dessus du sol, au niveau du palier",
-			creux_ok)
-	_ok("la profondeur d'une mare plafonne a quatre blocs", prof_max == 4,
-			"max %d" % prof_max)
-	# La porte de la rampe. La troncature entiere de la source la place a
-	# `t > 0,2` et non `t >= 0,4` : `bas = int(q - 5t + 2) <= q` equivaut a
-	# `2 - 5t < 1`. Cela fait 60 % du palier et non 45 %, et c'est mesure sur
-	# le monde a 58,4 % de la porte — les deux s'accordent.
-	var part: float = 100.0 * float(eau_frac) / float(pas)
-	_ok("la rampe laisse passer l'eau sur ~60 %% du palier (%.1f %%)" % part,
-			part > 55.0 and part < 65.0)
-	# Les deux bords d'un palier sont secs, son milieu est au plus profond.
-	var bord: Vector3i = CWTerrainField.pond_span(20.0)
+	_ok("le sol est toujours juste sous l'eau", creux_ok)
+	_ok("la profondeur d'un plan d'eau va de un a quatre blocs",
+			prof_min == 1 and prof_max == 4, "[%d, %d]" % [prof_min, prof_max])
 	# Le sommet de la rampe est a `frac = 0,5`, soit deux blocs et demi dans le
-	# palier — c'est la que `t` vaut 1 et que la mare fait ses quatre blocs.
+	# palier — c'est la que la cuvette est au plus creux. La rampe ne decide
+	# plus de la **presence** de l'eau depuis le 2026-09-06 au soir, seulement
+	# de son fond : c'est ce qui relie les rivieres.
 	var milieu: Vector3i = CWTerrainField.pond_span(22.5)
-	_ok("le bord d'un palier est sec", bord.y > bord.z)
 	_ok("le sommet de la rampe porte le fond le plus bas",
-			milieu.y <= milieu.z and milieu.z - milieu.y + 1 == 4,
-			str(milieu))
+			milieu.z - milieu.y + 1 == 4, str(milieu))
+	# La porte s'elargit en descendant : c'est ce qui fait finir les rivieres
+	# en lacs, et c'est une creation de ce projet.
+	_ok("la porte s'elargit vers le niveau de la mer",
+			CWTerrainField.pond_gate_at(0.0)
+			> CWTerrainField.pond_gate_at(200.0) * 2.0,
+			"%.4f contre %.4f" % [CWTerrainField.pond_gate_at(0.0),
+			CWTerrainField.pond_gate_at(200.0)])
 	# Et la porte : hors d'elle, la colonne n'est pas touchee.
-	var intact: Vector3i = CWTerrainField.column_profile(120.4, 0.5, 64)
+	var vert: int = CWBiome.GREENLANDS
+	var intact: Vector3i = CWTerrainField.column_profile(120.4, 0.5, 64, vert)
 	_ok("hors de la porte, la colonne est rendue telle quelle",
 			intact == Vector3i(120, 1, 0), str(intact))
-	var sous_mer: Vector3i = CWTerrainField.column_profile(30.0, 0.001, 64)
+	var sous_mer: Vector3i = CWTerrainField.column_profile(30.0, 0.001, 64, vert)
 	_ok("sous le niveau de la mer, pas d'etang",
 			sous_mer == Vector3i(30, 1, 0), str(sous_mer))
 	_ok("un etang ne se pose qu'au-dessus de la mer",
-			not CWTerrainField.pond_gate(30.0, 0.001, 64)
-			and CWTerrainField.pond_gate(120.0, 0.001, 64))
+			not CWTerrainField.pond_gate(30.0, 0.001, 64, vert)
+			and CWTerrainField.pond_gate(120.0, 0.001, 64, vert))
+
+	# Les deux biomes secs n'ont pas d'eau de surface (demande du 2026-09-06).
+	# Ce n'est pas une regle de la source — elle n'a pas de biomes —, donc rien
+	# d'autre que cette verification ne la tient.
+	_ok("pas d'eau dans les Deserts ni dans les Lava Lands",
+			not CWTerrainField.pond_gate(120.0, 0.001, 64, CWBiome.DESERTS)
+			and not CWTerrainField.pond_gate(120.0, 0.001, 64,
+					CWBiome.LAVALANDS))
+
+	# La surface de l'eau est **sous** la rive, toujours. C'est l'autre demande
+	# du meme jour, et elle se verifie sur la regle et non sur le monde : la
+	# rive est tranchee au palier, l'eau plafonne un bloc plus bas.
+	var sous_la_rive: bool = true
+	for i in 500:
+		var av: float = 10.0 + float(i) * 0.01
+		var sp2: Vector3i = CWTerrainField.pond_span(av)
+		@warning_ignore("integer_division")
+		var palier: int = (int(av) / CWTerrainField.POND_STEP) * CWTerrainField.POND_STEP
+		if sp2.z > palier - CWTerrainField.POND_BANK_DROP:
+			sous_la_rive = false
+	_ok("la surface de l'eau est un bloc sous la rive", sous_la_rive)
+
+	# Et la continuite : dans la porte, il y a **toujours** de l'eau. C'est ce
+	# qui relie les rivieres, et c'est un ecart assume a la source.
+	var sec: int = 0
+	for i in 500:
+		var sp3: Vector3i = CWTerrainField.pond_span(10.0 + float(i) * 0.01)
+		if sp3.y > sp3.z:
+			sec += 1
+	_ok("le lit porte de l'eau sur tout un palier, sans interruption", sec == 0,
+			"%d colonnes seches" % sec)
 
 
 # -- 4b. Elements de tuile ----------------------------------------------------

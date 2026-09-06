@@ -429,7 +429,7 @@ func _build_cell(cx: int, cz: int) -> Array:
 		# Sans ce test, chaque mare du monde se couvre d'herbe flottante — le
 		# niveau de la mer ne dit plus rien ici, une mare etant au-dessus de
 		# lui.
-		var prof: Vector3i = CWTerrainField.column_profile(c.x, c.w, sea)
+		var prof: Vector3i = CWTerrainField.column_profile(c.x, c.w, sea, biome)
 		if prof.y <= prof.z:
 			continue
 		# Sous l'eau, seul le fond marin se garnit : le reste de la flore
@@ -437,7 +437,7 @@ func _build_cell(cx: int, cz: int) -> Array:
 		if c.x < float(sea) and surface != CWPalette.GRAVEL:
 			continue
 		surface = CWVoxelGenerator.pond_surface(surface, biome, prof,
-				CWTerrainField.pond_gate(c.x, c.w, sea))
+				CWTerrainField.pond_gate(c.x, c.w, sea, biome))
 		# Scorie, coulee de lave, neige hors Snowlands : rien n'y pousse. C'est
 		# le filtre qui remplace l'ancienne table par matiere — voir
 		# `CWDecorRules.decor_allowed`.

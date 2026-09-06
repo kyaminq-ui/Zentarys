@@ -355,10 +355,11 @@ func _build_cell(cx: int, cz: int) -> Array:
 		# depuis le jalon 1.11 : un tronc pose au niveau d'avant creusement
 		# traverserait l'eau sur toute sa hauteur, et il est ecrit dans la
 		# matiere, donc rien ne le retirerait ensuite.
-		var prof: Vector3i = CWTerrainField.column_profile(col.x, col.w, sea)
+		var biome_c: int = CWBiome.at(col.x, col.y, col.z, sea)
+		var prof: Vector3i = CWTerrainField.column_profile(
+				col.x, col.w, sea, biome_c)
 		if prof.y <= prof.z:
 			continue
-		var biome_c: int = CWBiome.at(col.x, col.y, col.z, sea)
 		# La matiere exacte du point est verifiee, comme pour la flore : le
 		# biome dit ou l'on est, la matiere dit si ca porte quelque chose. Un
 		# bosquet ne pousse ni sur la scorie d'une Lava Lands, ni sur une plage,
@@ -366,7 +367,7 @@ func _build_cell(cx: int, cz: int) -> Array:
 		var surface: int = CWPalette.surface_of(biome_c,
 				col.x - float(sea), col.y, col.z, x, z)
 		surface = CWVoxelGenerator.pond_surface(surface, biome_c, prof,
-				CWTerrainField.pond_gate(col.x, col.w, sea))
+				CWTerrainField.pond_gate(col.x, col.w, sea, biome_c))
 		if not CWDecorRules.decor_allowed(biome_c, surface):
 			continue
 		var sp: Dictionary = CWTreeRules.species_at(biome_c, float(c["pick"]))

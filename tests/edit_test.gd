@@ -185,7 +185,8 @@ func _test_generated_voxel() -> void:
 		for rz in range(-400, 400, 7):
 			var wc: Vector4 = f2.sample_column_full(
 					p.world_origin.x + rx, p.world_origin.y + rz)
-			var pr: Vector3i = CWTerrainField.column_profile(wc.x, wc.w, sea2)
+			var pr: Vector3i = CWTerrainField.column_profile(wc.x, wc.w, sea2,
+					CWBiome.at(wc.x, wc.y, wc.z, sea2))
 			if pr.y <= pr.z:
 				mare = Vector2i(rx, rz)
 				trouvee = true
@@ -196,7 +197,8 @@ func _test_generated_voxel() -> void:
 	if trouvee:
 		var wm: Vector4 = f2.sample_column_full(
 				p.world_origin.x + mare.x, p.world_origin.y + mare.y)
-		var pm: Vector3i = CWTerrainField.column_profile(wm.x, wm.w, sea2)
+		var pm: Vector3i = CWTerrainField.column_profile(wm.x, wm.w, sea2,
+				CWBiome.at(wm.x, wm.y, wm.z, sea2))
 		@warning_ignore("integer_division")
 		var bx: int = floori(float(mare.x) / 16.0) * 16
 		@warning_ignore("integer_division")

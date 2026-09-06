@@ -81,6 +81,78 @@ func clear_cache() -> void:
 	_mutex.unlock()
 
 
+# -- Les provinces climatiques (creation de ce projet, 2026-09-06) ------------
+#
+# **La source tire le climat d'une zone independamment de ses voisines.** Une
+# fois sur deux elle prend un extreme — froid sous 0,1 ou chaud au-dessus de 0,9
+# — et le tirage est fait par un LCG graine sur (rx, rz). Deux zones cote a cote
+# peuvent donc sortir 0,05 et 0,95 : c'est ce qui met **une Snowlands contre un
+# desert**, releve en jeu le 2026-09-06.
+#
+# Ce qui suit est **une creation de ce projet**, et il faut le lire comme tel :
+# la source n'a pas de provinces. Le mecanisme est le plus petit qui reponde au
+# defaut sans rien deplacer d'autre.
+#
+# -- Comment ca marche -------------------------------------------------------
+#
+# Un champ de bruit basse frequence sur la **grille de zones** decide, pour
+# chaque zone qui tire un extreme :
+#
+#   * **quel** extreme — le signe du bruit : negatif froid, positif chaud ;
+#   * **a quel point** — sa valeur absolue. Au coeur d'une province, l'extreme
+#     est celui de la source, intact. Au bord, il se rapproche du tempere.
+#
+# La seconde moitie est celle qui compte. Ne prendre que le signe aurait
+# regroupe les extremes en provinces, mais **laisse une frontiere franche entre
+# deux provinces voisines** — c'est-a-dire exactement le defaut, plus rare. En
+# adoucissant vers 0,5 au bord, un coeur froid et un coeur chaud ne peuvent plus
+# se toucher : entre les deux, le champ passe par le tempere, et c'est une
+# **bande de Greenlands** qui apparait la ou il y avait une couture.
+#
+# -- Ce que ca ne change pas -------------------------------------------------
+#
+# **Le relief est identique au bloc pres**, et c'est delibere. `base_height` est
+# tire d'un bruit et non du LCG, et les tirages du LCG sont **tous conserves** :
+# `rng.coin()` est toujours appele, sa valeur simplement ignoree au profit du
+# champ. Le nombre de tirages ne bouge donc pas, les positions de sites
+# (`rng.mod` plus bas) non plus, et le champ d'altitude non plus. Seule la carte
+# des climats change — ce qui etait la demande.
+
+## Frequence du champ de provinces, en zones. A 0,12, une province fait de
+## l'ordre de huit zones de cote, soit ~130 000 unites : assez pour qu'on
+## traverse une region froide sans en voir le bout, assez peu pour que le monde
+## ne soit pas coupe en deux.
+const PROVINCE_FREQ: float = 0.12
+
+## Valeur absolue du bruit au-dela de laquelle une province est a son coeur,
+## c'est-a-dire rend l'extreme de la source sans adoucissement. En dessous, la
+## valeur glisse lineairement vers 0,5.
+const PROVINCE_CORE: float = 0.35
+
+## Decalages de graine des deux champs. Ils sont differents pour que les
+## provinces de temperature et d'humidite **ne se superposent pas** : un monde
+## ou chaud implique sec n'aurait que des deserts et des jungles.
+const PROVINCE_SEED_T: float = 7717.0
+const PROVINCE_SEED_H: float = 21193.0
+
+
+## Valeur climatique extreme d'une zone, adoucie vers le tempere au bord de sa
+## province. `u` est le tirage `rng.unit()` de la source, consomme par
+## l'appelant : cette fonction ne touche pas au LCG.
+##
+## Au coeur d'une province : `[0, 0,1)` au froid, `[0,9, 1)` au chaud — les
+## bornes exactes de la source. Au bord : 0,5 des deux cotes.
+func _province_climate(rx: int, rz: int, seed_offset: float, u: float) -> float:
+	var w: float = float(_params.world_seed)
+	var n: float = CWValueNoise.sample(
+			w + float(rx) * PROVINCE_FREQ + seed_offset,
+			w + float(rz) * PROVINCE_FREQ + seed_offset)
+	var f: float = minf(absf(n) / PROVINCE_CORE, 1.0)
+	if n < 0.0:
+		return 0.5 - f * (0.5 - u * 0.1)
+	return 0.5 + f * (0.4 + u * 0.1)
+
+
 func _build_site(rx: int, rz: int) -> CWRegionSite:
 	var seed_world: int = _params.world_seed
 	var rng := CWRand.new(rx + 0x108A + rz * ZONE_GRID + seed_world * 3)
@@ -102,8 +174,13 @@ func _build_site(rx: int, rz: int) -> CWRegionSite:
 			site.humidity = rng.unit() * 0.2 + 0.8
 			site.temperature = rng.unit() * 0.5
 	else:
-		site.temperature = (rng.unit() * 0.1) if rng.coin() else (rng.unit() * 0.1 + 0.9)
-		site.humidity = (rng.unit() * 0.1) if rng.coin() else (rng.unit() * 0.1 + 0.9)
+		# Les deux `coin()` sont **toujours tires** — ils tiennent le flux du
+		# LCG, et le decaler deplacerait tous les sites du monde. Seule leur
+		# *decision* est remplacee par le champ de provinces (voir ci-dessus).
+		rng.coin()
+		site.temperature = _province_climate(rx, rz, PROVINCE_SEED_T, rng.unit())
+		rng.coin()
+		site.humidity = _province_climate(rx, rz, PROVINCE_SEED_H, rng.unit())
 
 	if not is_start:
 		# L'original tire z avant x ; l'ordre compte, il décale toute la suite.
@@ -128,9 +205,15 @@ func _build_site(rx: int, rz: int) -> CWRegionSite:
 			site.base_height = rng.mod(50) + 20
 			return site
 		site.base_height = maxi(site.base_height - 100, -100)
+		# Meme traitement pour les sites noyes, et pour la meme raison : un site
+		# oceanique chaud colle a un coeur froid ramenait le defaut par la cote,
+		# ou la moitie des frontieres du monde se trouvent. Le tirage est
+		# conserve, la decision vient du champ.
 		if rng.coin():
-			site.temperature = rng.unit() * 0.1 + 0.9
-			site.humidity = rng.unit() * 0.1 + 0.9
+			site.temperature = _province_climate(rx, rz, PROVINCE_SEED_T,
+					rng.unit())
+			site.humidity = _province_climate(rx, rz, PROVINCE_SEED_H,
+					rng.unit())
 		else:
 			site.temperature = rng.unit() * 0.4 + 0.3
 			site.humidity = rng.unit() * 0.4 + 0.4

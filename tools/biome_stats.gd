@@ -1,5 +1,9 @@
 extends SceneTree
 
+## Ecart, en cases de sondage, auquel on juge le voisinage des biomes.
+## Seize cases de 256 unites = 4 096 unites, l'echelle d'une marche.
+const VOISIN_PAS: int = 16
+
 ## Repartition des six biomes et des matieres de surface, mesuree sur le champ
 ## reel (jalon 1.12).
 ##
@@ -70,6 +74,15 @@ func _initialize() -> void:
 	var creuse: int = 0
 	var prof_hist: PackedInt32Array = PackedInt32Array()
 	prof_hist.resize(8)
+	# Voisinage des biomes : c'est le garde-fou des **provinces climatiques**
+	# (`CWRegionSiteGrid`, 2026-09-06). Un monde ou une Snowlands touche un
+	# desert n'est pas credible, et aucune repartition globale ne le dit — les
+	# deux peuvent faire 14 % chacun en etant bien separes ou entremeles. Ce
+	# qu'on compte ici, ce sont les **paires voisines** de biomes incompatibles.
+	var grille: PackedInt32Array = PackedInt32Array()
+	grille.resize(per_zone * per_zone)
+	var paires: int = 0
+	var paires_froid_chaud: int = 0
 	var t0: int = Time.get_ticks_usec()
 	var done: int = 0
 	for i in zones:
@@ -88,16 +101,17 @@ func _initialize() -> void:
 				var biome: int = CWBiome.at(c.x, c.y, c.z, p.sea_level)
 				var surface: int = CWPalette.surface_of(biome,
 						c.x - float(p.sea_level), c.y, c.z, x, z)
-				if CWTerrainField.pond_gate(c.x, c4.w, p.sea_level):
+				if CWTerrainField.pond_gate(c.x, c4.w, p.sea_level, biome):
 					porte += 1
 					var prof: Vector3i = CWTerrainField.column_profile(
-							c.x, c4.w, p.sea_level)
+							c.x, c4.w, p.sea_level, biome)
 					creuse += floori(c.x) - prof.x
 					if prof.y <= prof.z:
 						eau += 1
 						prof_hist[clampi(prof.z - prof.y + 1, 0, 7)] += 1
 					surface = CWVoxelGenerator.pond_surface(surface, biome, prof,
 							true)
+				grille[ix * per_zone + iz] = biome
 				biome_count[biome] = int(biome_count.get(biome, 0)) + 1
 				surface_count[surface] = int(surface_count.get(surface, 0)) + 1
 				total += 1
@@ -114,6 +128,35 @@ func _initialize() -> void:
 				t_max = maxf(t_max, c.y)
 				h_min = minf(h_min, c.z)
 				h_max = maxf(h_max, c.z)
+		# Fin de zone : on compte les paires voisines de sa grille.
+		#
+		# **L'ecart est de seize cases, pas d'une.** A 256 unites, deux sondages
+		# tombent presque toujours dans le meme climat — la mesure y rend zero
+		# avant comme apres, et ne dit rien. Ce qu'on veut savoir est si l'on
+		# traverse du tempere en allant de la neige au desert, ce qui se juge a
+		# l'echelle d'une marche : 4 096 unites, soit un quart de zone.
+		for gx in per_zone:
+			for gz in per_zone:
+				var b0: int = grille[gx * per_zone + gz]
+				if b0 == CWBiome.OCEANS:
+					continue
+				for d in 2:
+					var nx: int = gx + (VOISIN_PAS if d == 0 else 0)
+					var nz: int = gz + (0 if d == 0 else VOISIN_PAS)
+					if nx >= per_zone or nz >= per_zone:
+						continue
+					var b1: int = grille[nx * per_zone + nz]
+					if b1 == CWBiome.OCEANS:
+						continue
+					paires += 1
+					var froid: bool = (b0 == CWBiome.SNOWLANDS
+							or b1 == CWBiome.SNOWLANDS)
+					var chaud: bool = (b0 == CWBiome.DESERTS
+							or b1 == CWBiome.DESERTS
+							or b0 == CWBiome.LAVALANDS
+							or b1 == CWBiome.LAVALANDS)
+					if froid and chaud:
+						paires_froid_chaud += 1
 		done += 1
 	var secs: float = float(Time.get_ticks_usec() - t0) / 1e6
 
@@ -158,7 +201,14 @@ func _initialize() -> void:
 				100.0 * float(h_above) / float(land)])
 
 	print("")
-	print("Les etangs (jalon 1.14), porte du champ de chenaux a %.2f" % CWTerrainField.POND_GATE)
+	print("Voisinage des biomes, sur %d paires de terres a %d unites d'ecart"
+			% [paires, step * VOISIN_PAS])
+	print("  neige contre desert ou lave : %d   %.3f %% des paires"
+			% [paires_froid_chaud,
+			100.0 * float(paires_froid_chaud) / maxf(1.0, float(paires))])
+	print("")
+	print("Les etangs (jalon 1.14), porte du chenal de %.3f en altitude a %.3f au ras de la mer"
+			% [CWTerrainField.POND_GATE_HAUT, CWTerrainField.POND_GATE_BAS])
 	print("  colonnes dans la porte : %8d   %6.2f %% des terres" % [porte,
 			100.0 * float(porte) / maxf(1.0, float(land))])
 	print("  dont en eau            : %8d   %6.2f %% des terres, %5.1f %% de la porte"

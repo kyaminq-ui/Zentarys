@@ -903,9 +903,9 @@ func _update_hud() -> void:
 	# l'ATH annonce « sol 117 » au bord d'une mare dont le fond est a 111 :
 	# c'est l'instrument qui sert a viser les captures, il doit dire ce que le
 	# monde genere contient et non ce que le champ rendait avant l'etang.
-	var prof: Vector3i = CWTerrainField.column_profile(c.x, c4.w, sea)
+	var prof: Vector3i = CWTerrainField.column_profile(c.x, c4.w, sea, biome)
 	surface = CWVoxelGenerator.pond_surface(surface, biome, prof,
-			CWTerrainField.pond_gate(c.x, c4.w, sea))
+			CWTerrainField.pond_gate(c.x, c4.w, sea, biome))
 
 	var busy: String = ""
 	if _search_status != "":
@@ -944,7 +944,7 @@ func _update_hud() -> void:
 				roundi(feat.radius), roundi(feat.height), w])
 		lines.append("chenal %.4f%s   vue %d blocs%s   %d fils" % [
 			c4.w,
-			"  (etang)" if CWTerrainField.pond_gate(c.x, c4.w, sea) else "",
+			"  (etang)" if CWTerrainField.pond_gate(c.x, c4.w, sea, biome) else "",
 			lod_view_distance if use_lod else view_distance,
 			("   LOD x%d" % lod_count) if use_lod else "",
 			_voxel_engine.get_thread_count() if _voxel_engine != null else 0])

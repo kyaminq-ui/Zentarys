@@ -22,19 +22,23 @@ avec ses noms et sa découverte.
 
 **Le monde a six biomes** — Greenlands, Snowlands, Deserts, Jungles, Lava Lands,
 Oceans. Un biome est une zone *climatique* : il décide ce qui pousse, tandis que
-la matière du sol — herbe, sable, neige, marais, magma — est une conséquence du
-biome, et une seule bande d'altitude la traverse encore : la plage. La roche nue
-a été essayée deux fois hors de Lava Lands, sur l'altitude puis sur la pente, et
-retirée les deux fois — `docs/ROADMAP.md` §1.13 dit pourquoi. Chacun porte son
+la matière du sol — herbe, sable, neige, jungle, magma — est une conséquence du
+biome, **une seule par biome**, et une seule bande d'altitude la traverse encore :
+la plage. La roche nue a été essayée deux fois hors de Lava Lands, sur l'altitude
+puis sur la pente, et retirée les deux fois — `docs/ROADMAP.md` §1.13 dit
+pourquoi. Les climats extrêmes sont regroupés en **provinces** qui s'adoucissent
+vers le tempéré à leurs bords : on ne passe jamais d'une neige à un désert sans
+traverser une prairie. Chacun porte son
 propre lot de modèles : **38 pour la flore basse** — quatre voxels par bloc pour
 ce qui a du volume, six pour les herbes et les fleurs, dont toute la forme tient
 dans un trait — et **24 pour les arbres**, dessinés à la maille du bloc comme le
 terrain lui-même.
 
-**L'eau de surface est là** : des mares en chapelets le long des fonds de
-vallée, posées par le même réseau de chenaux qui les creuse — il ne manquait pas
-un champ, il manquait un seuil. 1,9 % des terres en eau, profondeur d'un à quatre
-blocs.
+**L'eau de surface est là** : des rivières continues le long des fonds de vallée,
+posées par le même réseau de chenaux qui les creuse — il ne manquait pas un
+champ, il manquait un seuil. Elles s'élargissent en descendant et finissent en
+nappes dans les bas-fonds. 2,8 % des terres en eau, profondeur d'un à quatre
+blocs, une berge un bloc au-dessus de la surface, et rien dans les déserts.
 
 Deux chantiers suivent : la **collision**, objet par objet, maintenant que le
 tronc des arbres est écrit dans le terrain ; et le **jalon 2**, créatures et

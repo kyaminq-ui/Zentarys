@@ -495,12 +495,6 @@ static func build_opaque_material() -> StandardMaterial3D:
 	return mat
 
 
-## Humidite au-dessus de laquelle un sol de jungle se lit en sol humide. Le
-## marais est une *matiere* de Jungles, pas un biome — et c'est la seule frange
-## d'humidite qui reste, parce qu'elle porte quelque chose : le roseau de la
-## source pousse sur ce type de bloc et sur aucun autre.
-const SWAMP_H: float = 0.92
-
 ## Altitude sous laquelle une cuvette de Lava Lands est remplie de magma : un
 ## lac de lave au fond d'un bassin.
 ##
@@ -602,6 +596,20 @@ static func surface_of(biome: int, above: float, temperature: float,
 	# une montagne a de la roche et de la neige. Il tenait tant qu'on regardait
 	# une carte de hauteurs ; il ne tient plus des qu'on marche dessus.
 	#
+	# **La derniere frange d'humidite est tombee le 2026-09-06 au soir** : le
+	# marais etait une seconde matiere de Jungles, au-dessus de 0,92 d'humidite,
+	# et il avait survecu aux deux retraits du matin parce qu'il **portait**
+	# quelque chose — le roseau pousse sur ce bloc et sur aucun autre. Ce qui l'a
+	# emporte est autre chose : *une Jungles annoncee « jungle » avec un sol de
+	# marais dit deux choses a la fois*, exactement comme l'herbe seche de
+	# Greenlands. Un biome, une matiere de plaine, sans exception.
+	#
+	# **Le marais n'a pas disparu du monde pour autant** : il est devenu la
+	# matiere de **rive** des plans d'eau (jalon 1.14), ce qui est l'endroit ou
+	# un roseau se tient. Il est passe d'une frange de climat a un lieu, et c'est
+	# la meme lecon qu'a la plage — une matiere qui vaut la peine est celle qui
+	# nomme un endroit, pas celle qui nuance un gradient.
+	#
 	# Restent donc : la matiere du biome, la plage, et le cas de Lava Lands qui
 	# a sa propre regle plus haut — la sienne decrit un volcan, pas une altitude.
 	match biome:
@@ -610,7 +618,7 @@ static func surface_of(biome: int, above: float, temperature: float,
 		CWBiome.DESERTS:
 			return SAND
 		CWBiome.JUNGLES:
-			return SWAMP if humidity > SWAMP_H else GRASS_JUNGLE
+			return GRASS_JUNGLE
 		_:
 			return GRASS
 

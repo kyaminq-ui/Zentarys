@@ -894,6 +894,28 @@ spirale. Cela **confirme** la correction déjà écrite au jalon 1.6 : la source
 n'a pas de réseau de routes entre points d'intérêt. Un chemin reliant les bourgs
 d'une région serait une création de ce projet, et il faudra le dire comme tel.
 
+### 10.3bis Quatre écarts assumés au portage (2026-09-06, fin de soirée)
+
+L'algorithme ci-dessus est celui de la source, et il est porté tel quel. Ce qui
+suit s'en écarte, sur demande après l'avoir vu en jeu. **Ce sont des créations de
+ce projet** ; le détail et les mesures sont en `ROADMAP` §1.14 et `nextsteps.md`
+§7quinquies.
+
+| point | la source | ce projet |
+|---|---|---|
+| surface de l'eau | au palier `q`, à ras de la berge | **`q − 1`**, un bloc sous la berge |
+| présence de l'eau | la rampe `t` la commande — 60 % d'un palier | **toujours**, la rampe ne commande plus que le fond |
+| seuil du chenal | 0,02 partout | 0,02 en altitude, **0,055 au ras de la mer** |
+| biomes secs | pas de biomes dans la source | **ni Deserts ni Lava Lands** |
+| sol humide | écrit là où l'eau ne monte pas, donc par plaques | la **bande extérieure** du lit, continue |
+
+Les deux du milieu répondent à la même demande — *les rivières sont découpées en
+morceaux, il faudrait les relier et les faire finir dans des lacs.* La première
+moitié tient à la rampe ; la seconde à ceci : **un réseau de chenaux ne dit pas
+où est un bassin**, il faudrait un voisinage et donc un coût par colonne qu'on ne
+peut pas payer — mais il dit l'altitude, et une rivière qui s'élargit en
+descendant est ce qu'on voit d'un bassin.
+
 ### 10.4 Quelle hauteur, et la réponse est plus grande que la question
 
 **Lu le 2026-09-06 au soir**, corps de `terrain_generateColumnColor` @005c5e20

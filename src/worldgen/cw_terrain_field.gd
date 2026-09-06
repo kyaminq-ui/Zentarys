@@ -573,13 +573,72 @@ func _apply_feature(h: float, feature: CWTileFeature, weight: float,
 #     une marche franche de cinq blocs a chaque bord de palier : la rive remonte
 #     vers le terrain reel au lieu d'etre tranchee net.
 
-## Seuil du champ de chenaux sous lequel une colonne peut porter de l'eau.
-## Releve dans la source sous la forme `1 - 50 x chan >= 0`.
-const POND_GATE: float = 0.02
+## Seuil du champ de chenaux en **altitude**, ou l'eau est un ruisseau etroit.
+## C'est la valeur de la source, relevee sous la forme `1 - 50 x chan >= 0`.
+const POND_GATE_HAUT: float = 0.02
+
+## Seuil du champ de chenaux **au ras du niveau de la mer**, ou l'eau s'etale.
+##
+## **Ce second seuil est une creation de ce projet**, et la seule de la regle
+## d'eau. La source n'a qu'un seuil, donc des cours d'eau de largeur constante du
+## sommet a la mer. Demande du 2026-09-06 : *les rivieres doivent se terminer
+## dans des lacs.* Un reseau de chenaux ne dit pas ou est un bassin — il faudrait
+## un voisinage, donc un cout par colonne qu'on ne peut pas payer —, mais il dit
+## l'altitude, et une riviere qui s'elargit en descendant **est** ce qu'on voit
+## d'un bassin : le ruisseau nait etroit en altitude et finit en nappe dans le
+## fond de vallee. C'est un lac obtenu par ou il arrive, et non par sa forme.
+const POND_GATE_BAS: float = 0.055
+
+## Altitude au-dessus de la mer a laquelle la porte a fini de se refermer.
+## Au-dessus, un ruisseau ; en dessous, l'elargissement progressif.
+const POND_LAKE_SPAN: float = 90.0
 
 ## Pas de quantification du niveau d'eau, en blocs. C'est lui qui donne a l'eau
-## sa surface plate et aux mares leur decoupage en chapelet.
+## sa surface plate.
 const POND_STEP: int = 5
+
+## Profondeur minimale d'un plan d'eau, en blocs.
+##
+## **La rampe triangulaire ne decide plus de la presence de l'eau, seulement de
+## sa profondeur** — second ecart assume a la source, demande le meme jour :
+## *les rivieres sont souvent decoupees en plusieurs morceaux a cause du
+## terrain, il faudrait les relier entre elles.* Le decoupage etait la rampe :
+## elle ne laissait passer l'eau que sur 60 % d'un palier, si bien qu'un cours
+## d'eau s'interrompait chaque fois que le terrain traversait un multiple de 5.
+## En gardant la rampe pour le **fond** et en posant toujours au moins un bloc
+## d'eau, le trace redevient continu et la rampe garde son role : elle creuse
+## les cuvettes et laisse les seuils peu profonds.
+const POND_DEPTH_MIN: int = 1
+
+## Part de la porte occupee par l'eau ; le reste est la **rive**.
+##
+## Depuis que la rampe ne decide plus de la presence de l'eau (voir
+## `POND_DEPTH_MIN`), toute la porte serait mouillee et il n'y aurait plus de
+## rive du tout — donc plus de sol humide, donc plus de roseau, le seul modele
+## de la flore qui pousse sur cette matiere. La rive redevient ce qu'elle est
+## dans le paysage : **la bande exterieure du lit**, celle ou le chenal est
+## encore sous le seuil mais deja trop haut pour porter de l'eau.
+##
+## Elle a l'avantage d'etre continue le long du cours d'eau, la ou celle de la
+## source apparaissait par plaques entre deux mares.
+const POND_WATER_FRAC: float = 0.82
+
+## Hauteur de la surface de l'eau sous la rive, en blocs.
+##
+## Demande du 2026-09-06 : *l'eau ne doit pas etre au niveau du sol, toujours un
+## bloc en dessous minimum.* Dans la source, l'eau monte jusqu'au palier `q` et
+## la rive est tranchee au meme `q` : les deux affleurent, et une nappe a ras
+## bord ne se lit pas comme de l'eau — elle se lit comme une matiere bleue posee
+## a plat. Un bloc d'ecart suffit a lui donner une berge.
+const POND_BANK_DROP: int = 1
+
+
+## Seuil du champ de chenaux a une altitude donnee, en blocs au-dessus de la mer.
+##
+## Etroit en altitude, large au ras de la mer : voir `POND_GATE_BAS`.
+static func pond_gate_at(above: float) -> float:
+	var t: float = clampf(above / POND_LAKE_SPAN, 0.0, 1.0)
+	return POND_GATE_BAS + (POND_GATE_HAUT - POND_GATE_BAS) * t
 
 
 ## Profil d'etang d'une colonne, en blocs **au-dessus du niveau de la mer**.
@@ -590,9 +649,9 @@ const POND_STEP: int = 5
 ##   * `sol` est le dessus de la matiere apres creusement — la colonne est
 ##     tranchee a cette hauteur, ce qui est l'effet net des quatre dernieres
 ##     lignes de la source ;
-##   * `[eau_bas, eau_haut]` est l'intervalle d'eau, **vide quand
-##     `eau_bas > eau_haut`**, ce qui est le cas courant : la rampe ne laisse
-##     passer l'eau que sur 45 % des colonnes de la porte.
+##   * `[eau_bas, eau_haut]` est l'intervalle d'eau. Il n'est plus jamais vide
+##     dans la porte : depuis le 2026-09-06 au soir, la rampe ne decide que de
+##     la profondeur (voir `POND_DEPTH_MIN`).
 ##
 ## **Pure et sans etat**, ce qui est la condition pour que les quatre
 ## consommateurs s'accordent (invariant n. 18) — le bloc genere, la requete
@@ -618,46 +677,62 @@ static func pond_span(above: float) -> Vector3i:
 	else:
 		t = frac * 2.0
 
-	var bas: int = int(float(q) - t * 5.0 + 2.0)
-	if bas <= q:
-		# De l'eau : elle occupe [bas, q], et la matiere s'arrete juste dessous.
-		# `bas <= q` equivaut exactement a `t >= 0,4`, donc a `frac` entre 0,2
-		# et 0,65 : la profondeur maximale est de quatre blocs, au milieu du
-		# palier.
-		return Vector3i(bas - 1, bas, q)
+	# Profondeur : celle de la source la ou elle en donne une, le minimum
+	# ailleurs. `int(q - 5t + 2)` est le fond de la source ; sa distance au
+	# palier est la profondeur, qui plafonne a quatre blocs.
+	var fond_source: int = int(float(q) - t * 5.0 + 2.0)
+	var creux: int = maxi(q - fond_source + 1, POND_DEPTH_MIN)
 
-	# Pas d'eau : la colonne est simplement tranchee au niveau du lit, qui est
-	# le palier lui-meme sauf dans le dernier quart (voir la note ci-dessus).
-	var lit: int = q if t >= 0.0 else int(float(q) - t * 5.0)
-	return Vector3i(lit, 1, 0)
+	# La surface est un bloc sous la rive, qui reste au palier.
+	var haut: int = q - POND_BANK_DROP
+	return Vector3i(haut - creux, haut - creux + 1, haut)
+
+
+## Vrai si la colonne peut porter de l'eau de surface.
+##
+## Trois conditions, et les deux dernieres sont des ecarts assumes a la source :
+##
+##   * **le champ de chenaux passe sous le seuil de son altitude** — c'est la
+##     regle de la source, avec la porte elargie vers le bas (`POND_GATE_BAS`) ;
+##   * **la colonne est au-dessus du niveau de la mer.** La source travaille
+##     dans un domaine ou la mer vaut zero et borne son niveau a zero ; ici la
+##     borne devient ce test, sans quoi la porte trancherait le fond marin au
+##     niveau de la mer et souleverait l'ocean entier ;
+##   * **le biome accepte l'eau de surface.** Demande du 2026-09-06 : pas d'eau
+##     dans les Deserts ni dans les Lava Lands. La source n'a pas de biomes —
+##     c'est une couche de ce projet, jalon 1.12 — donc la regle non plus. Elle
+##     se defend seule : un desert est defini par l'absence d'eau, et une nappe
+##     d'eau au milieu des coulees de lave demanderait une vapeur qu'on n'a pas.
+static func pond_gate(height: float, chan: float, sea: int, biome: int) -> bool:
+	if biome == CWBiome.DESERTS or biome == CWBiome.LAVALANDS:
+		return false
+	var above: float = height - float(sea)
+	return above > 0.0 and chan <= pond_gate_at(above)
 
 
 ## Profil complet d'une colonne, etang compris, en altitudes de bloc
 ## **absolues**. C'est le point unique ou la porte, le niveau de la mer et la
 ## rampe se rencontrent ; tout le reste du projet passe par ici.
 ##
-## Hors de la porte — 96,6 % des terres — rend la colonne telle quelle et un
-## intervalle d'eau vide, donc le monde d'avant le jalon 1.14 au bloc pres.
-##
-## **Un etang ne se pose pas sous la mer.** La source travaille dans un domaine
-## ou le niveau de la mer vaut zero et borne son niveau a zero ; ici la borne
-## devient le test `height > sea`, sans quoi la porte trancherait le fond marin
-## au niveau de la mer et souleverait l'ocean entier.
+## Hors de la porte, rend la colonne telle quelle et un intervalle d'eau vide.
 ##
 ## La porte est sortie en `pond_gate` parce que **deux decisions la lisent** :
 ## celle-ci et la matiere de rive (`CWVoxelGenerator.pond_surface`). Les avoir
 ## ecrites deux fois aurait donne une rive humide sur une colonne non creusee le
 ## jour ou l'une des deux bougerait.
-static func pond_gate(height: float, chan: float, sea: int) -> bool:
-	return chan <= POND_GATE and height > float(sea)
-
-
-static func column_profile(height: float, chan: float, sea: int) -> Vector3i:
-	if not pond_gate(height, chan, sea):
+static func column_profile(height: float, chan: float, sea: int,
+		biome: int) -> Vector3i:
+	if not pond_gate(height, chan, sea, biome):
 		return Vector3i(floori(height), 1, 0)
-	var p: Vector3i = pond_span(height - float(sea))
-	if p.y > p.z:
-		return Vector3i(p.x + sea, 1, 0)
+	var above: float = height - float(sea)
+	# La bande exterieure de la porte est la **rive** : tranchee au palier, mais
+	# sans eau. C'est elle qui porte le sol humide, et elle est un bloc au-dessus
+	# de la surface de l'eau — ce qui est exactement `POND_BANK_DROP`.
+	if chan > pond_gate_at(above) * POND_WATER_FRAC:
+		@warning_ignore("integer_division")
+		var q: int = (int(maxf(above, 0.0)) / POND_STEP) * POND_STEP
+		return Vector3i(q + sea, 1, 0)
+	var p: Vector3i = pond_span(above)
 	return Vector3i(p.x + sea, p.y + sea, p.z + sea)
 
 

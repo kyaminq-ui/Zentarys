@@ -933,11 +933,11 @@ Répartition obtenue, sur 147 456 colonnes :
 
 | biome | du monde | des terres |
 |---|---|---|
-| Greenlands | 30,3 % | 42,5 % |
-| Snowlands | 17,4 % | 24,5 % |
-| Jungles | 15,2 % | 21,4 % |
-| Deserts | 6,9 % | 9,7 % |
-| Lava Lands | 1,3 % | **1,9 %** |
+| Greenlands | 43,5 % | 57,7 % |
+| Snowlands | 10,5 % | 13,9 % |
+| Deserts | 10,5 % | 13,9 % |
+| Jungles | 8,7 % | 11,6 % |
+| Lava Lands | 2,2 % | **2,9 %** |
 | Oceans | 28,8 % | — |
 
 #### Lava Lands : deux types de bloc, sans déplacer une frontière
@@ -1068,6 +1068,66 @@ tenaient sur **un bloc de section** sur quatorze de haut, parce qu'un rayon de
 1,0 décroissant ne garde qu'un voxel par étage. Verdict modèle par modèle,
 mesures et remèdes dans `nextsteps.md`, §6quater.
 
+### 1.12bis — Les provinces climatiques (2026-09-06, création de ce projet)
+
+**Le climat de la source n'est pas géographique**, et ça se voit en marchant.
+`World_generateRegionSite` tire la température et l'humidité d'une zone avec un
+LCG graîné sur `(rx, rz)` — **indépendamment de ses voisines** — et une fois sur
+deux il prend un extrême : froid sous 0,1 ou chaud au-dessus de 0,9. Deux zones
+côte à côte peuvent donc sortir 0,05 et 0,95.
+
+> **Relevé en jeu le 2026-09-06 : « un biome neige à côté du désert, c'est
+> bizarre. »** C'est la même bimodalité que le jalon 1.12 avait mesurée sans en
+> tirer cette conséquence — « ses quatre coins portent 48 % des terres ». On
+> l'avait lue comme une propriété du champ ; c'en est un défaut.
+
+**Ce qui est écrit ici est une création de ce projet**, et la charte demande de
+le dire : la source n'a pas de provinces. Le mécanisme est le plus petit qui
+réponde au défaut.
+
+Un bruit basse fréquence sur la **grille de zones** décide, pour chaque zone qui
+tire un extrême, **lequel** — le signe — et **à quel point** — la valeur absolue.
+Au cœur d'une province, l'extrême est celui de la source, intact ; au bord, il
+glisse vers 0,5.
+
+> **La seconde moitié est celle qui compte.** Ne prendre que le signe aurait
+> regroupé les extrêmes en provinces mais laissé une couture franche entre deux
+> provinces voisines — c'est-à-dire le même défaut, plus rare. En adoucissant
+> vers le tempéré au bord, un cœur froid et un cœur chaud **ne peuvent plus se
+> toucher** : entre les deux, le champ passe par 0,5, et c'est une bande de
+> Greenlands qui apparaît là où il y avait une couture.
+
+**Le relief est identique au bloc près**, et c'est délibéré. `base_height` sort
+d'un bruit et non du LCG, et **tous les tirages du LCG sont conservés** :
+`rng.coin()` est toujours appelé, sa valeur simplement ignorée au profit du
+champ. Le nombre de tirages ne bouge pas, donc les positions de sites non plus,
+donc le champ d'altitude non plus. Mesure à l'appui : la part d'océan est
+inchangée **au chiffre près**, 12 108 colonnes sur 49 152 avant comme après.
+
+#### Ce que ça change, mesuré
+
+| | avant | après |
+|---|---|---|
+| Greenlands, des terres | 49,5 % | **57,7 %** |
+| Snowlands | 35,8 % | 13,9 % |
+| Deserts | **1,2 %** | **13,9 %** |
+| Jungles | 9,6 % | 11,6 % |
+| Lava Lands | 3,8 % | 2,9 % |
+| coin froid-sec du climat | 17,98 % | **0,00 %** |
+| paires neige/désert à 4 096 unités | 6 sur 50 083 | **0** |
+
+Les deux dernières lignes sont la mesure qui compte, et la première des deux est
+la plus parlante : **le coin froid-sec du tableau croisé se vide entièrement**.
+C'est la bimodalité qui disparaît, et avec elle la cause.
+
+Le désert, lui, passe de 1,2 % à 13,9 % des terres — il était si rare qu'on ne
+pouvait pas juger de sa forme. `tools/biome_stats.gd` porte désormais le
+**voisinage des biomes**, mesuré à 4 096 unités et non à 256 : à 256 unités deux
+sondages tombent presque toujours dans le même climat, et la mesure y rendait
+zéro avant comme après, c'est-à-dire rien.
+
+---
+
 ### 1.13 — La falaise (portée puis retirée, 2026-09-06)
 
 **Écrite le matin, retirée le soir, sur une seule phrase :** *au final ça ne rend
@@ -1187,15 +1247,16 @@ premier change le sens de la passe :
 
 | | part des terres |
 |---|---|
-| colonnes dans la porte | **3,25 %** |
-| dont en **eau** | **1,90 %** (58,4 % de la porte) |
-| dont en **rive** | 1,35 % |
-| creusement moyen dans la porte | 2,78 blocs |
+| colonnes dans la porte | **3,35 %** |
+| dont en **eau** | **2,77 %** (82,8 % de la porte) |
+| dont en **rive** | 0,58 % |
+| creusement moyen dans la porte | 4,37 blocs |
 
-Profondeur : 1 à 4 blocs, répartis à un quart chacun — c'est la signature de la
-rampe triangulaire, et un plafond que la suite verrouille. En jeu, l'eau suit les
-fonds de vallée en **rubans ramifiés** plutôt qu'en taches : le champ de chenaux
-est rectifié, donc ses zéros dessinent des lignes.
+Profondeur : 1 à 4 blocs, dont 57 % à un seul bloc — la rampe ne décide plus de
+la présence de l'eau, et les seuils qu'elle laissait à sec sont maintenant
+couverts d'un fond de nappe. En jeu, l'eau suit les fonds de vallée en **rubans
+ramifiés continus** : le champ de chenaux est rectifié, donc ses zéros dessinent
+des lignes.
 
 #### Ce que le portage a demandé d'autre
 
@@ -1216,6 +1277,41 @@ est rectifié, donc ses zéros dessinent des lignes.
 - **coût : sous le bruit de mesure.** Médiane de cinq passes, 76,4 µs par colonne
   contre 75,7 sans les lacs, soit +0,9 % quand la dispersion d'une passe à
   l'autre est de ±6 %.
+
+#### Quatre écarts assumés à la source, demandés le soir même
+
+Le portage fidèle a été vu en jeu, et quatre choses en sont ressorties. Aucune
+n'est dans la source ; toutes sont écrites comme des créations de ce projet.
+
+- **l'eau ne touche plus la rive.** Dans la source, l'eau monte jusqu'au palier
+  `q` et la berge est tranchée au même `q` : les deux affleurent. Une nappe à ras
+  bord ne se lit pas comme de l'eau, elle se lit comme une matière bleue posée à
+  plat. La surface descend d'un bloc (`POND_BANK_DROP`), et la berge lui donne un
+  bord ;
+- **les rivières sont continues.** Le découpage venait de la rampe triangulaire,
+  qui ne laissait passer l'eau que sur 60 % d'un palier : un cours d'eau
+  s'interrompait chaque fois que le terrain traversait un multiple de 5. La rampe
+  garde le **fond** et perd la **présence** — il y a toujours au moins un bloc
+  d'eau dans le lit —, donc le tracé redevient continu et la rampe garde son
+  rôle : elle creuse les cuvettes et laisse les seuils peu profonds ;
+- **les rivières finissent en lacs.** Le seuil du chenal n'est plus constant : il
+  vaut 0,02 en altitude — la valeur de la source — et **0,055 au ras du niveau de
+  la mer**, l'écart se refermant sur les 90 premiers blocs. Un réseau de chenaux
+  ne dit pas où est un bassin ; il faudrait un voisinage, donc un coût par colonne
+  qu'on ne peut pas payer. Mais il dit l'altitude, et *une rivière qui s'élargit
+  en descendant est ce qu'on voit d'un bassin*. Mesuré : une fenêtre de 64 blocs
+  autour d'un point bas est à **27 % d'eau**, contre un ruban en altitude ;
+- **ni les Deserts ni les Lava Lands n'ont d'eau de surface.** La source n'a pas
+  de biomes — c'est une couche de ce projet, jalon 1.12 —, donc cette règle non
+  plus. Elle se défend seule : un désert est défini par l'absence d'eau.
+
+Et une conséquence à laquelle il a fallu répondre : **avec l'eau partout dans la
+porte, la rive disparaissait**, donc le sol humide, donc le roseau — le seul
+modèle de la flore qui pousse sur cette matière. La rive redevient ce qu'elle est
+dans le paysage, **la bande extérieure du lit** (`POND_WATER_FRAC`), celle où le
+chenal est encore sous le seuil mais déjà trop haut pour porter de l'eau. Elle a
+l'avantage d'être continue le long du cours d'eau, là où celle de la source
+apparaissait par plaques entre deux mares.
 
 #### La réserve assumée : la rive n'est humide qu'en Jungles
 
@@ -1538,6 +1634,7 @@ de le résoudre.
 
 | Date | Fait |
 |---|---|
+| 2026-09-06 (soir, 4) | **Cinq corrections vues en jeu : le marais, les provinces climatiques, et trois sur l'eau.** (1) **Le marais n'est plus une matiere de biome.** C'etait la derniere frange d'humidite, au-dessus de 0,92 en Jungles, et elle avait survecu aux deux retraits du matin parce qu'elle *portait* quelque chose — le roseau pousse sur ce bloc et sur aucun autre. Ce qui l'a emporte est autre chose : *une Jungles annoncee « jungle » sur un sol de marais dit deux choses a la fois*, exactement comme l'herbe seche de Greenlands. **Le marais n'a pas disparu du monde** — il est devenu la matiere de **rive** des cours d'eau, ou un roseau se tient : il passe de 6,5 % du monde a 0,1 %, et d'une frange de climat a un lieu. (2) **Les provinces climatiques**, et c'est une creation de ce projet : la source tire le climat d'une zone independamment de ses voisines et prend un extreme une fois sur deux, d'ou *une Snowlands contre un desert*. Un bruit basse frequence sur la grille de zones decide desormais quel extreme et **a quel point** — au coeur d'une province l'extreme est celui de la source, au bord il glisse vers le tempere. La seconde moitie est celle qui compte : ne prendre que le signe aurait laisse une couture franche entre deux provinces, c'est-a-dire le meme defaut plus rare. **Le relief est identique au bloc pres** — `base_height` sort d'un bruit et tous les tirages du LCG sont conserves, `rng.coin()` etant toujours appele et sa valeur ignoree ; l'ocean rend 12 108 colonnes avant comme apres. Mesure : Deserts de **1,2 a 13,9 % des terres**, Snowlands de 35,8 a 13,9, Greenlands de 49,5 a 57,7 ; le **coin froid-sec du climat passe de 17,98 % a 0,00 %**, et les paires neige/desert a 4 096 unites de 6 a **0**. `biome_stats` porte la mesure de voisinage, a 4 096 unites et non a 256 — a 256 deux sondages tombent dans le meme climat et la mesure rendait zero avant comme apres. (3) **L'eau descend d'un bloc sous la rive.** A ras bord elle ne se lisait pas comme de l'eau mais comme une matiere bleue posee a plat. (4) **Les rivieres sont continues, et finissent en lacs.** Le decoupage venait de la rampe triangulaire, qui ne laissait passer l'eau que sur 60 % d'un palier : elle garde le **fond** et perd la **presence**. Et le seuil du chenal n'est plus constant — 0,02 en altitude, **0,055 au ras de la mer** : un reseau de chenaux ne dit pas ou est un bassin, mais il dit l'altitude, et *une riviere qui s'elargit en descendant est ce qu'on voit d'un bassin*. Fenetre de 64 blocs autour d'un point bas : **27 % d'eau**. (5) **Ni Deserts ni Lava Lands n'ont d'eau de surface**, ce qui n'est pas dans la source — elle n'a pas de biomes — mais se defend seul. **Consequence a laquelle il a fallu repondre** : l'eau partout dans la porte faisait disparaitre la rive, donc le sol humide, donc le roseau. La rive redevient la **bande exterieure du lit** (`POND_WATER_FRAC`), continue le long du cours d'eau la ou celle de la source apparaissait par plaques. Eau 2,77 % des terres, rive 0,58 %. **346 verifications, 0 echec**, cout inchange (mediane de cinq passes, 76,1 us). Vu en jeu sur une riviere de Greenlands et sur un desert. |
 | 2026-09-06 (soir, 3) | **Jalon 1.14 : les lacs, et le jalon 1 est clos.** (1) **La porte est le champ de chenaux, a 0,02**, celui du jalon 1.4 : il ne manquait pas un champ, il manquait un seuil. L'eau est une seconde passe de `generateBiomeContent`, colonne par colonne, avec un niveau **quantifie au pas de 5** et une **rampe triangulaire** qui decide s'il y a de l'eau et quelle profondeur — d'ou des chapelets de mares le long des fonds de vallee et non une riviere continue. (2) **Trois corrections a notre propre note d'analyse, relevees en relisant la source pour l'ecrire**, et la premiere change le sens de la passe. **Le sol humide est la rive, pas le lit** : son ecriture est gardee par « le bloc qui se trouve la n'est pas de l'eau », garde qui echoue precisement quand il y en a. Le type 3 est donc l'anneau autour de chaque mare — beaucoup mieux, `FAMILIES_SURFACE` y faisant pousser des roseaux, et un roseau se tient sur la rive et non au fond. **Le lit remonte a `q + 5|t|` dans le dernier quart d'un palier**, ce qui evite une marche franche de cinq blocs a chaque bord. **Et la porte de la rampe est `t > 0,2` et non `t >= 0,4`**, par troncature entiere : 60 % du palier au lieu de 45 %, mesure a 58,4 % apres portage. *Un pseudo-code ecrit depuis un nom se relit avant d'etre porte.* (3) **Le creusement s'exprime en abaissement de colonne**, pas en passe separee : `column_profile` rend `(sol, eau_bas, eau_haut)` et `pond_span` isole l'arithmetique de la rampe, pure et testee seule. Cela regle du meme coup le piege annonce — les deux chemins rapides de `_generate_block` s'appuient sur `patch.lowest`, et prendre le minimum *apres* le profil suffit. (4) **`_sample` rend un `Vector4`** : le chenal sort avec l'altitude et le climat, il etait deja calcule, donc **zero echantillon de bruit de plus** ; `sample_column` garde son `Vector3` et les trente-cinq consommateurs n'ont pas bouge. (5) **Les deux dispersions savent nager**, et l'ATH aussi — il annoncait « sol 117 » au bord d'une mare dont le fond est a 111. Un test de la flore a attrape le changement de contrat tout seul : 145 plantes « flottantes » qui ne l'etaient pas, parce qu'il comparait au sol d'avant creusement. (6) **La rive n'est humide qu'en Jungles, et c'est assume** : le seul roseau du lot est `jungles/roseau`, et poser du sol humide ailleurs rendrait un anneau nu — *une matiere qui ne porte rien est un trou*, paye trois fois deja. La table lue est `FAMILIES_SURFACE_BIOME` ; le jour ou chaque biome aura son roseau, elle grandira et la rive suivra sans qu'on retouche au code. **Mesures** : porte 3,25 % des terres, **eau 1,90 %**, rive 1,35 %, creusement moyen 2,78 blocs, profondeur 1 a 4 blocs a un quart chacun. **Cout sous le bruit de mesure** — mediane de cinq passes, 76,4 us par colonne contre 75,7 sans, +0,9 % pour une dispersion de +-6 %. **344 verifications, 0 echec**, vu en jeu. |
 | 2026-09-06 (soir, 2) | **Les lacs : la lecture qui bloquait est faite, et la reponse est plus grande que la question.** (1) **`terrain_generateColumnColor` rend la hauteur FINALE de la colonne.** Le test decisif annonce etait : consulte-t-elle la porte des chenaux ? Elle la consulte, et pas incidemment — elle en fait un lissage sur ses octaves de detail (`chan*4` borne a 1, smoothstep, au carre). Deux autres marques du meme corps suffiraient chacune : l'octave de detail a 1e-2 y est, et la couche d'elements de tuile aussi, au couple `+0x14018` / stride `0x68` deja releve trois fois par ce depot. (2) **Ce n'est pas une fonction voisine de la notre, c'est la notre.** Les quatre graines de deformation d'elements — 8432984, 90493, 3423, 112, a la frequence 0,0025 — sont mot pour mot `LIFT_SEED_X`, `FALLOFF_SEED_XZ`, `FALLOFF_SEED_ZX`, `FALLOFF_SEED_Z` et `FALLOFF_WARP_FREQ`. `terrain_generateColumnColor` (@005c5e20, client) et `World_baseHeightField` (@004f9b70, serveur) sont **la meme fonction dans les deux binaires**, celle du jalon 1.4. **Le niveau d'un etang est `sample_column(x, z).x`**, rien de nouveau a calculer. (3) **Deux corroborations hors du corps de la fonction.** Le binaire serveur nomme le meme appel **`World_riverClimateGate`** la ou le client dit `WorldInfo_sampleTerrainHeight` : deux noms proposes independamment, le second disant « porte de riviere » en toutes lettres — la lecture du champ de chenaux du jalon 1.4 est confirmee par son nom dans l'autre binaire. Et un appelant (`WorldInfo.cpp:2562`) fait `(int)(h+1)` puis interroge la colonne pour y poser un objet en refusant l'air et l'eau : on ne pose pas un objet a « ossature + 1 ». (4) **Le plan de portage y perd la moitie de son premier point** : pas d'ossature `cont` a extraire de `_height_from`, la hauteur est deja la. `_sample` passe quand meme en `Vector4`, mais la quatrieme composante porte le **chenal**, dont la passe a besoin deux fois — comme porte et dans le creusement des berges. Les six autres points sont inchanges. (5) **Trouve au passage, et ca contredit un raisonnement de ce depot** : la passe de contenu de cellule **precalcule une grille 257 x 257 de hauteurs** puis mesure la pente **a un bloc**, contre la colonne voisine en X et en Z, seuil 0,3. L'original ne paie donc pas trois colonnes par colonne, il paie une grille par cellule amortie sur 65 536 colonnes — et « une pente d'un bloc ne decrit pas une falaise » est dementi par la source, qui mesure exactement a un bloc. **Cela ne rouvre pas la falaise**, retiree sur le rendu et non sur la mesure ; c'est note pour le jour ou le sujet reviendra. Reste non lu : `terrain_rockColor_blend` (@005c7140), fonction distincte de `terrain_surfaceColor_blend`, que le drapeau declenche quand la colonne **n'est pas** raide — l'inverse de ce que son nom laisse attendre, et les deux noms sont donnes « confiance moyenne ». Analyse : `docs/systems/02` Sec. 10.4 et 10.5. Aucun code touche. |
 | 2026-09-06 (soir) | **La falaise est retiree, une demi-journee apres avoir ete portee.** Demande en une phrase — *au final ca ne rend pas si bien que ca en jeu* — et c'est **le premier systeme que ce projet defait sans qu'il y ait ni bogue ni erreur d'analyse** : la regle etait bien dans la source, la pente etait mesuree et non devinee, les trois verifications passaient, le surcout etait sous le bruit de mesure. (1) **Ce qui a manque n'etait dans aucun test, et les mesures du matin le disaient deja.** A 2,0 — quarante-cinq degres — la regle rendait 0,62 % des terres, et on avait lu « le seuil est trop haut » la ou il fallait lire **« il n'y a pas de falaise dans ce terrain »**. Le monde a un denivele maximal de 0,65 bloc d'une colonne a la suivante ; baisser le seuil a 1,0 n'a pas trouve de parois, il a **teinte des flancs a vingt-sept degres**, et de la roche grise sur un flanc vert se lit comme une tache, pas comme une paroi. *Une falaise ne se peint pas, elle se taille* — il faudra un terme de terrasse dans `_height_from` avant que `CWPalette` ait quoi que ce soit a habiller. (2) **C'est le meme defaut de methode que les bandes d'altitude, retirees le matin meme, pris par un troisieme bout** : regle defendable, tests verts, et un echec que seul un ecran montre. Les bandes ne *portaient* rien, la falaise ne *ressemblait* a rien. (3) **Retrait complet** : `CLIFF_STEP`, `CLIFF_SLOPE_REF`, le treillis et son cache a deux generations, `cliff_factor`, `CWPalette.CLIFF_RIDGE`, le septieme parametre de `surface_of` et `surface_index` sur ses six sites d'appel, l'histogramme de `biome_stats` et les trois verifications de `decor_test`. **Les invariants n° 37 et 38 tombent avec la regle qu'ils gardaient**, et l'ancien n° 39 — les deux graines — devient le n° 37. Les mesures, elles, sont **gardees en toutes lettres** dans `ROADMAP` §1.13 et `nextsteps` §7ter.4 : elles decrivent le terrain et pas la regle, et elles resserviront telles quelles. `--ici x z` survit a ce qui l'avait motive. (4) **Deux notes devenues fausses sont corrigees au passage** dans `cw_palette.gd` : celle des trois constantes de ligne de neige, qui annoncait la falaise comme a venir, et celle de `surface_of`, qui decrivait encore trois bandes d'altitude alors qu'il n'en reste qu'une — la plage. **329 verifications, 0 echec** (les trois de la falaise en moins), colonne redescendue de 76,9 a **73,8 us**, repartition des matieres identique au chiffre pres a celle d'avant le portage — herbe 37,2 %, neige 27,0 %, gravier 23,9 %, marais 6,6 %, scorie 2,4 %, sable 2,0 %, jungle 0,5 %, magma 0,5 %, **plus une colonne de roche** hors Lava Lands. Verifie en capture sur Greenlands. |
