@@ -36,6 +36,26 @@ deux moities ne se rejoignent proprement que si la grille du houppier est celle
 du bloc. Un voxel = un bloc explique l'architecture de la source ; 3/40 la rend
 impossible.
 
+-- Les dix grands arbres (2026-09-06) -----------------------------------------
+
+Deux par biome arbore, en plus des especes existantes. Ce sont des **grands
+arbres** au sens du montage : un fut haut, quatre branches, et un houppier au
+bout de chacune plus un a la cime — une envergure au lieu d'une hauteur.
+
+Ils tiennent le lot par ce qui lui manquait : **la couleur**. Douze des vingt-
+quatre modeles precedents puisent dans la seule rampe de feuillage (128-139), et
+une foret de Greenlands n'avait qu'une teinte. Les nouveaux prennent l'automne
+(140-147), les quatre couples de fleurs (156-163), la rampe des champignons et
+mousses (164-169), la roche nue pour le givre (14-19) et le basalte pour la
+cendre (25-27). Aucune entree nouvelle dans la palette : la variete etait deja
+la, elle n'etait pas employee.
+
+**Une seule interdiction, et elle est un invariant** : aucune plante de
+Snowlands ne prend 140-147 (n. 29). Un orange chaud sur un sol de neige cyan
+ressort comme une tache, et le defaut est deja revenu deux fois. Les deux
+grands arbres de Snowlands prennent donc le blanc-bleu de la roche nue et le
+violet des fleurs, qui sont froids.
+
 -- Les enveloppes -------------------------------------------------------------
 
 En blocs, et `tests/tree_test.gd` les verrouille :
@@ -68,10 +88,51 @@ RACINE_ARBRES = os.path.join(fv.RACINE, "arbres")
 PLAFOND_ARBRE = (34, 12)
 PLAFOND_HOUPPIER = (12, 11)
 PLAFOND_PALME = (8, 10)
+# Une charpente porte ses branches : son rayon est celui de sa portee, pas celui
+# de son fut. Sa hauteur reste sous celle d'un arbre entier.
+PLAFOND_CHARPENTE = (34, 12)
+
+# Les bouts de branche de chaque grand arbre, **en coordonnees Godot** et avant
+# rotation : (dx, dz, dy), en blocs depuis la colonne du tronc et depuis sa base.
+#
+# **Cette table et `CWTreeRules.SPECIES` doivent dire la meme chose**, et c'est
+# le meme genre d'accord que celui de `GRILLE_FINE` entre le catalogue de flore
+# et `CWModelLibrary` : le generateur dessine la branche a l'endroit qu'il croit,
+# le moteur y pose le houppier a l'endroit qu'il lit de son cote. La difference,
+# et elle est confortable, c'est que la divergence se **verifie directement** :
+# `tests/tree_test.gd` charge le modele et regarde s'il y a du bois au bout
+# declare. Une branche deplacee d'un cote seulement fait tomber la verification.
+#
+# Quatre branches aux quatre points cardinaux : ce sont les seules directions
+# qu'un quart de tour envoie l'une sur l'autre, donc les seules qui gardent la
+# meme silhouette aux quatre rotations que le mailleur precalcule. Les hauteurs,
+# elles, different d'une branche a l'autre — sans quoi les quatre houppiers
+# formeraient un disque.
+# **La portee est de huit a dix blocs, et les domes font neuf de large.** Le
+# premier reglage — branches a cinq ou sept, domes a onze ou treize — a donne
+# des arbres corrects et faux : les cinq masses se recouvraient presque
+# entierement et l'arbre se lisait comme **un seul** parasol, ce qui est
+# exactement la silhouette d'un feuillu. Ce qui distingue un grand arbre est
+# qu'on **compte ses masses** ; il faut donc que la portee depasse le rayon du
+# dome, pas qu'elle l'egale.
+#
+# Le second reglage a corrige l'ecartement et laisse un dome de **trois blocs
+# d'epaisseur pour dix de large** : cinq galettes, pas cinq spheres aplaties.
+# `houppier` rend a peu pres la moitie de la hauteur demandee — son profil se
+# ferme avant le sommet —, donc 6,5 pour cinq blocs. Un rapport de deux entre
+# largeur et hauteur est ce qui se lit comme une masse ; a trois pour un, c'est
+# un plateau.
+BRANCHES_GRANDES = [(9, 0, 15), (-8, 0, 13), (0, 9, 17), (0, -8, 14)]
+BRANCHES_LARGES = [(10, 0, 12), (-10, 0, 14), (0, 9, 11), (0, -9, 13)]
+BRANCHES_HAUTES = [(8, 0, 19), (-8, 0, 17), (0, 8, 21), (0, -7, 18)]
 
 # Index autorises pour un arbre : le feuillage et l'ecorce de la plage
 # vegetation, la roche nue (pour la neige et le rocher geant), le gres et le
 # basalte, plus les deux entrees de cactus. Pas de fleurs, pas de filons.
+# Les fleurs (156-163) entrent dans cette plage depuis les dix grands arbres :
+# un houppier de cerisier ou de jacaranda n'est pas du feuillage vert, et la
+# palette n'a pas d'autre rose ni d'autre violet. La plage reste celle de la
+# vegetation, aucune entree n'est ajoutee.
 INDEX_ARBRES = frozenset(list(range(14, 32)) + list(range(128, 176)))
 
 
@@ -300,6 +361,145 @@ def arbre_epineux(g, rng):
 
 
 # =============================================================================
+# Les dix grands arbres. Deux par biome arbore, hors du vert.
+# =============================================================================
+
+def erable_charpente(g, rng):
+    """L'erable de Greenlands : un fut clair et quatre branches portantes."""
+    ab.charpente(g, rng, 17, 1.8, 1.2, 149, 152, BRANCHES_GRANDES, penche=0.5)
+
+
+def erable_dome(g, rng):
+    """Le houppier d'automne : or au-dessus, rouille en dessous."""
+    ab.houppier(g, rng, 10.0, 6.5, 140, 146, creux=1.0, bosses=0.28)
+
+
+def cerisier_charpente(g, rng):
+    """Le cerisier : plus bas, plus etale, une ecorce sombre."""
+    ab.charpente(g, rng, 14, 1.6, 1.1, 151, 154, BRANCHES_LARGES, penche=0.6)
+
+
+def cerisier_dome(g, rng):
+    """Un dome de fleurs : rose clair dessus, rose soutenu dessous.
+
+    Les deux entrees 156 et 157 sont un couple de fleur, pas une rampe : le
+    degrade de `houppier` n'a donc que deux marches, ce qui suffit — une masse
+    rose a la taille du bloc se lit a sa couleur, pas a son modele.
+    """
+    ab.houppier(g, rng, 10.0, 6.5, 157, 156, creux=1.0, bosses=0.32)
+
+
+def saule_givre_charpente(g, rng):
+    """Snowlands : un fut pale, des branches basses et larges."""
+    ab.charpente(g, rng, 15, 1.7, 1.1, 14, 17, BRANCHES_LARGES, penche=0.4)
+
+
+def saule_givre_dome(g, rng):
+    """Un dome de givre : blanc bleute, froid. Jamais l'automne (invariant 29)."""
+    ab.houppier(g, rng, 10.0, 6.5, 14, 18, creux=1.0, bosses=0.3)
+    af.neige_dessus(g, rng, part=0.5, seuil_z=1)
+
+
+def arbre_pourpre_charpente(g, rng):
+    """Snowlands : l'arbre a baies du froid, ecorce sombre."""
+    ab.charpente(g, rng, 16, 1.6, 1.1, 152, 155, BRANCHES_GRANDES, penche=0.5)
+
+
+def arbre_pourpre_dome(g, rng):
+    """Violet : froid comme le biome, et la seule autre couleur qu'il accepte."""
+    ab.houppier(g, rng, 10.0, 6.5, 163, 162, creux=1.0, bosses=0.3)
+
+
+def acacia_charpente(g, rng):
+    """Deserts : un fut nu et haut, des branches qui montent tard."""
+    ab.charpente(g, rng, 18, 1.5, 1.0, 148, 152, BRANCHES_HAUTES, penche=0.7)
+
+
+def acacia_dome(g, rng):
+    """Le parasol d'acacia : **tres** plat, doré-olive, et c'est sa signature."""
+    ab.houppier(g, rng, 10.0, 6.5, 141, 145, creux=1.0, bosses=0.24)
+
+
+def baobab_charpente(g, rng):
+    """Deserts : un tronc massif, court, et quatre branches trapues."""
+    ab.charpente(g, rng, 13, 2.6, 1.6, 149, 153, BRANCHES_LARGES, penche=0.3)
+
+
+def baobab_dome(g, rng):
+    """Une masse claire et seche : la rampe des mousses, terre cuite a olive."""
+    ab.houppier(g, rng, 10.0, 6.5, 164, 168, creux=1.0, bosses=0.35)
+
+
+def flamboyant_charpente(g, rng):
+    """Jungles : haut, droit, l'ecorce claire des arbres tropicaux."""
+    ab.charpente(g, rng, 19, 1.8, 1.2, 148, 151, BRANCHES_HAUTES, penche=0.5)
+
+
+def flamboyant_dome(g, rng):
+    """Rouge franc : c'est l'arbre qu'on voit d'un bout a l'autre d'une clairiere."""
+    ab.houppier(g, rng, 10.0, 6.5, 157, 156, creux=1.0, bosses=0.3)
+
+
+def jacaranda_charpente(g, rng):
+    """Jungles : un peu plus bas que le flamboyant, plus etale."""
+    ab.charpente(g, rng, 17, 1.7, 1.1, 149, 152, BRANCHES_GRANDES, penche=0.6)
+
+
+def jacaranda_dome(g, rng):
+    """Violet clair sur violet soutenu."""
+    ab.houppier(g, rng, 10.0, 6.5, 163, 162, creux=1.0, bosses=0.3)
+
+
+def arbre_de_cendre_charpente(g, rng):
+    """Lava Lands : un fut de basalte, mort et dur."""
+    ab.charpente(g, rng, 15, 1.7, 1.1, 153, 155, BRANCHES_GRANDES, penche=0.8)
+
+
+def arbre_de_cendre_dome(g, rng):
+    """Une masse de cendre parcourue de braises.
+
+    Les braises sont posees **sur la peau** du dome et non dedans : c'est la
+    lecon du 2026-09-06 sur le buisson de feu, ou cinq braises tirees dans la
+    masse etaient cinq voxels perdus.
+    """
+    ab.houppier(g, rng, 10.0, 6.5, 25, 27, creux=1.0, bosses=0.35)
+    _braises(g, rng, 14, 30)
+
+
+def arbre_de_braise_charpente(g, rng):
+    """Lava Lands : plus haut, plus mince, presque un cierge."""
+    ab.charpente(g, rng, 18, 1.5, 1.0, 152, 155, BRANCHES_HAUTES, penche=0.6)
+
+
+def arbre_de_braise_dome(g, rng):
+    """Un dome de feuillage incandescent : la rampe d'automne, ici a sa place."""
+    ab.houppier(g, rng, 10.0, 6.5, 140, 145, creux=1.0, bosses=0.3)
+    _braises(g, rng, 8, 30)
+
+
+def _braises(g, rng, combien, index):
+    """Repeint quelques voxels de **surface** en braise.
+
+    Meme role que `flore_blocs.semis`, refait ici parce que celui-la travaille
+    sur la grille de la flore. La liste des candidats est **triee** avant le
+    tirage : sans cela l'ordre d'un dictionnaire deciderait du resultat, et le
+    lot ne se regenererait plus a l'identique.
+    """
+    peau = []
+    for (x, y, z) in g.v:
+        for dx, dy, dz in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0),
+                           (0, 0, 1), (0, 0, -1)):
+            if (x + dx, y + dy, z + dz) not in g.v:
+                peau.append((x, y, z))
+                break
+    peau.sort()
+    if not peau:
+        return
+    for p in rng.sample(peau, min(combien, len(peau))):
+        g.v[p] = index
+
+
+# =============================================================================
 # Le lot
 # =============================================================================
 
@@ -342,6 +542,40 @@ LOT = [
     ("jungles", "palme_diagonale", 3106, palme_diagonale, PLAFOND_PALME, False),
 
     ("lavalands", "arbre_epineux", 6101, arbre_epineux, PLAFOND_ARBRE),
+
+    # -- Les dix grands arbres, deux par biome arbore --
+    ("greenlands", "erable_charpente", 1201, erable_charpente, PLAFOND_CHARPENTE),
+    ("greenlands", "erable_dome", 1202, erable_dome, PLAFOND_HOUPPIER),
+    ("greenlands", "cerisier_charpente", 1203, cerisier_charpente, PLAFOND_CHARPENTE),
+    ("greenlands", "cerisier_dome", 1204, cerisier_dome, PLAFOND_HOUPPIER),
+
+    ("snowlands", "saule_givre_charpente", 2201, saule_givre_charpente,
+     PLAFOND_CHARPENTE),
+    ("snowlands", "saule_givre_dome", 2202, saule_givre_dome, PLAFOND_HOUPPIER),
+    ("snowlands", "arbre_pourpre_charpente", 2203, arbre_pourpre_charpente,
+     PLAFOND_CHARPENTE),
+    ("snowlands", "arbre_pourpre_dome", 2204, arbre_pourpre_dome, PLAFOND_HOUPPIER),
+
+    ("deserts", "acacia_charpente", 5201, acacia_charpente, PLAFOND_CHARPENTE),
+    ("deserts", "acacia_dome", 5202, acacia_dome, PLAFOND_HOUPPIER),
+    ("deserts", "baobab_charpente", 5203, baobab_charpente, PLAFOND_CHARPENTE),
+    ("deserts", "baobab_dome", 5204, baobab_dome, PLAFOND_HOUPPIER),
+
+    ("jungles", "flamboyant_charpente", 3201, flamboyant_charpente,
+     PLAFOND_CHARPENTE),
+    ("jungles", "flamboyant_dome", 3202, flamboyant_dome, PLAFOND_HOUPPIER),
+    ("jungles", "jacaranda_charpente", 3203, jacaranda_charpente,
+     PLAFOND_CHARPENTE),
+    ("jungles", "jacaranda_dome", 3204, jacaranda_dome, PLAFOND_HOUPPIER),
+
+    ("lavalands", "arbre_de_cendre_charpente", 6201, arbre_de_cendre_charpente,
+     PLAFOND_CHARPENTE),
+    ("lavalands", "arbre_de_cendre_dome", 6202, arbre_de_cendre_dome,
+     PLAFOND_HOUPPIER),
+    ("lavalands", "arbre_de_braise_charpente", 6203, arbre_de_braise_charpente,
+     PLAFOND_CHARPENTE),
+    ("lavalands", "arbre_de_braise_dome", 6204, arbre_de_braise_dome,
+     PLAFOND_HOUPPIER),
 ]
 
 

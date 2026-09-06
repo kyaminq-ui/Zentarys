@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://drt8khl37w1f4"
+path="res://.godot/imported/arbre_de_cendre_dome.vox-61895cdc6e367f246655b1011405192c.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/lavalands/arbre_de_cendre_dome.vox"
+dest_files=["res://.godot/imported/arbre_de_cendre_dome.vox-61895cdc6e367f246655b1011405192c.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

@@ -190,11 +190,16 @@ const EMPILEMENT: float = 0.42
 
 ## Marge horizontale, en blocs, d'un tronc estampe autour de sa colonne.
 ##
-## Le plus large du lot est `tropical_tronc`, 7 blocs de large, soit un rayon de
-## 3. Quatre laisse une marge d'un bloc, et un test refuse qu'un modele de tronc
-## la depasse : `trunks_in` s'en sert pour savoir quelles cellules consulter, et
-## un tronc plus large deborderait d'un bloc de terrain sans que rien ne le dise.
-const MARGE_TRONC: int = 4
+## **Onze depuis les grands arbres**, quatre avant eux. Un fut seul tient dans
+## quatre — le plus large est `tropical_tronc`, 7 blocs, soit un rayon de 3 —
+## mais une **charpente** porte ses branches, et ses branches vont chercher le
+## houppier a dix blocs de l'axe. Ce sont des blocs de terrain comme les
+## autres : ils s'estampent, donc ils entrent dans la marge.
+##
+## `trunks_in` s'en sert pour savoir quelles cellules consulter, et un test
+## refuse qu'un modele de tronc la depasse — sans quoi une branche serait
+## tronquee au bord d'un bloc, ce qui se verrait a peine et ne leverait rien.
+const MARGE_TRONC: int = 11
 
 ## Hauteur maximale, en blocs, d'un tronc estampe.
 ##
@@ -380,6 +385,19 @@ func _monte(out: Array, sp: Dictionary, x: int, z: int, ground: int,
 	if couronnes.is_empty():
 		return
 
+	# -- Le grand arbre : un houppier par branche, plus un a la cime ---------
+	#
+	# Il passe avant le reste parce qu'il n'empile rien : ses masses sont posees
+	# **en dehors** de l'axe du tronc, au bout de branches dessinees dans le
+	# modele. Les offsets sont tournes par `CWVoxelModel._turn`, et non par une
+	# copie de sa table : le modele et ses branches doivent tourner ensemble, et
+	# deux implementations de la meme rotation finiraient par diverger.
+	if montage == CWTreeRules.Montage.GRAND:
+		pied.matiere = true
+		pied.hauteur = maxi(1, roundi(float(tronc.height) * echelle))
+		_grand(out, sp, pied, tronc, x, z, ground, turn, echelle)
+		return
+
 	# -- Le tronc passe en matiere -------------------------------------------
 	#
 	# Il n'est plus instancie : `CWVoxelGenerator` l'ecrit dans les donnees du
@@ -416,6 +434,40 @@ func _monte(out: Array, sp: Dictionary, x: int, z: int, ground: int,
 		# empiles a la meme orientation rendent une image doublee.
 		out.append(_piece(m, x, z, ground, y, (turn + k * 3) % CWVoxelModel.ROTATIONS,
 				echelle))
+
+
+## Les houppiers d'un grand arbre : un au bout de chaque branche, un a la cime.
+##
+## -- La hauteur d'un bout de branche apres reechantillonnage ------------------
+##
+## Le tronc est estampe a `pied.hauteur` blocs, ses niveaux copies au plus proche
+## voisin depuis les `tronc.height` du modele. Un bout de branche dessine au
+## niveau `b.z` du modele ressort donc au niveau `b.z * hauteur / height`, et
+## c'est **cette** valeur qui doit porter le houppier. Prendre `b.z` tel quel
+## poserait la masse jusqu'a quatre blocs au-dessus de sa branche sur un arbre
+## tire a 1,25 — exactement le defaut des palmes du 2026-09-06, par un autre
+## chemin.
+##
+## Le houppier descend d'un bloc sous le bout : une masse posee **sur** la
+## pointe laisse voir le dernier bloc de bois par en dessous.
+func _grand(out: Array, sp: Dictionary, pied: CWScatter.Placement,
+		tronc: CWVoxelModel, x: int, z: int, ground: int, turn: int,
+		echelle: float) -> void:
+	var couronnes: Array = sp["couronnes"]
+	if couronnes.is_empty():
+		return
+	var dome: CWVoxelModel = _lib.model(couronnes[0])
+	if dome == null:
+		return
+	var ratio: float = float(pied.hauteur) / float(maxi(1, tronc.height))
+	for b in sp["branches"]:
+		var o: Vector2i = CWVoxelModel._turn(b.x, b.y, turn)
+		out.append(_piece(dome, x + o.x, z + o.y, ground,
+				float(b.z) * ratio - 1.0, turn, echelle))
+	# La cime, sur l'axe du tronc : sans elle, quatre masses en couronne
+	# laissent un trou au milieu et l'arbre se lit comme un anneau.
+	out.append(_piece(dome, x, z, ground, float(pied.hauteur) - 2.0, turn,
+			echelle))
 
 
 ## La couronne d'un palmier : des palmes rayonnantes au sommet du stipe.

@@ -85,6 +85,61 @@ def colonne(g, rng, hauteur, r_bas, r_haut, clair, sombre, penche=0.0,
     return centres
 
 
+def charpente(g, rng, hauteur, r_bas, r_haut, clair, sombre, branches,
+              penche=0.0):
+    """Un fut **et ses branches**, pour un grand arbre a plusieurs houppiers.
+
+    -- Ce qui distingue un grand arbre d'un feuillu ---------------------------
+
+    Un feuillu empile un a trois houppiers sur l'axe de son tronc : sa
+    silhouette est une colonne coiffee. Un grand arbre porte ses masses **en
+    dehors** de son axe, au bout de branches, et c'est ce qui lui donne une
+    envergure plutot qu'une hauteur. Il faut donc que le tronc montre les
+    branches qui portent les houppiers, sans quoi les masses flottent a cote de
+    l'arbre — le defaut du 2026-09-06 sur les palmes, transpose.
+
+    `branches` est la liste des bouts, **en coordonnees Godot** et avant
+    rotation : `(dx, dz, dy)`, en blocs depuis la colonne du tronc et depuis sa
+    base. La **meme liste, ecrite a l'identique**, est declaree dans
+    `CWTreeRules.SPECIES`, qui y pose les houppiers.
+
+    Elles sont en coordonnees Godot et non en coordonnees `.vox` pour une seule
+    raison, et elle vaut d'etre dite : l'import fait tourner les axes
+    (`vox(x, y, z) -> godot(y, z, x)`), donc une liste ecrite dans le repere du
+    fichier serait la meme a **deux axes echanges** pres de celle du moteur. Une
+    branche a l'est du modele porterait le houppier au nord. La conversion est
+    faite ici, une fois, et les deux listes se relisent l'une contre l'autre sans
+    rien transposer de tete. Un test verifie en plus que chaque bout declare
+    tombe sur de la matiere du modele charge — le bois y est, ou il n'y est pas.
+
+    La branche est **epaisse de deux voxels** a sa naissance et d'un a son bout :
+    a un voxel par bloc, une branche d'un seul bloc de section lit comme une
+    file de cubes en l'air (jalon 1.11, l'arbre a epines).
+    """
+    centres = colonne(g, rng, hauteur, r_bas, r_haut, clair, sombre,
+                      penche=penche)
+    for (gx, gz, gy) in branches:
+        # (vox_x, vox_y, vox_z) = (godot_z, godot_x, godot_y) : voir plus haut.
+        bx, by, bz = gz, gx, gy
+        n = max(abs(bx), abs(by))
+        if n <= 0:
+            continue
+        # La branche part du fut a la hauteur du bout moins sa montee : elle
+        # monte en s'eloignant, comme une branche portante.
+        z0 = bz - max(1, n // 3)
+        for k in range(n + 1):
+            t = k / float(n)
+            x = bx * t
+            y = by * t
+            z = z0 + (bz - z0) * t
+            c = teinte(clair, sombre, 0.3 + 0.4 * (1.0 - t))
+            g.pose(x, y, z, c)
+            # Epaisse pres du tronc : c'est la que le poids passe.
+            if k < n * 0.6:
+                g.pose(x, y, z - 1, c)
+    return centres
+
+
 def houppier(g, rng, largeur, hauteur, clair, sombre, creux=0.0, bosses=0.22):
     """Un dome en parasol : **plus large que haut**, et c'est la forme.
 

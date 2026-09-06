@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://r0qe37rveqfn"
+path="res://.godot/imported/erable_dome.vox-80a8792c95c341bc51d9633036840eed.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/greenlands/erable_dome.vox"
+dest_files=["res://.godot/imported/erable_dome.vox-80a8792c95c341bc51d9633036840eed.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

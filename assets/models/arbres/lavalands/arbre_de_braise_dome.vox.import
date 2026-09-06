@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://c4fns18gam0x7"
+path="res://.godot/imported/arbre_de_braise_dome.vox-b02b754b49c3bc3d5615f921ad3a8915.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/lavalands/arbre_de_braise_dome.vox"
+dest_files=["res://.godot/imported/arbre_de_braise_dome.vox-b02b754b49c3bc3d5615f921ad3a8915.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://daa2e27xwva5x"
+path="res://.godot/imported/arbre_pourpre_dome.vox-25f3041f92fb7458d110e0fcee748f88.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/snowlands/arbre_pourpre_dome.vox"
+dest_files=["res://.godot/imported/arbre_pourpre_dome.vox-25f3041f92fb7458d110e0fcee748f88.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

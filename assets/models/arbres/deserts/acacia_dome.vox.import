@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://jnaudq8752l3"
+path="res://.godot/imported/acacia_dome.vox-538923e6b5f70130a5d375be196e8d4f.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/deserts/acacia_dome.vox"
+dest_files=["res://.godot/imported/acacia_dome.vox-538923e6b5f70130a5d375be196e8d4f.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

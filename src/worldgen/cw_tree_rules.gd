@@ -45,6 +45,25 @@ enum Montage {
 	FEUILLU,
 	## Un stipe, puis une couronne de palmes rayonnantes a son sommet.
 	PALMIER,
+	## Une charpente — un fut et quatre branches — puis un houppier au bout de
+	## chaque branche, plus un a la cime. Ajoute le 2026-09-06.
+	##
+	## -- Ce qu'il apporte que FEUILLU n'a pas ---------------------------------
+	##
+	## Un feuillu empile ses houppiers **sur l'axe du tronc** : sa silhouette est
+	## une colonne coiffee, et son envergure ne depasse jamais celle d'un seul
+	## houppier. Un grand arbre porte ses masses **en dehors** de son axe, au
+	## bout de branches dessinees dans le modele de tronc : c'est ce qui fait la
+	## difference entre un arbre de foret et un arbre isole qu'on remarque de
+	## loin.
+	##
+	## Les bouts de branche sont declares dans `branches`, et la meme liste est
+	## ecrite dans `tools/blender/generer_arbres.py`. Elles sont en coordonnees
+	## **Godot** des deux cotes — l'import fait tourner les axes, et une liste
+	## ecrite dans le repere du fichier `.vox` porterait le houppier a quatre-
+	## vingt-dix degres de sa branche. `tests/tree_test.gd` charge le modele et
+	## verifie qu'il y a bien du bois a chaque bout declare.
+	GRAND,
 }
 
 ## Racine du lot d'arbres. Chemins relatifs, dossier de biome compris, comme
@@ -58,7 +77,11 @@ const TREE_DIR: String = "res://assets/models/arbres/"
 ## du disque est ignoree en entier — un tronc nu vaut moins qu'une clairiere.
 ##
 ## `pieces` est le nombre de houppiers empiles (FEUILLU) ou de **paires** de
-## palmes en couronne (PALMIER), tire dans l'intervalle donne.
+## palmes en couronne (PALMIER), tire dans l'intervalle donne. Un montage GRAND
+## l'ignore : son nombre de pieces est celui de ses branches, plus la cime.
+##
+## `branches` n'existe que pour GRAND : les bouts de branche du modele de tronc,
+## en coordonnees Godot `(dx, dz, dy)`, en blocs depuis la colonne et la base.
 ##
 ## Des paires, et non des palmes : depuis le jalon 1.12 un modele de palme porte
 ## deux frondes opposees passant par son ancre. La raison est l'ancre elle-meme,
@@ -120,6 +143,26 @@ const SPECIES: Dictionary = {
 			"pieces": [3, 4],
 			"poids": 0.02,
 		},
+		{
+			"nom": "erable",
+			"montage": Montage.GRAND,
+			"tronc": "greenlands/erable_charpente",
+			"couronnes": ["greenlands/erable_dome"],
+			"branches": [Vector3i(9, 0, 15), Vector3i(-8, 0, 13),
+					Vector3i(0, 9, 17), Vector3i(0, -8, 14)],
+			"pieces": [0, 0],
+			"poids": 0.12,
+		},
+		{
+			"nom": "cerisier",
+			"montage": Montage.GRAND,
+			"tronc": "greenlands/cerisier_charpente",
+			"couronnes": ["greenlands/cerisier_dome"],
+			"branches": [Vector3i(10, 0, 12), Vector3i(-10, 0, 14),
+					Vector3i(0, 9, 11), Vector3i(0, -9, 13)],
+			"pieces": [0, 0],
+			"poids": 0.06,
+		},
 	],
 	CWBiome.SNOWLANDS: [
 		{
@@ -146,6 +189,26 @@ const SPECIES: Dictionary = {
 			"pieces": [1, 2],
 			"poids": 0.20,
 		},
+		{
+			"nom": "saule givre",
+			"montage": Montage.GRAND,
+			"tronc": "snowlands/saule_givre_charpente",
+			"couronnes": ["snowlands/saule_givre_dome"],
+			"branches": [Vector3i(10, 0, 12), Vector3i(-10, 0, 14),
+					Vector3i(0, 9, 11), Vector3i(0, -9, 13)],
+			"pieces": [0, 0],
+			"poids": 0.10,
+		},
+		{
+			"nom": "arbre pourpre",
+			"montage": Montage.GRAND,
+			"tronc": "snowlands/arbre_pourpre_charpente",
+			"couronnes": ["snowlands/arbre_pourpre_dome"],
+			"branches": [Vector3i(9, 0, 15), Vector3i(-8, 0, 13),
+					Vector3i(0, 9, 17), Vector3i(0, -8, 14)],
+			"pieces": [0, 0],
+			"poids": 0.06,
+		},
 	],
 	CWBiome.DESERTS: [
 		{
@@ -165,6 +228,26 @@ const SPECIES: Dictionary = {
 			"couronnes": ["deserts/palme", "deserts/palme_diagonale"],
 			"pieces": [3, 4],
 			"poids": 0.4,
+		},
+		{
+			"nom": "acacia",
+			"montage": Montage.GRAND,
+			"tronc": "deserts/acacia_charpente",
+			"couronnes": ["deserts/acacia_dome"],
+			"branches": [Vector3i(8, 0, 19), Vector3i(-8, 0, 17),
+					Vector3i(0, 8, 21), Vector3i(0, -7, 18)],
+			"pieces": [0, 0],
+			"poids": 0.16,
+		},
+		{
+			"nom": "baobab",
+			"montage": Montage.GRAND,
+			"tronc": "deserts/baobab_charpente",
+			"couronnes": ["deserts/baobab_dome"],
+			"branches": [Vector3i(10, 0, 12), Vector3i(-10, 0, 14),
+					Vector3i(0, 9, 11), Vector3i(0, -9, 13)],
+			"pieces": [0, 0],
+			"poids": 0.08,
 		},
 	],
 	CWBiome.JUNGLES: [
@@ -187,6 +270,26 @@ const SPECIES: Dictionary = {
 			"pieces": [3, 4],
 			"poids": 0.4,
 		},
+		{
+			"nom": "flamboyant",
+			"montage": Montage.GRAND,
+			"tronc": "jungles/flamboyant_charpente",
+			"couronnes": ["jungles/flamboyant_dome"],
+			"branches": [Vector3i(8, 0, 19), Vector3i(-8, 0, 17),
+					Vector3i(0, 8, 21), Vector3i(0, -7, 18)],
+			"pieces": [0, 0],
+			"poids": 0.10,
+		},
+		{
+			"nom": "jacaranda",
+			"montage": Montage.GRAND,
+			"tronc": "jungles/jacaranda_charpente",
+			"couronnes": ["jungles/jacaranda_dome"],
+			"branches": [Vector3i(9, 0, 15), Vector3i(-8, 0, 13),
+					Vector3i(0, 9, 17), Vector3i(0, -8, 14)],
+			"pieces": [0, 0],
+			"poids": 0.08,
+		},
 	],
 	CWBiome.LAVALANDS: [
 		# « Thorn Tree : rare, pas de drop ». C'est le seul arbre du biome, et sa
@@ -199,6 +302,26 @@ const SPECIES: Dictionary = {
 			"couronnes": [],
 			"pieces": [0, 0],
 			"poids": 1.0,
+		},
+		{
+			"nom": "arbre de cendre",
+			"montage": Montage.GRAND,
+			"tronc": "lavalands/arbre_de_cendre_charpente",
+			"couronnes": ["lavalands/arbre_de_cendre_dome"],
+			"branches": [Vector3i(9, 0, 15), Vector3i(-8, 0, 13),
+					Vector3i(0, 9, 17), Vector3i(0, -8, 14)],
+			"pieces": [0, 0],
+			"poids": 0.30,
+		},
+		{
+			"nom": "arbre de braise",
+			"montage": Montage.GRAND,
+			"tronc": "lavalands/arbre_de_braise_charpente",
+			"couronnes": ["lavalands/arbre_de_braise_dome"],
+			"branches": [Vector3i(8, 0, 19), Vector3i(-8, 0, 17),
+					Vector3i(0, 8, 21), Vector3i(0, -7, 18)],
+			"pieces": [0, 0],
+			"poids": 0.20,
 		},
 	],
 }

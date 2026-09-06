@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://e8t2lb08ogrw"
+path="res://.godot/imported/flamboyant_charpente.vox-1700f964bb119956801dc9459c310dae.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/jungles/flamboyant_charpente.vox"
+dest_files=["res://.godot/imported/flamboyant_charpente.vox-1700f964bb119956801dc9459c310dae.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

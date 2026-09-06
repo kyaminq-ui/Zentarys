@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://c5k58ip3cetih"
+path="res://.godot/imported/acacia_charpente.vox-7543bd11df9414ce3c40f958b16bd63b.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/deserts/acacia_charpente.vox"
+dest_files=["res://.godot/imported/acacia_charpente.vox-7543bd11df9414ce3c40f958b16bd63b.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

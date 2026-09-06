@@ -130,7 +130,7 @@ moitiés sortent du **même tirage, dans la même liste** : `Placement.matiere`
 marque la pièce que le générateur estampe et que le rendu ignore. Le type de
 bloc est `CWPalette.WOOD`, l'index 4 recyclé le jour même ; la teinte reste
 celle du modèle, ce qui donne quatre écorces pour un seul type. Coût mesuré :
-**+5 % sur le chargement**.
+**+2 % sur le chargement** (18,1 → 18,4 s à 384 blocs de vue).
 
 Ce que la capture a attrapé au passage, et qui datait du jalon 1.7 : **le
 terrain charge une boîte, la végétation garnissait un disque** — les quatre
@@ -597,6 +597,15 @@ docs/images/               gabarit, carte et composition de flore, en jeu
   échantillonnages : un pour décider la densité, un par plante posée). Ne pas
   revenir à un tirage à rejet : échantillonner un candidat pour le jeter ensuite
   triplait la facture.
+- **Changer une entrée de la palette change tous les `.vox` à la génération
+  suivante.** `flore_vox.write_vox` recopie le bloc `RGBA` de
+  `assets/palette/zentarys_palette.vox` **verbatim** dans chaque fichier : le
+  jour où l'index 4 est passé d'herbe sèche à bois, les 24 modèles d'arbres
+  regénérés ce jour-là ont changé d'un octet et les 38 de flore, non. Sans
+  conséquence à l'exécution — le chargeur reçoit la palette du projet, pas celle
+  du fichier — mais le lot cesse d'être homogène pour qui l'ouvre dans
+  MagicaVoxel. **Regénérer les trois lots après toute modification de
+  `CWPalette`**, comme on réexporte `assets/palette/`.
 - **Les 38 modèles de flore sont générés, pas dessinés.** Les rouvrir dans
   MagicaVoxel pour les retoucher est du travail perdu : la prochaine exécution
   de `tools/blender/generer_flore.py` les écrase. Corriger le générateur, puis
@@ -1243,27 +1252,32 @@ bel et bien écrit.
 
 ### Ce que ça coûte
 
-**+2 à 3 secondes sur un chargement de 41**, soit de l'ordre de 5 % — à la
-limite de la dispersion des mesures. Vue de 384 blocs, quatre exécutions
-alternées : 41,1 et 41,3 s sans l'étampage, 43,5 et 44,2 s avec. L'appel ne
-touche que les blocs qui croisent la surface (les deux chemins rapides sortent
-avant), `trunks_in` consulte une à quatre cellules d'arbres — toutes en cache
-après le premier bloc de la pile verticale — et une cellule de 64 blocs contient
-de l'ordre de sept arbres.
+**+2 %**, soit 0,4 s sur un chargement de 18. Vue de 384 blocs, au point de
+départ : **17,9 et 18,1 s sans l'étampage, 18,4 s avec**. L'appel ne touche que
+les blocs qui croisent la surface — les deux chemins rapides sortent avant —,
+`trunks_in` consulte une à quatre cellules d'arbres, toutes en cache après le
+premier bloc de la pile verticale, et une cellule de 64 blocs contient de
+l'ordre de sept arbres.
 
-Le passage du disque au carré, lui, **ne se mesure pas** : 42,2 et 42,9 s avec
-le disque contre 41,1 et 41,3 s avec le carré, soit l'inverse du signe attendu,
-dans le bruit. Les 27 % de cellules en plus se paient sur le fil du pool, et le
-verrou du chargement est la génération du terrain, pas la végétation.
+Le passage du disque au carré, lui, **ne se mesure pas** : les 27 % de cellules
+en plus se paient sur le fil du pool, et le verrou du chargement est la
+génération du terrain, pas la végétation.
 
-> **En revanche, ce chargement de 41 s n'est pas celui que la feuille de route
-> annonce.** Elle donne **16,4 s à 384 blocs** (2026-09-05), et la mesure du
-> jour en donne 41 à 43 — étampage désactivé, donc l'écart est **antérieur à ce
-> travail**. Le coût par colonne est passé de 61 à 80 µs entre-temps
-> (`CWBiome`, les coulées de lave, la couche des arbres), ce qui explique un
-> tiers de l'écart, pas les deux autres tiers. C'est un relevé, pas un
-> diagnostic : à reprendre avant toute optimisation, et surtout avant de croire
-> le nombre écrit dans la feuille de route.
+> **Une mesure de chargement se prend au démarrage, pas après un téléport — et
+> ça a failli coûter une journée.** Les premières mesures ont été prises avec
+> `-- --biome 0`, la commande de toutes les captures : elles donnaient 41 à 43 s
+> là où la feuille de route annonce 16,4 s, et le premier réflexe a été de
+> chercher une régression de facteur 2,5 introduite depuis le 2026-09-05. Il n'y
+> en a pas. **Un téléport charge deux fois plus de blocs qu'un démarrage** — la
+> zone quittée est encore en file quand celle d'arrivée entre —, et le compteur
+> le disait depuis le début : 70 000 tâches contre 35 000. Sans téléport, le
+> même monde se stabilise en **18,4 s pour 35 000 tâches**, ce qui reproduit la
+> ligne de la feuille de route à deux secondes près — les 61 → 80 µs par colonne
+> apportés depuis par `CWBiome` et les coulées de lave.
+>
+> La leçon n'est pas « il fallait lire le compteur » : c'est qu'**une mesure ne
+> vaut que si son protocole est écrit à côté du nombre**. Les deux lignes sont
+> maintenant dans `docs/ROADMAP.md`, chacune avec la sienne.
 
 ### Ce qui reste ouvert, et qui n'est plus bloquant
 
@@ -1284,6 +1298,61 @@ verrou du chargement est la génération du terrain, pas la végétation.
   usage. Un houppier de 22 blocs de large est le premier modèle assez gros pour
   la justifier, et il est maintenant seul dans son instance — le tronc ne le suit
   plus.
+
+### Dix grands arbres, et la couleur qui manquait au lot
+
+Demandés le 2026-09-06 : **deux par biome arboré**, un tronc, des branches, et
+plusieurs feuillages en sphères aplaties, *dans d'autres couleurs que le vert*.
+Dix espèces, vingt modèles, un quatrième montage.
+
+**`Montage.GRAND`** est ce qui les distingue, et ce n'est pas un réglage de
+FEUILLU : un feuillu empile ses houppiers **sur l'axe** de son tronc — sa
+silhouette est une colonne coiffée, et son envergure ne dépasse jamais celle
+d'un seul houppier. Un grand arbre porte ses masses **en dehors** de son axe, au
+bout de branches dessinées dans le modèle de tronc, plus une à la cime. Cinq
+masses, et c'est le fait qu'on puisse les compter qui le rend différent.
+
+**Les branches sont écrites dans le terrain avec le fût** — elles font partie du
+même modèle, et le tronc est estampé depuis §7. Un grand arbre pose donc dix
+blocs de charpente de chaque côté de sa colonne, ce qui a fait passer
+`MARGE_TRONC` de 4 à 11.
+
+> **Deux tables doivent dire la même chose, et pour une fois la vérification est
+> directe.** `CWTreeRules.SPECIES[...]["branches"]` déclare où sont les bouts,
+> `generer_arbres.BRANCHES_*` les dessine. C'est le piège de `GRILLE_FINE`, à
+> ceci près qu'on peut le trancher : `tests/tree_test.gd` charge le modèle et
+> regarde s'il y a **du bois au bout déclaré**. Une branche déplacée d'un seul
+> côté fait tomber la vérification.
+>
+> Les deux listes sont en coordonnées **Godot**, pas en coordonnées `.vox` :
+> l'import fait tourner les axes (`vox(x, y, z) -> godot(y, z, x)`), et une
+> liste écrite dans le repère du fichier porterait le houppier à quatre-vingt-dix
+> degrés de sa branche. La conversion est faite une fois, dans `ab.charpente`.
+
+**Les couleurs étaient déjà dans la palette, elles n'étaient pas employées.**
+Douze des vingt-quatre modèles précédents puisaient dans la seule rampe de
+feuillage : une forêt de Greenlands n'avait qu'une teinte. Les dix nouveaux
+prennent l'automne (140-147), les quatre couples de fleurs (156-163), la rampe
+des champignons et mousses (164-169), la roche nue pour le givre (14-19) et le
+basalte pour la cendre (25-27). **Aucune entrée nouvelle** : érable doré,
+cerisier rose, saule givré, arbre pourpre, acacia doré, baobab terre cuite,
+flamboyant rouge, jacaranda violet, arbre de cendre noir à braises, arbre de
+braise incandescent.
+
+Une seule interdiction, et c'est l'invariant n° 29 : **aucune plante de
+Snowlands ne prend la rampe d'automne**. Ses deux grands arbres prennent donc le
+blanc-bleu et le violet, qui sont froids.
+
+**Deux réglages qu'il a fallu voir pour trancher**, et aucun ne se déduisait :
+
+1. **la portée doit dépasser le rayon du dôme, pas l'égaler.** Premier essai,
+   branches à 5-7 blocs et dômes de 11-13 : les cinq masses se recouvraient
+   presque entièrement et l'arbre se lisait comme **un seul** parasol —
+   c'est-à-dire comme un feuillu. Branches à 8-10, dômes à 10 ;
+2. **un dôme de trois blocs d'épaisseur pour dix de large est une galette.**
+   `houppier` rend à peu près la moitié de la hauteur demandée — son profil se
+   ferme avant le sommet —, donc 6,5 pour cinq blocs. Un rapport de deux entre
+   largeur et hauteur se lit comme une masse ; à trois pour un, c'est un plateau.
 
 ### La suite : 2.6, l'apparition
 

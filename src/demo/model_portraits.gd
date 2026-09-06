@@ -352,6 +352,7 @@ func _nom_montage(montage: int) -> String:
 		CWTreeRules.Montage.ENTIER: return "entier"
 		CWTreeRules.Montage.FEUILLU: return "feuillu"
 		CWTreeRules.Montage.PALMIER: return "palmier"
+		CWTreeRules.Montage.GRAND: return "grand"
 	return "?"
 
 

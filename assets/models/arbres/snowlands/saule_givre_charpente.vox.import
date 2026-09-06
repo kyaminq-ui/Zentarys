@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://brpcjjbw24hdu"
+path="res://.godot/imported/saule_givre_charpente.vox-c12203935f5ff1e51b28f592edfe621b.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/snowlands/saule_givre_charpente.vox"
+dest_files=["res://.godot/imported/saule_givre_charpente.vox-c12203935f5ff1e51b28f592edfe621b.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

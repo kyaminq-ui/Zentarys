@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://drxi3vd60j0sm"
+path="res://.godot/imported/arbre_de_braise_charpente.vox-47e345fa4e232b3fdd568d353453fbde.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/lavalands/arbre_de_braise_charpente.vox"
+dest_files=["res://.godot/imported/arbre_de_braise_charpente.vox-47e345fa4e232b3fdd568d353453fbde.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

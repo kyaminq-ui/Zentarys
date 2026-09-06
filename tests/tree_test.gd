@@ -253,11 +253,12 @@ func _test_scatter() -> void:
 		total += list.size()
 		if not list.is_empty():
 			non_vides += 1
-		var vus: Dictionary = {}
 		for pl in list:
-			var k := Vector2i(pl.x, pl.z)
-			if not vus.has(k):
-				vus[k] = true
+			# Un arbre = un pied, et un pied = la piece posee sur la colonne du
+			# candidat. Compter les colonnes distinctes marchait tant qu'un
+			# arbre tenait sur la sienne ; depuis le montage GRAND, ses quatre
+			# houppiers sont poses **a cote** et chacun compterait pour un arbre.
+			if pl.fy == 0.0:
 				troncs += 1
 	print("     %d cellules, %d non vides, %d pieces, %d arbres"
 			% [cells.size(), non_vides, total, troncs])
@@ -282,10 +283,16 @@ func _test_scatter() -> void:
 	# C'est la seule propriete de cette couche qui ne se verifie pas en
 	# regardant une cellule seule : la regle du rang absolu n'a d'interet que si
 	# elle tient entre voisines.
+	# Les **pieds**, et non les colonnes occupees : un grand arbre pose ses
+	# houppiers au bout de branches, donc sur quatre colonnes voisines de la
+	# sienne. Les compter comme des arbres ferait echouer l'espacement sur des
+	# pieces qui appartiennent au meme arbre — ce qui est arrive le 2026-09-06,
+	# avec 497 faux couples. La piece posee au sol (`fy == 0`) est le pied.
 	var pieds: Dictionary = {}
 	for c in cells:
 		for pl in scatter.cell(c.x, c.y):
-			pieds[Vector2i(pl.x, pl.z)] = true
+			if pl.fy == 0.0:
+				pieds[Vector2i(pl.x, pl.z)] = true
 	var liste: Array = pieds.keys()
 	var d2: int = CWTreeScatter.ESPACEMENT * CWTreeScatter.ESPACEMENT
 	var trop_proches: int = 0
@@ -426,6 +433,42 @@ func _test_matiere() -> void:
 			trop_large.is_empty(), ", ".join(trop_large))
 	_ok("aucun tronc ne depasse la hauteur annoncee",
 			trop_haut.is_empty(), ", ".join(trop_haut))
+
+	# -- Les branches d'un grand arbre portent-elles vraiment leur houppier ? -
+	#
+	# `CWTreeRules.SPECIES[...]["branches"]` et
+	# `tools/blender/generer_arbres.BRANCHES_*` sont deux tables qui doivent dire
+	# la meme chose : l'une dessine la branche, l'autre y pose la masse. C'est le
+	# meme accord que celui de `GRILLE_FINE`, a une difference pres qui rend ce
+	# test-ci facile — **le bois est la, ou il n'y est pas**. On charge le modele
+	# et on regarde s'il y a de la matiere au bout declare.
+	#
+	# La tolerance est d'un bloc : le bout est le dernier voxel dessine, et
+	# l'arrondi de la ligne peut le poser a un bloc de la valeur nominale.
+	var bouts_vides := PackedStringArray()
+	var grands: int = 0
+	for biome in CWTreeRules.biomes():
+		for sp in CWTreeRules.SPECIES[biome]:
+			if int(sp["montage"]) != CWTreeRules.Montage.GRAND:
+				continue
+			grands += 1
+			var m: CWVoxelModel = lib.model(sp["tronc"])
+			if m == null:
+				continue
+			var dx: PackedInt32Array = m.offsets_x(0)
+			var dy: PackedInt32Array = m.offsets_y(0)
+			var dz: PackedInt32Array = m.offsets_z(0)
+			for b in sp["branches"]:
+				var proche: bool = false
+				for i in m.voxel_count:
+					if absi(dx[i] - b.x) <= 1 and absi(dz[i] - b.y) <= 1 							and absi(dy[i] - b.z) <= 1:
+						proche = true
+						break
+				if not proche:
+					bouts_vides.append("%s %s" % [m.name, b])
+	_ok("chaque bout de branche declare porte du bois (%d grands arbres)" % grands,
+			bouts_vides.is_empty(), ", ".join(bouts_vides))
+	_ok("les dix grands arbres sont dans la table", grands == 10, "%d" % grands)
 
 	# -- Qui est de la matiere, et qui n'en est pas --------------------------
 	var origin := Vector2i(p.world_origin.x >> CWTreeScatter.TREE_CELL_SHIFT,

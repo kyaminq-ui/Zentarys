@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://bbxvla3o4ntaw"
+path="res://.godot/imported/baobab_charpente.vox-04567d36dc21f64e9078b9651db67511.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/deserts/baobab_charpente.vox"
+dest_files=["res://.godot/imported/baobab_charpente.vox-04567d36dc21f64e9078b9651db67511.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://cgstk1mq1xbro"
+path="res://.godot/imported/jacaranda_charpente.vox-56700c8280d7af3b0b59b19c8bc37fdb.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/jungles/jacaranda_charpente.vox"
+dest_files=["res://.godot/imported/jacaranda_charpente.vox-56700c8280d7af3b0b59b19c8bc37fdb.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

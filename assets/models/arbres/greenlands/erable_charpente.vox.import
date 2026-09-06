@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://c4pbuijsqu8gc"
+path="res://.godot/imported/erable_charpente.vox-b9b7fa3cfd0571fbda8a49fa2b13604c.tscn"
+
+[deps]
+
+source_file="res://assets/models/arbres/greenlands/erable_charpente.vox"
+dest_files=["res://.godot/imported/erable_charpente.vox-b9b7fa3cfd0571fbda8a49fa2b13604c.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

@@ -778,8 +778,24 @@ terrain charge une **boîte** de blocs, la végétation garnissait un **disque**
 Les quatre coins de la boîte portaient donc du terrain sans porter de cellules —
 invisible tant que l'arbre entier était instancié, un **fût nu** dès que le tronc
 est devenu de la matière. Les deux couches suivent maintenant la même forme
-(invariant n° 36). Coût mesuré de l'étampage : **+5 % sur le chargement**
-(41 s → 43,5 s à 384 blocs de vue).
+(invariant n° 36). Coût mesuré de l'étampage : **+2 %**, soit 17,9 et 18,1 s
+sans contre 18,4 s avec, à 384 blocs de vue.
+
+**Dix grands arbres, ajoutés le 2026-09-06.** Deux par biome arboré, un
+quatrième montage (`Montage.GRAND`), vingt modèles. Un fût, **quatre branches
+dessinées dans le modèle de tronc**, et un houppier au bout de chacune plus un à
+la cime : ce qui distingue un grand arbre d'un feuillu est qu'on **compte ses
+masses**, là où le feuillu empile les siennes sur son axe. Les branches sont
+estampées avec le fût, d'où `MARGE_TRONC` porté de 4 à 11 blocs.
+
+Ils apportent au lot ce qui lui manquait le plus : **la couleur**. Douze des
+vingt-quatre modèles précédents puisaient dans la seule rampe de feuillage, et
+une forêt de Greenlands n'avait qu'une teinte. Les nouveaux prennent l'automne,
+les quatre couples de fleurs, la rampe des mousses, la roche nue et le basalte —
+**aucune entrée nouvelle dans la palette** : érable doré, cerisier rose, saule
+givré, arbre pourpre, acacia, baobab, flamboyant, jacaranda, arbre de cendre,
+arbre de braise. L'invariant n° 29 tient : les deux espèces de Snowlands
+prennent le blanc-bleu et le violet, jamais l'orange d'automne.
 
 **Ce qui reste :**
 
@@ -1120,14 +1136,20 @@ Quatre corrections, dans l'ordre de leur effet :
 | 384 blocs | **16 s** (8 fils, flux avec index) | 35 000 |
 | 768 blocs | **120 s** | 198 000 |
 
-> ⚠️ **Ces deux nombres ne tiennent plus, et l'écart n'est pas expliqué.**
-> Mesuré le 2026-09-06 sur la même machine, même commande, même vue de 384
-> blocs : **41 à 43 s**, pour un pic de 70 000 tâches. Six exécutions, avec et
-> sans l'étampage des troncs — l'écart est donc antérieur au jalon 1.11. Le coût
-> par colonne est passé de 61 à 80 µs entre-temps (`CWBiome`, les coulées de
-> lave), ce qui explique un tiers de la différence, et le pic de tâches a doublé,
-> ce qui n'est pas expliqué du tout. **À reprendre avant toute optimisation** :
-> il y a probablement plus à gagner ici que dans le portage en GDExtension.
+> **Ces nombres tiennent toujours — mais ils décrivent un chargement, pas un
+> téléport.** Revérifié le 2026-09-06, même machine, même vue : **18 s pour
+> 35 000 tâches** au point de départ, ce qui reproduit la ligne ci-dessus (les
+> ~2 s de plus sont les 61 → 80 µs par colonne apportés depuis par `CWBiome` et
+> les coulées de lave). Le même monde après un saut de biome — `-- --biome N`,
+> c'est-à-dire la commande de toutes les captures — demande **43 s pour 70 000
+> tâches** : un téléport charge deux fois plus de blocs qu'un démarrage, parce
+> que la zone quittée est encore en file quand celle d'arrivée entre.
+>
+> C'est la nuance qui a failli coûter cher : mesuré au téléport, le chargement
+> paraissait avoir triplé depuis le 2026-09-05, et le premier réflexe a été de
+> chercher une régression qui n'existait pas. **Une mesure de chargement se
+> prend au démarrage** ; le téléport a sa propre ligne, et elle est utile
+> puisque c'est ce qu'on fait pour valider.
 
 Le débit ne s'écroule pas quand l'empreinte grandit : 1 290 tâches/s à 384,
 1 650 à 768. C'est le **nombre** de blocs qui explose — il croît comme le
