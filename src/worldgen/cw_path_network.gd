@@ -169,8 +169,11 @@ const MESA_WEIGHT: float = 0.9
 ## L'altitude, elle, peut se lire au jalon : c'est un champ lisse a grande
 ## echelle. La masse est un objet local, et un objet local se manque.
 ##
-## On integre donc l'epaisseur le long des deux segments adjacents, a 32 blocs
-## de pas — quatre sondages par rayon de massif, de quoi ne pas en manquer un.
+## On integre donc l'epaisseur le long des deux segments adjacents. Le pas est
+## de 48 blocs : le plus petit massif a 34 blocs de rayon, donc aucun ne passe
+## entre deux sondages. Un pas de 32 a ete essaye — il rend la meme mesure
+## (0,08 bloc d'epaisseur moyenne traversee contre 0,09) pour quatre secondes de
+## plus sur la suite de validation.
 const MESA_PROBE: int = 48
 
 ## Nombre maximum d'agglomerations raccordees au reseau d'une zone, en plus du

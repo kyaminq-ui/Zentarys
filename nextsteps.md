@@ -3197,6 +3197,73 @@ Trois garde-fous, a deux etages :
 | rapport de section (large / etroit) | 1,00 — un tuyau | **1,94** |
 | embranchements | aucun | **28**, sur 37 % des galeries |
 
+### 7octies.4 « Contourner un massif, pas le percer tout droit » — les deux lectures
+
+Ce point avait **deux lectures** et le fichier de reprise demandait de trancher
+avant d'ecrire une ligne. **Les deux ont ete retenues**, et elles ne se
+recouvrent pas : l'une decide *ou* passe le chemin, l'autre *de quelle forme*
+est le trou quand il passe quand meme.
+
+#### Le trace connait les massifs
+
+La fonction de cout de `_relaxe` les ignorait totalement. Elle les compte
+maintenant, avec un poids qui repond a une question ayant une reponse
+naturelle : **percer un bloc de roche doit couter ce que couterait le monter.**
+Le denivele y est deja compte en blocs, donc le poids est de l'ordre de 1.
+
+> **Et ce qui en sort n'est pas un contournement construit.** La penalite etant
+> proportionnelle a l'**epaisseur**, la relaxation ne fuit pas la masse : elle
+> glisse vers la ou celle-ci est mince, c'est-a-dire vers son contour. Le trace
+> decrit donc un arc dont le rayon suit celui de la masse — un chemin de
+> corniche — et il la perce quand meme lorsque le detour couterait plus cher que
+> le tunnel. C'est le mot « orbitale », obtenu par le cout plutot que par une
+> regle qui l'aurait impose.
+
+**La premiere version n'a presque rien change, et sa lecon est celle d'un piege
+deja ecrit.** Elle lisait l'epaisseur **au jalon**, comme l'altitude : 0,21 bloc
+d'epaisseur moyenne traversee contre 0,17. Les jalons sont espaces de
+`SEGMENT_LEN`, soit 256 blocs ; un massif fait 70 a 140 blocs de rayon. **Une
+masse tient tout entiere entre deux jalons**, et le cout ne la voyait jamais.
+C'est *chercher un itineraire et epouser un sol ne se font pas a la meme
+echelle*, dans une troisieme variante : l'altitude peut se lire au jalon parce
+que c'est un champ lisse a grande echelle ; la masse est un **objet local**, et
+un objet local se manque.
+
+Integree le long des deux segments adjacents, a 48 blocs de pas :
+
+| | avant | au jalon | integree |
+|---|---|---|---|
+| chemin sous un massif | 1,4 % | 1,3 % | **0,7 %** |
+| epaisseur moyenne traversee | 0,21 bloc | 0,17 | **0,08** |
+| traversee la plus profonde | 48 blocs | 48 | 47 |
+
+La derniere ligne compte autant que les deux autres : **les tunnels ne
+disparaissent pas.** Ils cessent d'etre subis.
+
+**Ce que ca coute.** La relaxation touche des cellules de massifs sur tout le
+corridor qu'elle explore, et les construire n'est plus gratuit depuis que les
+grottes echantillonnent le terrain point par point : **+14 s sur la suite de
+validation** (44 s a 58 s). C'est du travail de zone, froid, mis en cache et
+fait sur un fil de fond en jeu ; l'essentiel est du travail que le terrain
+aurait fait de toute facon en se chargeant, avance plus tot. La fenetre de
+massifs est prise une fois par cellule traversee et non une fois par sondage,
+comme dans la boucle du generateur.
+
+#### La section du tunnel est un cercle
+
+`tunnel_height` rendait une **hauteur** : une tranche rectangulaire de largeur
+constante au-dessus de la chaussee. Sous quarante blocs de roche, cela fait une
+fente, pas une arche.
+
+Elle rend maintenant un **rayon** (`tunnel_bore`), proportionnel a la masse
+traversee, et la section est un cercle centre sur l'axe a hauteur de chaussee :
+le degagement vaut `sqrt(R² - d²)`, maximal sur l'axe, nul au piedroit. **La
+voute deborde la chaussee** des que le rayon depasse sa demi-largeur de 4,5
+blocs, c'est-a-dire sous toute masse un peu haute — et c'est ce debordement qui
+fait la difference entre une arche et une fente. Le toit reste garde comme
+avant : `TUNNEL_ROOF_MIN` blocs de matiere au-dessus de la voute, faute de quoi
+le chemin ne percerait plus le massif mais le couperait en deux.
+
 ---
 
 ## 8. Assets voxels
