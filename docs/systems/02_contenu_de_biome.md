@@ -742,49 +742,120 @@ confiance portait sur *quel appel* le type 12 fait — ce qui est juste et véri
 
 ### 10.2 Où l'eau est réellement écrite
 
-Dans `WorldInfo_generateBiomeContent` (@005e4850), la fonction que ce projet a
-déjà portée pour la flore (§8.6) — dans une **autre passe** de la même cellule,
+Dans `WorldInfo_generateBiomeContent` (@005e4850) — la fonction que ce projet a
+déjà portée pour la flore (§8.6) —, dans une **autre passe** de la même cellule,
 une boucle de 64 × 64 colonnes distincte de celle du décor.
-
-Le corps, à `WorldInfo.cpp:2694-2760` :
+`WorldInfo.cpp:2694-2805`, et elle tient en entier :
 
 ```
 pour chaque colonne (x, z) de la cellule :
-    v = WorldInfo_sampleTerrainHeight(x, z)
-    si 1 - v x 50 >= 0                    -- soit v <= 0,02 : une porte très étroite
-        h = Terrain_sampleHeightAtWorldXY(x, z)
-        si h <= 0,95
-            niveau = terrain_generateColumnColor()      -- une hauteur, pas une couleur
-            q      = (niveau / 5) * 5                   -- quantifié au pas de 5
-            f      = (niveau - q) / 5
-            t      = triangle(f)        -- f < 0,5 : 2f ; sinon 1 - (f - 0,5) x 4
-            remplir de (q - t x 5 + 2) jusqu'à q  avec  {0, 0, 255 x (1 - t), type 2}
+
+    v = WorldInfo_sampleTerrainHeight(x, z)          -- le CHAMP DE CHENAUX
+    si v <= 0,02                                     -- la porte
+      et garde_de_region(x, z) <= 0,95               -- §10.2.2
+
+        niveau = terrain_generateColumnColor(x, z)   -- une hauteur, pas une couleur
+        q      = floor(niveau / 5) * 5               -- quantifié au pas de 5
+        frac   = (niveau - q) / 5
+        t      = 2 x frac                si frac < 0,5
+                 1 - (frac - 0,5) x 4    sinon,  et si t < 0 : (t+1)^2 - 1
+        bas    = q - 5t + 2
+
+        si bas <= q :                                -- vrai ssi t >= 0,4
+            remplir [bas, q] d'EAU (type 2), couleur (0, 0, 255 x (1 - t))
+            écrire du SOL HUMIDE (type 3) en q       -- le lit, et la rive
+            une chance sur 200 : poser un objet en q
+
+        -- puis on ouvre la colonne au-dessus : les berges
+        creux = niveau + 5 x (1 - (50v)^3) + (bruit(x x 0,02, z x 0,02) + 1) x 2
+        remplir [q + 1, creux[ d'AIR
 ```
 
-Trois choses en sortent, et chacune répond à une question ouverte :
+#### 10.2.1 Ce que chaque ligne apporte
 
-1. **l'eau est de la matière écrite.** Type 2, colonne par colonne, avec sa
-   couleur — un bleu dont la composante bleue s'éteint avec `t`. Ce n'est pas
-   un vide sous un niveau global ;
-2. **son niveau est local et quantifié au pas de 5.** C'est ce qui permet un
-   plan d'eau à une altitude quelconque, et c'est ce qui lui donne ses paliers :
-   deux colonnes voisines partagent un niveau tant qu'elles tombent dans le même
-   pas de 5 ;
-3. **la porte est très sélective** — `v <= 0,02` sur un champ normalisé. L'eau
-   d'altitude est rare par construction, ce qui est cohérent avec un paysage où
-   l'on croise un étang de loin en loin et non un marécage continu.
+1. **la porte est le champ de chenaux**, et c'est la découverte qui compte :
+   `WorldInfo_sampleTerrainHeight` (@005f9340) **ne lit pas une hauteur**. Elle
+   calcule `|bruit(1e-3) + bruit(1e-2) x 0,1|`, module par un bruit non graîné à
+   1e-3 (`x ((m+1) x 0,1 + 0,8)`), puis ajoute un terme de crête en
+   `(1 - d x 0,75)^2 x 0,05`. **C'est mot pour mot `CWTerrainField._channel`**,
+   que ce projet porte depuis le jalon 1.4 sous le nom
+   `World_riverClimateGate` (@0052cd50) — mêmes fréquences, même valeur absolue,
+   même modulation non graînée, même terme de crête.
 
-Le drapeau `0x40`, testé avant chaque écriture (`(octet & 0x40) == 0`), protège
-ce qui est déjà posé : la passe d'eau n'écrase pas un bloc marqué. C'est le même
-drapeau que `Terrain_paintSphere` consulte.
+   > **Le réseau qui creuse les vallées est celui qui les remplit.**
+   > `nextsteps.md` écrivait « le réseau de chenaux du jalon 1.4 creuse bien les
+   > vallées, mais rien ne les remplit ». Il ne manquait pas un champ, il
+   > manquait un seuil : **0,02**.
 
-**Ce qui reste ouvert :** `WorldInfo_sampleTerrainHeight` et
-`Terrain_sampleHeightAtWorldXY` sont deux champs distincts dont aucun n'est
-identifié — le premier sert de porte, le second de garde-fou d'altitude. Tant
-qu'ils ne le sont pas, la *forme* de la règle est connue et sa *carte* ne l'est
-pas. Et deux autres sites de la même fonction (`WorldInfo.cpp:2559` et `:3167`)
-enchaînent les deux mêmes appels sans écrire d'eau : ce sont probablement des
-variantes de la même passe, non analysées.
+   Deux termes de la version décompilée que notre portage n'a pas : des bosses
+   par **type de cellule de région** (types 1, 2, 4, 13 : `+ (1-d²)²` ; types
+   6 et 7 : `+ (1-d²)² x 0,5`) et un terme additif final tiré de la cellule.
+   Ils **élèvent** le champ, donc ils **interdisent** l'eau près de ces
+   cellules — un bourg n'a pas d'étang en son centre. À porter avec les lacs,
+   pas avant : ils déplaceraient le lit des vallées existantes ;
+
+2. **le niveau est quantifié au pas de 5.** C'est ce qui donne à l'eau sa
+   surface plate par paliers, et c'est ce qui fait que deux colonnes voisines
+   partagent un niveau tant qu'elles tombent dans le même pas ;
+
+3. **`t` est une rampe triangulaire, et c'est elle qui fait les étangs.** Elle
+   vaut 0 aux deux bouts d'un palier et 1 en son milieu ; la condition
+   `bas <= q` équivaut à `t >= 0,4`, donc à `frac` entre **0,2 et 0,65**. Le
+   long d'un chenal, l'eau apparaît et disparaît à chaque fois que le niveau
+   traverse un multiple de 5 : **un chapelet de mares, pas une rivière
+   continue**. La profondeur maximale est de quatre blocs, atteinte au milieu
+   du palier ;
+
+4. **le lit est du sol humide (type 3)**, et c'est la boucle qui ferme une
+   question ouverte du jalon 1.7 : `CWDecorRules.FAMILIES_SURFACE` donne au sol
+   humide sa propre composition — roseau, sous-bois humide — et c'est la
+   **seule exception attachée à une matière** du projet. On savait quoi y faire
+   pousser sans savoir qui produisait la matière. C'est cette passe ;
+
+5. **les berges sont creusées, et l'eau n'est donc pas enterrée.** Sans les
+   quatre dernières lignes, remplir `[bas, q]` d'eau sous un terrain plus haut
+   donnerait une poche invisible. La passe ouvre la colonne de `q+1` jusqu'à
+   `niveau + 5 x (1 - (50v)^3) + bruit`, et l'exposant cubique fait que le creux
+   est **maximal au centre du chenal** (v = 0 → +5) et **nul au bord de la
+   porte** (v = 0,02 → +0). C'est un bol, et c'est ce qui donne la rive.
+
+#### 10.2.2 Les deux réserves qui restent
+
+- **`Terrain_sampleHeightAtWorldXY` (@005989d0) est elle aussi mal nommée** :
+  elle ne lit aucune altitude. Elle prend la cellule de région de `x >> 11`,
+  `z >> 11` — la grille de **2 048 unités**, soit la tuile — et ne rend une
+  valeur que si le type de cette cellule vaut **1** ; partout ailleurs elle rend
+  **0**, donc la porte `<= 0,95` passe par défaut. C'est une exclusion locale
+  autour d'un seul type de site, pas un garde-fou d'altitude. Le **sens** de
+  l'exclusion n'est pas tranché : la valeur rendue est une distance au carré
+  selon le nom proposé, un poids de retombée selon la forme du code, et les deux
+  donnent des exclusions inverses. Sans effet sur la carte d'ensemble ;
+- **quelle hauteur `terrain_generateColumnColor` rend.** Que ce soit une
+  couleur est déjà corrigé (elle rend une hauteur, `docs/ROADMAP.md` §1.7). Reste
+  à savoir si c'est la hauteur **finale** de la colonne ou son **ossature
+  continentale** avant les octaves de détail. Les berges creusées rendent les
+  deux jouables, et l'écart se voit : avec la finale, l'étang se creuse dans le
+  sol ; avec l'ossature, il se pose au fond de la vallée telle qu'elle est
+  taillée. **C'est la seule chose qui manque pour porter la passe**, et c'est
+  une lecture, pas un choix.
+
+#### 10.2.3 Ce que la porte rend sur notre champ
+
+Mesuré sur `CWTerrainField.channel_field`, 147 456 colonnes sur 36 zones
+éloignées, graine 1337 :
+
+| chenal | part du monde |
+|---|---|
+| 0,00 – 0,01 | 1,72 % |
+| 0,01 – 0,02 | 1,78 % |
+| **≤ 0,02 (la porte)** | **3,51 % du monde, 3,40 % des terres** |
+
+Le champ est presque uniforme par centièmes — 1,7 à 1,8 % par tranche —, donc le
+seuil se déplace linéairement et se règle sans surprise. **La règle n'est pas
+vide** : 3,4 % des terres, et comme le champ est rectifié, ce sont des **lignes
+ramifiées** et non des taches. À quoi il faut appliquer la rampe `t`, qui n'en
+garde que 45 % : de l'ordre de **1,5 % des terres en eau**, en chapelets le long
+des fonds de vallée.
 
 ### 10.3 Et les chemins ?
 

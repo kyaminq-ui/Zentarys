@@ -130,11 +130,19 @@ biome, **Échap** rend la souris puis quitte.
 > a été menée dans la foulée : **la fonction que la feuille de route désignait
 > n'était pas la bonne** — elle ne fait ni eau ni chemin, c'est le douzième nom
 > trompeur, et l'élément de tuile 12 n'est donc pas un plan d'eau (§7bis.2,
-> `docs/systems/02` §10). L'eau est écrite ailleurs, et **la source tranche la
-> décision d'architecture qu'on gardait ouverte : l'eau est de la matière**.
-> **Restent à porter les lacs — il manque d'identifier les deux champs qui
-> disent où — et la collision, objet par objet (§7bis.3).** 2.6, l'apparition,
-> reste l'autre porte ouverte.
+> `docs/systems/02` §10).
+>
+> **L'eau est écrite dans `generateBiomeContent`, et sa porte est le champ de
+> chenaux que ce projet porte depuis le jalon 1.4** — il ne manquait pas un
+> champ, il manquait un seuil : 0,02, soit 3,4 % des terres, mesuré. La décision
+> d'architecture qu'on gardait ouverte est tranchée, et elle était deux fois
+> plus petite qu'on ne croyait : **ce projet écrit déjà l'eau comme matière**,
+> ce qui est global n'est pas le stockage mais le *niveau*. Le plan de portage
+> tient en sept points (§7bis.2) et **un seul verrou reste, qui est une lecture
+> et non un choix** : quelle hauteur `terrain_generateColumnColor` rend.
+>
+> **Restent donc les lacs — à écrire, plan en main — et la collision, objet par
+> objet (§7bis.3).** 2.6, l'apparition, reste l'autre porte ouverte.
 
 Jalon 1 (le monde) : **1.1 à 1.13 sont portés, testés et vus en jeu**. Suite de
 validation : **332 vérifications, 0 échec**, ~20 s.
@@ -1575,48 +1583,94 @@ notes :
   fonction à analyser, seulement une décision de conception, et elle n'a rien à
   voir avec les lacs.
 
-#### Où l'eau est réellement écrite, et ce que ça tranche
+#### Où l'eau est réellement écrite
 
 Dans **`WorldInfo_generateBiomeContent`** (@005e4850) — la fonction que ce projet
-a déjà portée pour la flore (`docs/systems/02`, §8.6) —, dans une **autre passe**
-de la même cellule, une boucle de 64 × 64 colonnes distincte de celle du décor.
-`WorldInfo.cpp:2694-2760` :
+a déjà portée pour la flore —, dans une **autre passe** de la même cellule.
+L'algorithme complet est en `docs/systems/02`, §10.2 ; en trois lignes :
 
 ```
-pour chaque colonne (x, z) de la cellule :
-    v = WorldInfo_sampleTerrainHeight(x, z)
-    si v <= 0,02                              -- une porte très étroite
-        h = Terrain_sampleHeightAtWorldXY(x, z)
-        si h <= 0,95
-            niveau = terrain_generateColumnColor()   -- une hauteur, pas une couleur
-            q = (niveau / 5) * 5                     -- quantifié au pas de 5
-            t = triangle((niveau - q) / 5)
-            remplir de (q - t*5 + 2) à q  avec  {0, 0, 255*(1-t), type 2}
+si  chenal(x, z) <= 0,02                        -- la porte
+    q = floor(niveau/5)*5 ;  t = triangle((niveau - q)/5)
+    si t >= 0,4 :  [q - 5t + 2 .. q] <- EAU, puis SOL HUMIDE en q
+    [q+1 .. niveau + 5*(1 - (50*chenal)^3) + bruit[ <- AIR      -- les berges
 ```
 
-**La question d'architecture que cette section gardait ouverte — « comment le
-monde porte-t-il de l'eau au-dessus du niveau de la mer ? » — est répondue par
-la source : c'était l'issue n° 2.** L'eau est de la **matière écrite**, type 2,
-colonne par colonne, avec sa couleur ; son niveau est **local et quantifié au
-pas de 5**, ce qui lui donne ses paliers et permet un plan d'eau à une altitude
-quelconque. Les issues 1 (un niveau par élément de tuile) et 3 (une couche d'eau
-séparée) étaient nos inventions, et la seconde était bien « ce que font la
-plupart des moteurs voxel, et rien de ce que la source fait » — c'est encore
-vrai.
+**La porte est le champ de chenaux, et ce projet le porte depuis le jalon 1.4.**
+`WorldInfo_sampleTerrainHeight` ne lit aucune hauteur : c'est
+`|bruit(1e-3) + bruit(1e-2)×0,1|`, modulé par un bruit non graîné, plus un terme
+de crête — mot pour mot `CWTerrainField._channel`. Il ne manquait pas un champ,
+**il manquait un seuil**. `nextsteps.md` écrivait « le réseau de chenaux creuse
+bien les vallées, mais rien ne les remplit » ; ce qui les remplit est le même
+réseau, à 0,02.
 
-**Ce que ça coûte est exactement ce que la section annonçait** : la règle
-d'effacement du jalon 1.8 tombe. « L'eau n'est pas de la matière, c'est le vide
-sous le niveau de la mer » (`docs/systems/03`) — `World_getBlockAt` rend un
-témoin d'eau si `z <= 0`, et `CWWorldEdits.erase_value` rejoue la même règle.
-Porter l'eau écrite demande de reprendre les deux, plus le type de bloc, plus la
-sauvegarde. C'est le morceau, et il n'a pas bougé de taille ; ce qui a changé est
-qu'on sait maintenant **quoi** écrire, au lieu de choisir entre trois paris.
+Mesuré sur notre champ, 147 456 colonnes : **3,40 % des terres** passent la
+porte, et la rampe `t` n'en garde que 45 % — de l'ordre de **1,5 % des terres en
+eau**, en chapelets le long des fonds de vallée. Ce n'est ni vide ni envahissant.
+La vérification valait d'être faite avant d'écrire : c'est la leçon de la
+première règle de Lava Lands, *une règle peut être juste et vide*.
 
-**Ce qui reste ouvert avant d'écrire** : `WorldInfo_sampleTerrainHeight` et
-`Terrain_sampleHeightAtWorldXY` sont deux champs distincts, aucun identifié —
-le premier est la porte, le second le garde-fou d'altitude. La **forme** de la
-règle est connue, sa **carte** ne l'est pas, et sans elle on saurait faire un
-lac sans savoir où le mettre. C'est la prochaine lecture, et elle est petite.
+#### La décision d'architecture est tranchée — et elle était plus petite qu'on ne croyait
+
+Deux fois plus petite, et pour une raison qu'on avait sous les yeux.
+
+**La source écrit l'eau comme matière** : type 2, colonne par colonne. C'était
+l'issue n° 2 des trois, et les deux autres étaient nos inventions. Mais surtout :
+
+> **Ce projet écrit déjà l'eau dans les données.** `CWVoxelGenerator.voxel_of`
+> rend `CWPalette.water_index(...)` pour tout `top < y <= sea`, et
+> `CWWorldEdits.erase_value` fait de même. La note de `voxel_of` le dit en
+> toutes lettres depuis le jalon 1.8 : « **l'original ne stocke pas l'eau** […]
+> ici l'eau est écrite dans les données, mais la règle est la même ».
+
+Ce qui est global dans ce projet n'est donc pas le *stockage* de l'eau, c'est son
+**niveau** — le scalaire `sea`. Le paragraphe qui annonçait qu'on « perdrait la
+règle d'effacement de 1.8 » se trompait de cible : il n'y a pas de bascule
+matière/vide à faire, il y a **un scalaire à rendre local**. `voxel_of` prend
+déjà `sea` en paramètre ; il suffit qu'il reçoive le niveau *de la colonne*.
+
+#### Le plan de portage, et le seul point qui bloque encore
+
+Ce qu'il reste à écrire, dans l'ordre :
+
+1. **`_height_from` rend l'ossature `cont` en plus de la hauteur**, et `_sample`
+   passe de `Vector3` à `Vector4` — `(hauteur, température, humidité, base
+   d'étang)`, la quatrième valant `-INF` hors de la porte. `_sample` est
+   **interne et n'a que deux appelants** ; `sample_column` et
+   `sample_column_raw` gardent leur `Vector3`, donc **les trente-cinq
+   consommateurs ne bougent pas**. Coût : zéro échantillon de bruit de plus,
+   `cont` et `chan` étant déjà calculés ;
+2. **`sample_patch` passe au pas de 4**, ce qui ne touche que `_get_patch` et
+   `tools/preview_features.gd` ;
+3. **`pond_span(base) -> Vector2i`**, statique et pure — la quantification, la
+   rampe triangulaire, et l'intervalle vide quand `t < 0,4`. C'est la seule
+   arithmétique de la règle, et elle se teste seule ;
+4. **`voxel_of` teste l'étang en premier**, parce que l'étang *recouvre* le
+   terrain — l'ordre des tests doit suivre celui des recouvrements de
+   `_generate_block`, comme sa note l'exige déjà. Puis `_generate_block` pose un
+   `_fill_run` d'eau et un d'air pour les berges. **L'invariant n° 18 est le
+   filet** : la vérification des 4 096 points compare les deux consommateurs, et
+   c'est elle qui attrapera une berge creusée d'un côté et pas de l'autre ;
+5. **les deux chemins rapides** de `_generate_block` s'appuient sur
+   `patch.lowest` / `patch.highest` : creuser les berges **abaisse** la surface,
+   donc `lowest` doit suivre, sinon un bloc entièrement plein de roche sera
+   rendu là où il y a maintenant un trou. C'est le piège de cette étape ;
+6. **la dispersion** : `CWScatter` et `CWTreeScatter` comparent `c.x` au niveau
+   de la mer pour refuser de semer sous l'eau. Le test doit passer au niveau de
+   la colonne, sans quoi les mares se couvriront d'herbe ;
+7. **le sol humide en `q`** ferme une question ouverte depuis le jalon 1.7 :
+   `CWDecorRules.FAMILIES_SURFACE` donne au sol humide sa composition — roseau,
+   sous-bois — et c'est la **seule exception attachée à une matière** du projet.
+   On savait quoi y faire pousser sans savoir qui produisait la matière. C'est
+   cette passe, et le roseau aura enfin une rive.
+
+**Ce qui bloque, et c'est une lecture et non un choix** :
+`terrain_generateColumnColor` rend une hauteur — la correction est déjà dans la
+liste des noms trompeurs — mais on ne sait pas **laquelle** : la hauteur finale
+de la colonne, ou son ossature continentale avant les octaves de détail. Les
+deux sont jouables et l'écart se voit en jeu ; c'est le niveau de l'eau. La
+lecture est petite. **Ne pas deviner** : le champ d'altitude est ce sur quoi
+repose l'identité de tous les mondes déjà explorés.
 
 ### 3 — La collision : ce qui en a, ce qui n'en a pas, et ce que ça coûte
 
