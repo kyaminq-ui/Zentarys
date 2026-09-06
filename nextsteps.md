@@ -54,7 +54,11 @@ C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path 
 
 # Répartition des six biomes et des matières de surface, mesurée sur le champ
 # réel (zones échantillonnées, pas de sondage, graine). C'est le garde-fou de
-# tout déplacement de seuil dans `CWBiome` — voir §6.
+# tout déplacement de seuil dans `CWBiome` — voir §6. Depuis le jalon 1.13 il
+# donne aussi **le facteur de falaise par dixièmes et la part des terres qui
+# bascule en roche** : c'est lui qui a dit que 45 degrés ne rendaient rien
+# (§7ter.4). Il coûte cinq fois le prix d'une colonne par sondage, son pas de
+# 256 unités ne retombant jamais sur un sommet de treillis déjà calculé.
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/biome_stats.gd
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/biome_stats.gd -- 144 512
 
@@ -65,7 +69,7 @@ C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path 
 # ne sont plus appelés par ce lot — ils restent pour les créatures du jalon 2.
 python tools/blender/generer_flore.py
 
-# Regénération du lot d'arbres (24 .vox, ~2 s). **Python pur** depuis le jalon
+# Regénération du lot d'arbres (39 .vox, ~2 s). **Python pur** depuis le jalon
 # 1.12 : à 1 voxel = 1 bloc, Blender n'apporte rien. Mêmes garde-fous.
 python tools/blender/generer_arbres.py
 
@@ -82,6 +86,14 @@ python tools/blender/generer_arbres.py
 ./godot.windows.editor.double.x86_64.exe --path . scenes/terrain_demo.tscn \
     --resolution 1600x900 -- --biome 7 --shot 32 --vue 256
 #   options : --sans-arbres, --sans-flore, pour isoler une couche
+#
+# Se poser a un point **nomme** plutot qu'au premier endroit qui convient : les
+# coordonnees sont celles de l'ATH, donc celles qu'on lit sur une capture
+# precedente. C'est ce qu'il faut pour viser un objet local — une falaise, un
+# element de tuile — au lieu de relancer --biome jusqu'a tomber dessus.
+# **La demo tourne sur la graine 2024**, pas sur le 1337 des outils headless.
+./godot.windows.editor.double.x86_64.exe --path . scenes/terrain_demo.tscn \
+    --resolution 1600x900 -- --ici 8396632 8396464 --shot 30 --vue 224
 
 # Planche de validation des assets : **une capture par modèle, seul, de près**,
 # sur un damier neutre d'un bloc de maille, deux angles (face et trois-quarts).
@@ -114,13 +126,14 @@ biome, **Échap** rend la souris puis quitte.
 
 ## 3. État
 
-> **Le jalon 1 est clos** — le tronc écrit dans le terrain (§7) et la planche de
-> validation des assets (§6quater) étaient ses deux derniers points. **La
-> prochaine session est décrite en §7bis : la falaise d'abord, puis les lacs et
-> les chemins ensemble.** 2.6, l'apparition, reste l'autre porte ouverte.
+> **Le jalon 1 est clos.** La falaise (§7ter) était le premier des trois points
+> de §7bis ; elle est faite. **Restent les lacs et les chemins — la même
+> fonction à analyser, et une décision d'architecture à prendre avant d'écrire
+> une ligne (§7bis.2) — puis la collision, objet par objet (§7bis.3).** 2.6,
+> l'apparition, reste l'autre porte ouverte.
 
-Jalon 1 (le monde) : **1.1 à 1.12 sont portés, testés et vus en jeu**. Suite de
-validation : **327 vérifications, 0 échec**, ~20 s.
+Jalon 1 (le monde) : **1.1 à 1.13 sont portés, testés et vus en jeu**. Suite de
+validation : **332 vérifications, 0 échec**, ~20 s.
 
 **1.11 — le tronc en matière, fait** (2026-09-06, §7). Un feuillu se pose en
 deux temps : un tronc **écrit dans les données du monde** par
@@ -297,7 +310,7 @@ docs/prompt_generation_flore.md   la commande du lot de flore
 docs/prompt_generation_arbres.md  la commande du lot d'arbres
 assets/palette/            palette de projet + PALETTE.md
 assets/models/flore/<biome>/  38 modèles, un dossier par biome (six)
-assets/models/arbres/<biome>/ 24 modèles d'arbres, à la maille du bloc
+assets/models/arbres/<biome>/ 39 modèles d'arbres, à la maille du bloc
 assets/models/filons/      9 filons, estampables (1 voxel = 1 bloc)
 assets/models/             MODELS.md (échelle, palette et conventions)
 docs/images/               gabarit, carte et composition de flore, en jeu
@@ -567,6 +580,35 @@ docs/images/               gabarit, carte et composition de flore, en jeu
     exprimée en cellules doit suivre la forme de ce que Voxel Tools charge, pas
     la forme d'une distance. Le surcoût de 4/π ne se mesure pas : le verrou du
     chargement est la génération du terrain.
+
+37. **`CWPalette.surface_of` a sept paramètres, et le septième n'a pas de
+    valeur par défaut.** Le facteur de falaise (jalon 1.13) est demandé à
+    l'appelant, alors qu'un défaut à zéro aurait laissé compiler les sept sites
+    d'appel sans un mot. C'est délibéré : un appelant qui l'oublierait rendrait
+    un monde **sans une falaise**, c'est-à-dire exactement le monde d'avant, et
+    aucun test ne le verrait — le sien passerait, les autres aussi. Les sept
+    sont les deux du générateur (le patch et la requête ponctuelle), les deux
+    dispersions, la carte, l'ATH de `terrain_demo` et `tools/biome_stats.gd`.
+    **L'ATH est celui qu'on oublie** : il n'est dans aucun test, et l'erreur y
+    sort en `Parse Error` au lancement de la démo, ce qui ressemble à un blocage
+    de chargement.
+38. **`CWTerrainField.cliff_factor` doit rester une fonction pure de (x, z).**
+    C'est ce qui accorde les deux consommateurs de `voxel_of` (invariant n° 18),
+    et c'est ce qui permet à la dispersion, à la carte et à l'ATH de décrire la
+    même falaise que le terrain. La mémoïsation en est la seule entorse, et son
+    mutex est **relâché pendant l'échantillonnage de colonne** : un échantillon
+    descend dans la grille d'éléments de tuile, qui a son propre verrou. Le
+    tenir pendant ce temps serait la manière la plus directe d'inventer un
+    interblocage entre fils de génération. Deux fils calculent alors deux fois
+    le même sommet, ce qui est sans conséquence puisque le champ est pur.
+39. **La démo et les outils headless ne tournent pas sur la même graine.**
+    `terrain_demo` porte `world_seed = 2024`, `CWWorldParams` a `1337` par
+    défaut, et `tools/biome_stats.gd` prend la sienne en argument. Un point
+    repéré par un sondage headless puis visé par `--ici` décrit donc **deux
+    endroits différents**, et rien ne le signale : les coordonnées sont valides
+    des deux côtés, seul le terrain change. Tout script jetable qui sert à viser
+    une capture doit poser `p.world_seed = 2024`. Compté une fois, trois quarts
+    d'heure.
 
 ## 5. Pièges connus
 
@@ -1302,6 +1344,10 @@ génération du terrain, pas la végétation.
 
 ### Dix grands arbres, et la couleur qui manquait au lot
 
+> **Ils sont huit depuis le soir du même jour.** Snowlands a rendu les siens —
+> le saule givré et l'arbre pourpre —, voir §7ter.2. Ce qui suit décrit le lot
+> tel qu'il a été produit ; tout le reste en est encore vrai.
+
 Demandés le 2026-09-06 : **deux par biome arboré**, un tronc, des branches, et
 plusieurs feuillages en sphères aplaties, *dans d'autres couleurs que le vert*.
 Dix espèces, vingt modèles, un quatrième montage.
@@ -1468,7 +1514,7 @@ listés dans `docs/ROADMAP.md`, §1.7, « correction de sources ». Les deux qui
 comptent pour la suite : `WorldInfo_scatterObjectsInArea` **ne disperse pas
 d'objets** et `World_generateTreeRecursive` **ne génère pas d'arbres**.
 
-## 7bis. La prochaine session — **la falaise, puis les lacs et les chemins**
+## 7bis. La prochaine session — **les lacs et les chemins, puis la collision**
 
 Décidé le 2026-09-06, après la question « a-t-on prévu un jalon pour les lacs,
 les rivières, les chemins entre POI et les falaises ? ». Réponse : non, aucun des
@@ -1477,37 +1523,12 @@ un ordre de préférence, c'est celui de leurs dépendances. S'y ajoute un
 troisième point, demandé le même jour : **la collision du branchage, du
 feuillage, des filons et des cactus**.
 
-### 1 — La falaise, d'abord
+### 1 — La falaise — **faite le 2026-09-06, voir §7ter**
 
-**C'est une règle de la source, quelques lignes dans `surface_of`, et elle rend
-au relief ce qu'on lui a enlevé.**
-
-`terrain_surfaceColor_blend` (@005c56e0) force le bloc **6 — la roche** quand
-« le facteur de falaise dépasse 0,5 » (`docs/systems/02`, §9.1). C'est la
-cinquième et dernière règle de la table de surface d'origine, et la seule que ce
-projet n'a pas portée. Ce qu'il manque est le **facteur** lui-même : une pente,
-mesurée sur le champ d'altitude, dont le seuil est déjà connu.
-
-Elle referme un trou ouvert volontairement le 2026-09-06 : les trois bandes
-d'altitude ont été retirées parce qu'**une matière qui ne porte rien est un trou
-dans le monde** — la roche nue et la calotte de neige rendaient des plateaux nus
-où l'on marchait sans rien rencontrer. Le raisonnement était juste et le remède
-trop large : une montagne *a* de la roche, simplement elle en a sur ses **pentes
-raides**, pas sur ses sommets plats. C'est exactement ce que dit la source, et
-`nextsteps.md` l'avait noté le jour même — « ce sera une pente à mesurer, et
-c'est probablement là que la roche nue doit revenir ».
-
-Points d'attention :
-
-- `surface_of` prend déjà `(x, z)` depuis les coulées de lave : la pente s'y
-  échantillonne sans changer de signature ;
-- `tools/biome_stats.gd` donne la répartition avant/après en douze secondes,
-  et c'est lui qui dira si le seuil de 0,5 rend 2 % ou 30 % du monde en roche ;
-- `CWDecorRules.decor_allowed` refuse déjà le décor sur la roche : une falaise
-  sera nue, et c'est **voulu** cette fois — une paroi verticale ne porte rien.
-  Le test de `decor_test.gd` qui refuse les matières nues hors Oceans et Lava
-  Lands devra apprendre cette exception, et c'est là qu'il faudra être précis :
-  l'exception est *la pente*, pas *l'altitude*.
+Elle était le premier des trois points, et le seul qui n'attendait aucune
+décision : une règle de la source, quelques lignes dans `surface_of`, un seuil
+déjà relevé. Ce qui restait à écrire était la *mesure* du facteur, et c'est elle
+qui a demandé deux essais et une capture. Le compte rendu est en §7ter.
 
 ### 2 — Les lacs et les chemins, ensemble
 
@@ -1570,11 +1591,17 @@ Le décompte, mesuré sur le lot réel (`tools/inspect_model.gd`) :
 | **branchage d'un grand arbre** | **matière** | compris dans les 406 | rien : les branches sont **dans le modèle de tronc**, donc estampées avec lui |
 | houppier, dôme | instancié | 983 le dôme, ×5 par grand arbre ; 2 316 le houppier de chêne | à décider — voir plus bas |
 | arbre entier (`pin`, `sapin_enneige`, `pin_enneige`) | instancié | 692 – 809 | **à passer en matière** |
-| `cactus_geant` | instancié | 250 | **à passer en matière** |
 | `arbre_epineux` | instancié | 186 | **à passer en matière** |
 | `rocher_geant` | instancié | 1 907 | **à passer en matière** — c'est un rocher, il est déjà de la roche |
 | les neuf filons | pas encore posés | 13 – 32 | rien de plus : ils sont dessinés à **1 voxel = 1 bloc** pour être estampés, et se minent. Il ne leur manque que leur *pose* (2.6) |
-| cactus de flore (`cactus_01`, `cactus_02`) | instancié | — | ils sont à **4 voxels par bloc** : inestampables tels quels. Volume approché, ou rien |
+| cactus de flore (`cactus_01`, `cactus_02`) | instancié | 181 et 176 | ils sont à **4 voxels par bloc** : inestampables tels quels. Volume approché, ou rien |
+
+> **Le tableau a perdu une ligne le 2026-09-06** : `cactus_geant` est retiré du
+> lot (§7ter.3), et avec lui le seul objet du désert qui aurait pu passer en
+> matière. Le désert n'a donc **plus rien à estamper** hors les troncs de ses
+> trois arbres : ses cactus sont passés du côté de la flore, où la question du
+> volume approché est la seule qui se pose. Les modèles entiers sont **cinq** et
+> non plus six.
 
 **Ce qui est déjà réglé, et il faut le savoir avant d'ouvrir le sujet :** le
 branchage a la collision. Les quatre branches d'une charpente sont dessinées
@@ -1627,6 +1654,182 @@ au jalon 2 plutôt qu'à la fin du jalon 1.
 
 ---
 
+
+## 7ter. Cette session — **moins de flore, trois assets retirés, et la falaise**
+
+Demandé le 2026-09-06 dans cet ordre, et c'est l'ordre où ça a été fait : baisser
+la quantité de flore en général, retirer les deux grands arbres de Snowlands,
+retirer le cactus géant du désert et refaire ses deux cactus de flore, puis
+passer au point suivant de §7bis.
+
+### 7ter.1 La densité de flore descend de 40 %, uniformément
+
+`CWModelLibrary.DENSITY` est multipliée par **0,6** sur les six biomes :
+Greenlands 9,0 → 5,4, Snowlands 2,5 → 1,5, Deserts 1,4 → 0,85, Jungles 14,0 →
+8,4, Lava Lands 1,2 → 0,7, Oceans 2,5 → 1,5.
+
+**Le facteur est uniforme, et c'est le point.** Le rapport entre biomes n'était
+pas en cause — une jungle doit rester six fois plus fournie qu'une plaine de
+neige, et c'est le seul repère qu'on ait de l'original. Ce qui a bougé est
+l'échelle commune, et elle a bougé d'un seul coup pour que la comparaison d'un
+biome à l'autre reste lisible.
+
+Ce que le réglage précédent avait raté, et qui vaut d'être noté parce que
+l'erreur est reproductible : le jalon 1.12 avait bien vu que des plantes deux
+fois et demie plus grandes couvrent plus de sol, et avait baissé les densités en
+conséquence — **le bon geste, pas assez loin**. La raison est qu'on ne compare
+pas une densité à une densité : on la compare à la **surface de sol qui reste
+libre**. Une prairie où l'on distingue chaque touffe se lit comme une prairie ;
+une prairie où les touffes se touchent se lit comme un tapis, et le relief sous
+elle disparaît.
+
+### 7ter.2 Snowlands n'a plus de grand arbre
+
+Le saule givré et l'arbre pourpre sont retirés — table (`CWTreeRules`),
+générateur (`generer_arbres`) et les quatre `.vox`. Ils avaient été dessinés la
+veille au soir avec les huit autres.
+
+**La raison n'est pas leur exécution, c'est leur montage.** Un `Montage.GRAND`
+tient sa lecture de l'**étalement de ses cinq masses** — c'est un arbre isolé
+qu'on remarque de loin, une silhouette d'été. Une taïga se lit exactement à
+l'inverse, par des **flèches étroites**. Les deux ne se rencontrent pas, et les
+peindre en froid (blanc-bleu et violet, comme l'exigeait l'invariant n° 29)
+n'avait rien changé au fond : c'étaient deux arbres d'été peints en froid.
+
+Le biome garde ses deux conifères entiers et son bouleau givré, et leurs poids
+n'ont pas bougé — ils sommaient déjà 1,0 avant que les grands arbres s'ajoutent.
+Le compte en dur de `tests/tree_test.gd` passe de dix à huit ; c'est le seul
+intérêt de cette vérification, dire qu'on n'a pas perdu une espèce sans le
+vouloir.
+
+### 7ter.3 Le désert perd son cactus géant et gagne deux vrais cactus
+
+**`arbres/deserts/cactus_geant` est retiré.** Sa propre note disait déjà qu'il
+n'était pas un arbre et qu'il n'était rangé là que par sa taille ; c'est
+justement la taille qui n'allait pas. À **un voxel par bloc**, un saguaro de
+3,5 blocs de large n'a ni cannelure, ni épine, ni galbe — il a la forme que la
+grille lui laisse, c'est-à-dire un poteau. Il pesait 0,6 sur quatre espèces, donc
+c'était le poteau le plus fréquent du biome.
+
+Les trois poids restants sont redistribués et **l'acacia passe devant** (0,5
+contre 0,3 au dattier et 0,2 au baobab) : à poids constants, le dattier — un
+arbre d'oasis — serait devenu l'espèce dominante du désert, ce qui est le
+contraire de ce qu'il décrit.
+
+**Et les deux cactus de flore sont refaits**, à 4 voxels par bloc, là où ils ont
+la place d'avoir une forme :
+
+* **`cactus_01`, le saguaro**, monte à **16 voxels — 4 blocs, le plafond de la
+  flore**, ce qui en fait la plus haute plante du lot et lui laisse reprendre la
+  place que le cactus géant laisse vide. Trois choses le distinguent d'un
+  poteau, et aucune ne coûte cher :
+
+  1. **les cannelures.** La nouvelle primitive `flore_blocs.colonne_cannelee`
+     prend sa teinte sur l'**azimut** du voxel et non sur son rayon : quatre
+     crêtes claires, quatre sillons sombres. Le motif ne dépend pas de la
+     hauteur, donc il tient en bandes verticales sur tout le fût — c'est ce qui
+     se lit de loin, et c'est gratuit. Les deux valeurs (0,80 et 0,08) sont
+     calées pour que la rampe des cactus, qui n'a que **quatre entrées**, soit
+     employée de bout en bout ; à moins d'écart, crête et sillon tombent sur le
+     même index et la cannelure ne se voit pas du tout ;
+  2. **le fuselage**, 1,5 voxel de rayon au pied, 1,1 à la cime ;
+  3. **les bras à des hauteurs différentes**, 4 et 7 — deux coudes au même
+     niveau rendent un chandelier symétrique.
+
+  > **Le fût est mince parce que les bras en dépendent.** Premier essai, fût à
+  > 2,0 de rayon et bras à 3 : les deux premiers voxels du coude tombaient
+  > *dans* le fût, et le bras se posait contre lui sans un voxel d'air entre les
+  > deux. Il n'y avait donc pas de bras, seulement une bosse. **Ce qui fait lire
+  > un saguaro n'est pas le bras, c'est le jour qu'on voit entre le bras et le
+  > fût.**
+
+* **`cactus_02` devient un figuier de barbarie** — trois raquettes empilées et
+  ses figues rouges — là où c'était un tonneau. Un tonneau à cette grille est un
+  **seau** : un cylindre de 8 de haut sur 4 de large n'a aucun trait à montrer,
+  et la planche de validation ne pouvait pas le lire autrement.
+
+  L'oponce résout deux choses à la fois. Il donne au désert la seule silhouette
+  **large et basse** de son lot, ce qui le distingue enfin du saguaro au lieu
+  d'en être une version courte ; et c'est **déjà le nom que la table de récolte
+  lui donne** — `CWFloraDrops` rend « prickly pear » pour les deux cactus depuis
+  le jalon 1.7, sans qu'aucun des deux modèles n'en ait jamais eu la forme.
+  Nouvelle primitive : `flore_blocs.raquette`, la seule forme plate du lot.
+
+* **Les aréoles** (`flore_blocs.epines`) sont le troisième ajout, et leurs deux
+  réglages ont été corrigés après les avoir vues. Une épine n'a pas de taille à
+  cette grille — un voxel fait un quart de bloc, une épine de saguaro un
+  centième — donc ce qu'on dessine est l'**aréole**, la tache d'où elle part. À
+  l'index 14, la roche claire, elle ne se lit pas comme une épine mais comme un
+  caillou collé, ou pire comme de la neige ; le grès (21) est ce que la palette
+  a de plus proche, et il a l'avantage d'être la couleur du sol sur lequel la
+  plante pousse. Et à une chance sur six elles couvraient la cannelure qu'elles
+  étaient censées ponctuer : une sur quatorze laisse voir le fût, qui est le
+  sujet.
+
+### 7ter.4 La falaise — le premier point de §7bis
+
+**Portée.** Le détail est dans `docs/ROADMAP.md`, §1.13 ; ce qui suit est ce
+qu'il faut savoir avant d'y toucher.
+
+`CWPalette.surface_of` prend un **septième paramètre**, `cliff`, et il est
+**obligatoire**. Une valeur par défaut de zéro aurait laissé compiler tous les
+appelants ; un appelant qui l'oublierait rendrait un monde sans une falaise,
+identique à celui d'avant, et rien ne le signalerait. Il y a **sept** appelants —
+les deux du générateur (le patch et la requête ponctuelle), les deux
+dispersions, la carte, l'ATH de la démo et `biome_stats` — et **l'ATH de la démo
+est celui qu'on oublie** : il n'est dans aucun test, et l'erreur y sort en
+`SCRIPT ERROR: Parse Error` au lancement, ce qui ressemble à un blocage de
+chargement et non à une signature manquante. Compté : trois quarts d'heure.
+
+`CWTerrainField.cliff_factor(x, z)` est la mesure, et elle est **pure fonction
+de (x, z)** hors mémoïsation — c'est ce qui permet aux deux consommateurs de
+`voxel_of` de s'accorder (invariant n° 18), et c'est la vérification des 4 096
+points de la suite qui le tient. Le cache de sommets de treillis a son propre
+mutex, **relâché pendant l'échantillonnage de colonne** : un échantillon descend
+dans la grille d'éléments de tuile, qui a son propre verrou, et le tenir pendant
+ce temps serait la manière la plus directe d'inventer un interblocage. Deux fils
+qui demandent le même sommet le calculent donc deux fois, ce qui est sans
+conséquence — le champ est pur.
+
+**Deux mesures ont corrigé deux intuitions**, et ce sont elles qui valent d'être
+retenues :
+
+1. **quarante-cinq degrés ne décrit rien dans ce monde.** Premier essai,
+   `CLIFF_SLOPE_REF = 2,0` : 0,62 % des terres, c'est-à-dire rien. La cause n'est
+   pas le treillis, c'est le terrain — sur huit mille colonnes en ligne, le plus
+   grand dénivelé d'un bloc au suivant est de **0,65 bloc**. Un relief fait de
+   bruit de valeur à interpolation cosinus est lisse par construction ; ce qu'il
+   a de plus raide est un flanc, et un flanc de montagne de ce monde est à un
+   demi. À 1,0 la roche prend 4,4 % des terres ;
+2. **un pas de treillis long ne mesure pas la paroi, il mesure le flanc qui la
+   porte.** À 8 blocs comme à 4, la part qui bascule est la même (4,5 % contre
+   4,4 %), mais la **queue** de la distribution change du tout au tout : au-delà
+   d'un facteur de 0,9, huit blocs donnent 0,02 % des terres et quatre en
+   donnent 0,29 %, quinze fois plus. Ce qui l'a tranché est une capture — à
+   huit, la frontière entre la roche et l'herbe est un découpage à huit blocs
+   posé en travers de terrasses qui en font trois ; à quatre, elle s'engrène
+   avec elles.
+
+**Le coût est sous le bruit de mesure.** Borne haute théorique +6 % par colonne
+(un sommet de treillis toutes les seize colonnes) ; médiane de cinq passes sur le
+banc de la suite, **76,9 µs avec contre 76,1 sans**, soit +1 %, quand la
+dispersion d'une passe à l'autre est de ±6 %. **Ne pas citer un chiffre tiré
+d'une passe unique** : la première mesure faite ainsi disait +4,6 % et c'était du
+bruit.
+
+> **Un piège de méthode, et il vaut pour toute capture à venir.** La démo tourne
+> sur `world_seed = 2024`, les outils headless sur le défaut **1337**. Un point
+> repéré au sondage et visé à la capture décrit alors deux endroits différents,
+> et rien ne le dit : les coordonnées sont valides des deux côtés, seul le
+> terrain change. Tout script jetable qui sert à viser une capture doit poser
+> `p.world_seed = 2024`.
+
+`--ici x z` a été ajouté à la démo pour cela : se poser à un point **nommé**, là
+où `--biome` se pose au premier endroit qui convient. Une falaise est un objet
+local, et jusque-là on relançait la recherche de biome jusqu'à tomber dessus.
+`place_at` est la seconde moitié de `_finish_biome_search`, extraite pour que les
+deux posent la caméra à la même hauteur — sans quoi les captures ne se comparent
+pas.
 
 ## 8. Assets voxels
 
@@ -1795,8 +1998,8 @@ Ce sont les biomes de l'alpha 2013, décidés par `CWBiome.at`. Touches **1** à
 | biome | flore | arbres |
 |---|---|---|
 | **greenlands** | `herbe_01` `herbe_02` `herbe_03` `herbe_seche` `fleur_bleuet` `fleur_tournesol` `fleur_coeur` `ginseng` `buisson` `scrub` `broussaille` `fougere` | `chene_tronc` + 2 houppiers, `bouleau_tronc` + houppier, `pin`, `rocher_geant`, `arbre_geant_tronc` + houppier |
-| **snowlands** | `herbe_gelee` `fleur_de_glace` `buisson_neige` `snowberry` `cotonnier` | `pin_enneige`, `sapin_enneige`, `bouleau_givre_tronc` + houppier |
-| **deserts** | `cactus_01` `cactus_02` `broussaille_seche` `cotonnier` `habanero` | `cactus_geant`, `palmier_tronc` + `palme` + `palme_diagonale` |
+| **snowlands** | `herbe_gelee` `fleur_de_glace` `buisson_neige` `snowberry` `cotonnier` | `pin_enneige`, `sapin_enneige`, `bouleau_givre_tronc` + houppier — **pas de grand arbre**, §7ter.2 |
+| **deserts** | `cactus_01` `cactus_02` `broussaille_seche` `cotonnier` `habanero` | `palmier_tronc` + `palme` + `palme_diagonale` — **plus de `cactus_geant`**, §7ter.3 |
 | **jungles** | `feuille_large` `fougere_geante` `liane` `vrille` `lierre` `fleur_coeur` `fleur_ame` `roseau` `champignon` | `tropical_tronc` + 2 houppiers, `palmier_tronc` + 2 palmes |
 | **lavalands** | `fire_shrub` `herbe_de_lave` `fleur_de_lave` `champignon_luisant` | `arbre_epineux` |
 | **oceans** | `algue` `corail` `etoile_de_mer` | — |

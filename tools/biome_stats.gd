@@ -61,6 +61,14 @@ func _initialize() -> void:
 	# moyennement humide » n'existe pas dans ce monde.
 	var joint: PackedInt32Array = PackedInt32Array()
 	joint.resize(25)
+	# Le facteur de falaise, par dixiemes, et la part de terre ferme qui passe
+	# le seuil. C'est ce qui dit si `CWTerrainField.CLIFF_SLOPE_REF` rend deux
+	# pour cent du monde en roche ou trente — la question posee mot pour mot
+	# par `nextsteps.md` quand la regle a ete decidee, et la seule facon d'y
+	# repondre autrement qu'a l'oeil.
+	var cliff_land: int = 0
+	var cliff_hist: PackedInt32Array = PackedInt32Array()
+	cliff_hist.resize(20)
 
 	var t0: int = Time.get_ticks_usec()
 	var done: int = 0
@@ -77,8 +85,21 @@ func _initialize() -> void:
 				var z: int = base_z + iz * step
 				var c: Vector3 = field.sample_column(x, z)
 				var biome: int = CWBiome.at(c.x, c.y, c.z, p.sea_level)
+				# Le facteur de falaise coute quatre echantillons de
+				# colonne de plus par sondage : le pas de 256 unites ne
+				# retombe jamais sur un sommet de treillis deja calcule, la
+				# ou le jeu, qui genere des colonnes contigues, en partage
+				# soixante-quatre. L'outil est donc cinq fois plus lent que
+				# le monde ne l'est — c'est le prix d'un sondage epars, pas
+				# une mesure de ce que la regle coute en jeu.
+				var cliff: float = field.cliff_factor(x, z)
 				var surface: int = CWPalette.surface_of(biome,
-						c.x - float(p.sea_level), c.y, c.z, x, z)
+						c.x - float(p.sea_level), c.y, c.z, x, z, cliff)
+				if biome != CWBiome.OCEANS:
+					if cliff > CWPalette.CLIFF_RIDGE:
+						cliff_land += 1
+					var ci: int = clampi(int(cliff * 10.0), 0, 19)
+					cliff_hist[ci] += 1
 				biome_count[biome] = int(biome_count.get(biome, 0)) + 1
 				surface_count[surface] = int(surface_count.get(surface, 0)) + 1
 				total += 1
@@ -138,6 +159,20 @@ func _initialize() -> void:
 				float(i) * 0.05, float(i + 1) * 0.05, h_hist[i],
 				100.0 * float(h_above) / float(land)])
 
+	print("")
+	print("Facteur de falaise sur les terres, par dixiemes")
+	print("%-14s %10s %10s" % ["facteur", "colonnes", "des terres"])
+	var cum: int = 0
+	for i in 20:
+		cum += cliff_hist[i]
+		if cliff_hist[i] == 0 and cum == land:
+			break
+		print("%.1f - %.1f %10d %9.2f %%" % [
+				float(i) * 0.1, float(i + 1) * 0.1, cliff_hist[i],
+				100.0 * float(cliff_hist[i]) / maxf(1.0, float(land))])
+	print("  seuil %.2f -> %d colonnes de roche de falaise, %.2f %% des terres"
+			% [CWPalette.CLIFF_RIDGE, cliff_land,
+			100.0 * float(cliff_land) / maxf(1.0, float(land))])
 	print("")
 	print("Terres par (temperature, humidite), en % des terres — lignes chaudes en bas")
 	print("%-12s %8s %8s %8s %8s %8s" % ["t / h", "0-20 %", "20-40", "40-60",

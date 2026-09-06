@@ -195,7 +195,8 @@ func generated_voxel(x: int, y: int, z: int) -> int:
 	var wx: int = p.world_origin.x + x
 	var wz: int = p.world_origin.y + z
 	var c: Vector3 = f.sample_column(wx, wz)
-	var surface: int = CWPalette.surface_index(c.x, c.y, c.z, p.sea_level, wx, wz)
+	var surface: int = CWPalette.surface_index(c.x, c.y, c.z, p.sea_level, wx, wz,
+			f.cliff_factor(wx, wz))
 	return voxel_of(y, floori(c.x), surface, subsurface_depth, p.sea_level)
 
 
@@ -391,8 +392,10 @@ func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,
 		@warning_ignore("integer_division")
 		var iz: int = i / size.x
 		var ix: int = i - iz * size.x
+		var cx: int = ox + ix * stride
+		var cz: int = oz + iz * stride
 		patch.surfaces[i] = CWPalette.surface_index(h, raw[j + 1], raw[j + 2],
-				sea, ox + ix * stride, oz + iz * stride)
+				sea, cx, cz, f.cliff_factor(cx, cz))
 		patch.lowest = minf(patch.lowest, h)
 		patch.highest = maxf(patch.highest, h)
 		j += 3

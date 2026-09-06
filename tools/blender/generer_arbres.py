@@ -1,4 +1,10 @@
-"""Le lot d'arbres : 24 modeles `.vox` sous `assets/models/arbres/`.
+"""Le lot d'arbres : 39 modeles `.vox` sous `assets/models/arbres/`.
+
+Vingt-trois pieces d'espece — troncs, houppiers, palmes, modeles entiers — et
+seize de grands arbres, soit huit especes a deux pieces. Le lot en a compte 44 :
+le 2026-09-06 au soir, les quatre modeles des deux grands arbres de Snowlands et
+le `cactus_geant` du desert ont ete retires, chacun pour sa raison, notee a
+l'endroit ou il etait dessine.
 
     python tools/blender/generer_arbres.py
 
@@ -36,25 +42,27 @@ deux moities ne se rejoignent proprement que si la grille du houppier est celle
 du bloc. Un voxel = un bloc explique l'architecture de la source ; 3/40 la rend
 impossible.
 
--- Les dix grands arbres (2026-09-06) -----------------------------------------
+-- Les grands arbres (2026-09-06) ---------------------------------------------
 
 Deux par biome arbore, en plus des especes existantes. Ce sont des **grands
 arbres** au sens du montage : un fut haut, quatre branches, et un houppier au
 bout de chacune plus un a la cime — une envergure au lieu d'une hauteur.
 
-Ils tiennent le lot par ce qui lui manquait : **la couleur**. Douze des vingt-
-quatre modeles precedents puisent dans la seule rampe de feuillage (128-139), et
-une foret de Greenlands n'avait qu'une teinte. Les nouveaux prennent l'automne
-(140-147), les quatre couples de fleurs (156-163), la rampe des champignons et
-mousses (164-169), la roche nue pour le givre (14-19) et le basalte pour la
-cendre (25-27). Aucune entree nouvelle dans la palette : la variete etait deja
-la, elle n'etait pas employee.
+Ils tiennent le lot par ce qui lui manquait : **la couleur**. Douze des modeles
+precedents puisent dans la seule rampe de feuillage (128-139), et une foret de
+Greenlands n'avait qu'une teinte. Les nouveaux prennent l'automne (140-147), les
+quatre couples de fleurs (156-163), la rampe des champignons et mousses
+(164-169) et le basalte pour la cendre (25-27). Aucune entree nouvelle dans la
+palette : la variete etait deja la, elle n'etait pas employee.
 
-**Une seule interdiction, et elle est un invariant** : aucune plante de
-Snowlands ne prend 140-147 (n. 29). Un orange chaud sur un sol de neige cyan
-ressort comme une tache, et le defaut est deja revenu deux fois. Les deux
-grands arbres de Snowlands prennent donc le blanc-bleu de la roche nue et le
-violet des fleurs, qui sont froids.
+**Ils sont dix a la production, huit apres coup** — Snowlands a rendu les
+siens le soir meme. Le montage GRAND se lit a l'etalement de ses cinq masses ;
+une taiga se lit a l'inverse, par des fleches etroites, et deux arbres d'ete
+peints en froid restaient deux arbres d'ete. Le biome garde ses deux coniferes
+entiers et son bouleau. La consequence est qu'il n'y a plus de grand arbre a
+peindre dans les teintes froides, et donc plus d'occasion de retomber sur
+l'invariant n. 29 par ce chemin ; l'interdiction, elle, tient toujours pour tout
+ce qui pousse sur la neige.
 
 -- Les enveloppes -------------------------------------------------------------
 
@@ -133,7 +141,7 @@ BRANCHES_HAUTES = [(11, 0, 27), (-11, 0, 24), (0, 11, 29), (0, -10, 25)]
 # Index autorises pour un arbre : le feuillage et l'ecorce de la plage
 # vegetation, la roche nue (pour la neige et le rocher geant), le gres et le
 # basalte, plus les deux entrees de cactus. Pas de fleurs, pas de filons.
-# Les fleurs (156-163) entrent dans cette plage depuis les dix grands arbres :
+# Les fleurs (156-163) entrent dans cette plage depuis les grands arbres :
 # un houppier de cerisier ou de jacaranda n'est pas du feuillage vert, et la
 # palette n'a pas d'autre rose ni d'autre violet. La plage reste celle de la
 # vegetation, aucune entree n'est ajoutee.
@@ -261,25 +269,13 @@ def bouleau_givre_houppier(g, rng):
 # deserts/
 # =============================================================================
 
-def cactus_geant(g, rng):
-    """Le saguaro a la maille du bloc : un fut et deux bras.
-
-    C'est le seul « arbre » du desert hors oasis, et il n'est pas un arbre :
-    il est range ici parce qu'il se pose par la couche des arbres — sa taille et
-    son espacement sont ceux d'un arbre, pas ceux d'une touffe.
-    """
-    ab.colonne(g, rng, 14, 2.5, 2.0, 172, 175)
-    a = rng.uniform(0.0, math.tau)
-    # Les bras sortent sur **deux axes** et non sur un seul : alignes, ils
-    # rendaient une plaque verte vue de face et rien du tout vue de cote.
-    for s, z0, h in ((0.0, 3, 5), (math.pi, 5, 4),
-                     (math.pi * 0.5, 4, 3)):
-        for k in range(3):
-            g.pose(math.cos(a + s) * (1 + k), math.sin(a + s) * (1 + k), z0,
-                   teinte(172, 175, 0.4))
-        for k in range(h):
-            g.pose(math.cos(a + s) * 3, math.sin(a + s) * 3, z0 + k,
-                   teinte(172, 175, 0.3 + 0.5 * k / h))
+# **Le cactus geant est retire le 2026-09-06.** Sa note disait deja qu'il
+# n'etait pas un arbre et qu'il n'etait ici que par sa taille ; c'est justement
+# la taille qui n'allait pas. A un voxel par bloc, un saguaro de 3,5 blocs de
+# large et 14 de haut n'a pas de cannelure, pas d'epine et pas de galbe — il a
+# la forme que la grille lui laisse, c'est-a-dire un poteau. Le desert garde ses
+# cactus par la couche de flore, qui est a quatre voxels par bloc et ou ils
+# retrouvent la taille d'une plante (`generer_flore.cactus_01`, `cactus_02`).
 
 
 def palmier_tronc_desert(g, rng):
@@ -365,7 +361,7 @@ def arbre_epineux(g, rng):
 
 
 # =============================================================================
-# Les dix grands arbres. Deux par biome arbore, hors du vert.
+# Les grands arbres. Deux par biome arbore sauf Snowlands, hors du vert.
 # =============================================================================
 
 def erable_charpente(g, rng):
@@ -393,25 +389,11 @@ def cerisier_dome(g, rng):
     ab.houppier(g, rng, 14.0, 9.1, 157, 156, creux=1.0, bosses=0.32)
 
 
-def saule_givre_charpente(g, rng):
-    """Snowlands : un fut pale, des branches basses et larges."""
-    ab.charpente(g, rng, 21, 2.4, 1.5, 14, 17, BRANCHES_LARGES, penche=0.4)
-
-
-def saule_givre_dome(g, rng):
-    """Un dome de givre : blanc bleute, froid. Jamais l'automne (invariant 29)."""
-    ab.houppier(g, rng, 14.0, 9.1, 14, 18, creux=1.0, bosses=0.3)
-    af.neige_dessus(g, rng, part=0.5, seuil_z=1)
-
-
-def arbre_pourpre_charpente(g, rng):
-    """Snowlands : l'arbre a baies du froid, ecorce sombre."""
-    ab.charpente(g, rng, 22, 2.2, 1.5, 152, 155, BRANCHES_GRANDES, penche=0.5)
-
-
-def arbre_pourpre_dome(g, rng):
-    """Violet : froid comme le biome, et la seule autre couleur qu'il accepte."""
-    ab.houppier(g, rng, 14.0, 9.1, 163, 162, creux=1.0, bosses=0.3)
+# **Snowlands n'a plus de grand arbre.** Le saule givre et l'arbre pourpre ont
+# ete dessines ici le 2026-09-06 avec les huit autres, puis retires le meme jour
+# apres les avoir vus en jeu : un montage GRAND tient sa lecture de l'etalement
+# de ses cinq masses, et une taiga se lit exactement a l'inverse, par des
+# fleches etroites. Ils faisaient deux arbres d'ete peints en froid.
 
 
 def acacia_charpente(g, rng):
@@ -533,7 +515,6 @@ LOT = [
     ("snowlands", "bouleau_givre_houppier", 2104, bouleau_givre_houppier,
      PLAFOND_HOUPPIER),
 
-    ("deserts", "cactus_geant", 5101, cactus_geant, PLAFOND_ARBRE),
     ("deserts", "palmier_tronc", 5102, palmier_tronc_desert, PLAFOND_ARBRE),
     ("deserts", "palme", 5103, palme_desert, PLAFOND_PALME, False),
     ("deserts", "palme_diagonale", 5104, palme_diagonale_desert, PLAFOND_PALME, False),
@@ -547,18 +528,11 @@ LOT = [
 
     ("lavalands", "arbre_epineux", 6101, arbre_epineux, PLAFOND_ARBRE),
 
-    # -- Les dix grands arbres, deux par biome arbore --
+    # -- Les grands arbres, deux par biome arbore sauf Snowlands --
     ("greenlands", "erable_charpente", 1201, erable_charpente, PLAFOND_CHARPENTE),
     ("greenlands", "erable_dome", 1202, erable_dome, PLAFOND_HOUPPIER),
     ("greenlands", "cerisier_charpente", 1203, cerisier_charpente, PLAFOND_CHARPENTE),
     ("greenlands", "cerisier_dome", 1204, cerisier_dome, PLAFOND_HOUPPIER),
-
-    ("snowlands", "saule_givre_charpente", 2201, saule_givre_charpente,
-     PLAFOND_CHARPENTE),
-    ("snowlands", "saule_givre_dome", 2202, saule_givre_dome, PLAFOND_HOUPPIER),
-    ("snowlands", "arbre_pourpre_charpente", 2203, arbre_pourpre_charpente,
-     PLAFOND_CHARPENTE),
-    ("snowlands", "arbre_pourpre_dome", 2204, arbre_pourpre_dome, PLAFOND_HOUPPIER),
 
     ("deserts", "acacia_charpente", 5201, acacia_charpente, PLAFOND_CHARPENTE),
     ("deserts", "acacia_dome", 5202, acacia_dome, PLAFOND_HOUPPIER),

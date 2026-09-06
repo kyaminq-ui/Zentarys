@@ -256,6 +256,101 @@ def colonne_pleine(g, rng, hauteur, rayon, clair, sombre, x0=0.0, y0=0.0):
                                        / max(0.5, rayon))))
 
 
+def colonne_cannelee(g, rng, hauteur, rayon_bas, rayon_haut, clair, sombre,
+                     x0=0.0, y0=0.0, depuis=0.0):
+    """Un fut **cannele** et fusele : le corps d'un cactus, pas un tuyau.
+
+    `colonne_pleine` degrade sa teinte du centre vers le bord — un cylindre
+    eclaire, donc lisse. Un cactus ne se reconnait pas a sa section mais a ses
+    **cotes verticaux**, et c'est ce qui manquait aux deux modeles du desert
+    jusqu'au 2026-09-06 : a trois voxels de large, un fut uni est un poteau.
+
+    La teinte est donc prise sur l'**azimut** du voxel et non sur son rayon :
+    les quatre axes portent la crete, les quatre diagonales le sillon. Le motif
+    ne depend pas de la hauteur, donc il tient en bandes sur tout le fut — c'est
+    exactement ce qu'on veut voir de loin, et c'est gratuit.
+
+    Le fuselage (`rayon_bas` vers `rayon_haut`) fait le reste : un saguaro est
+    plus epais au pied qu'a la cime, et deux voxels d'ecart suffisent a le dire.
+    Rend la hauteur atteinte, ou poser ce qui coiffe.
+    """
+    h = max(1, int(round(hauteur)))
+    n = int(math.ceil(max(rayon_bas, rayon_haut)))
+    for k in range(h):
+        t = k / max(1.0, h - 1.0)
+        r = rayon_bas + (rayon_haut - rayon_bas) * t
+        for dy in range(-n, n + 1):
+            for dx in range(-n, n + 1):
+                if math.hypot(dx, dy) > r:
+                    continue
+                crete = dx == 0 or dy == 0
+                # Les deux valeurs sont calees pour que la rampe des cactus,
+                # qui n'a que quatre entrees, soit employee de bout en bout :
+                # a moins d'ecart, crete et sillon tombent sur le meme index et
+                # la cannelure ne se voit pas du tout.
+                g.pose(x0 + dx, y0 + dy, depuis + k,
+                       teinte(clair, sombre,
+                              (0.80 if crete else 0.08) + 0.15 * t))
+    return depuis + h - 1
+
+
+def raquette(g, rng, x0, y0, z0, azim, longueur, hauteur, clair, sombre,
+             epaisseur=1):
+    """Une raquette d'oponce : une palette ovale, plate, dressee sur sa tranche.
+
+    C'est la seule forme du lot qui soit **plate par construction**, et c'est
+    tout son objet : un figuier de barbarie n'a ni tige ni fut, il empile des
+    palettes, et on le reconnait a cet empilement et a rien d'autre. Une masse
+    ou une colonne ne peuvent pas le rendre, quel que soit le reglage.
+
+    L'ovale est parcouru dans le plan vertical d'azimut `azim` ; `epaisseur` est
+    perpendiculaire a ce plan. A un voxel d'epaisseur la raquette disparait vue
+    de profil, ce qui est juste pour une vraie plante et faux pour un objet
+    qu'on doit voir de partout : deux est la valeur qui se lit des deux cotes.
+    """
+    ux, uy = math.cos(azim), math.sin(azim)
+    nx, ny = -uy, ux
+    nu = int(math.ceil(longueur))
+    nv = int(math.ceil(hauteur))
+    for du in range(-nu, nu + 1):
+        for dv in range(-nv, nv + 1):
+            q = (du / longueur) ** 2 + (dv / hauteur) ** 2
+            if q > 1.0:
+                continue
+            for e in range(epaisseur):
+                d = e - (epaisseur - 1) / 2.0
+                g.pose(x0 + ux * du + nx * d, y0 + uy * du + ny * d, z0 + dv,
+                       teinte(clair, sombre, 0.3 + 0.55 * (1.0 - q)))
+
+
+def epines(g, rng, part=0.07, index=21, depuis=0.0):
+    """Des areoles : un voxel de gres pousse de cote depuis la peau.
+
+    Une epine n'a pas de taille a cette grille — un voxel fait un quart de bloc,
+    et une epine de saguaro en fait un centieme. Ce qu'on dessine n'est donc pas
+    l'epine mais **l'areole**, la tache d'ou elle part, et c'est elle qu'on voit
+    a la distance ou le joueur est. Elles sortent de cote et jamais par le
+    dessus : posees a plat, elles feraient une calotte, ce que `semis` avait
+    deja appris aux baies.
+
+    **Deux reglages ont ete corriges apres les avoir vues** (2026-09-06), et les
+    deux tiraient dans le meme sens. A 14 — la roche claire, presque blanche —
+    une areole ne se lit pas comme une epine mais comme un caillou colle sur la
+    plante, ou pire comme de la neige ; le gres (21) est ce que la palette a de
+    plus proche d'une epine de saguaro, et il a l'avantage d'etre la couleur du
+    sol sur lequel la plante pousse. Et a une chance sur six, elles couvraient
+    la cannelure qu'elles etaient censees ponctuer : une chance sur quatorze
+    laisse voir le fut, qui est le sujet.
+    """
+    for (x, y, z) in sorted(g.v):
+        if z < depuis or rng.random() >= part:
+            continue
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            if (x + dx, y + dy, z) not in g.v:
+                g.pose(x + dx, y + dy, z, index)
+                break
+
+
 def chapeau(g, rng, z, rayon, clair, sombre, bombe=1):
     """Un chapeau de champignon : un ou deux disques qui retrecissent."""
     for k in range(bombe + 1):

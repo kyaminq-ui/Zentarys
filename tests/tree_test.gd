@@ -473,7 +473,16 @@ func _test_matiere() -> void:
 					bouts_vides.append("%s %s" % [m.name, b])
 	_ok("chaque bout de branche declare porte du bois (%d grands arbres)" % grands,
 			bouts_vides.is_empty(), ", ".join(bouts_vides))
-	_ok("les dix grands arbres sont dans la table", grands == 10, "%d" % grands)
+	# Le compte est en dur, et c'est le seul interet de la verification : elle ne
+	# dit pas qu'une table est coherente — la boucle au-dessus s'en charge —, elle
+	# dit qu'**on n'a pas perdu une espece sans le vouloir**. Un modele absent du
+	# disque ne la ferait pas tomber (elle compte des entrees, pas des fichiers) ;
+	# une entree supprimee, si.
+	#
+	# Ils sont **huit depuis le 2026-09-06**, dessines dix le meme jour : Snowlands
+	# a rendu les siens le soir. Un montage GRAND se lit a l'etalement de ses cinq
+	# masses, une taiga se lit a ses fleches, et les deux ne se rencontrent pas.
+	_ok("les huit grands arbres sont dans la table", grands == 8, "%d" % grands)
 
 	# -- Qui est de la matiere, et qui n'en est pas --------------------------
 	var origin := Vector2i(p.world_origin.x >> CWTreeScatter.TREE_CELL_SHIFT,

@@ -531,6 +531,31 @@ const LAVA_FLOW_OFFSET_Z: float = 18923.0
 ## coulees sont larges. Mesuree par `tools/biome_stats.gd`, pas choisie a l'oeil.
 const LAVA_FLOW_RIDGE: float = 0.09
 
+# -- La falaise ---------------------------------------------------------------
+#
+# **La cinquieme regle de la table de surface d'origine**, et la derniere que ce
+# projet n'avait pas portee : `terrain_surfaceColor_blend` (@005c56e0) laisse son
+# appelant forcer le bloc 6 — la roche — « quand le facteur de falaise depasse
+# 0,5 » (`docs/systems/02`, Sec. 9.1).
+#
+# Le seuil ci-dessous est **la valeur relevee**. La mesure qu'il tranche, elle,
+# est de ce projet : voir `CWTerrainField.cliff_factor`, ou tout ce qui a ete
+# invente tient dans une constante.
+#
+# -- Elle referme un trou ouvert volontairement -------------------------------
+#
+# Les trois bandes d'altitude ont ete retirees le 2026-09-06 parce qu'une
+# matiere qui ne porte rien est un trou dans le monde : la roche nue et la
+# calotte de neige rendaient des plateaux ou l'on marchait sans rien
+# rencontrer. Le raisonnement etait juste et le remede trop large — une montagne
+# *a* de la roche, simplement elle en a sur ses **parois**, pas sur ses sommets
+# plats. La falaise dit exactement cela, et c'est la source qui le dit.
+#
+# La difference avec ce qui a ete retire tient en une phrase : **l'exception est
+# la pente, pas l'altitude**. Une paroi verticale ne porte rien, et c'est voulu ;
+# un plateau a mille blocs porte la vegetation de son biome, comme avant.
+const CLIFF_RIDGE: float = 0.5
+
 
 ## Vrai si la colonne est sur une coulee. Coordonnees **monde**, comme partout
 ## dans la dispersion — un decalage d'origine applique deux fois donnerait des
@@ -552,11 +577,35 @@ static func lava_flow(x: int, z: int) -> bool:
 ## Trois bandes d'altitude traversent presque tous les biomes, et elles passent
 ## avant la matiere de plaine : la plage, la roche nue, la neige de sommet.
 ## Lava Lands est le seul a les refuser toutes — il n'y neige pas.
+##
+## `cliff` est le facteur de falaise du point (`CWTerrainField.cliff_factor`).
+## Il est **demande et non optionnel**, alors qu'une valeur par defaut de zero
+## aurait laisse compiler tous les appelants : un appelant qui l'oublierait
+## rendrait un monde sans une falaise, identique a celui d'avant, et rien ne le
+## signalerait — c'est exactement la forme de panne que ce fichier passe son
+## temps a decrire.
 static func surface_of(biome: int, above: float, temperature: float,
-		humidity: float, x: int, z: int) -> int:
+		humidity: float, x: int, z: int, cliff: float) -> int:
 	if biome == CWBiome.OCEANS:
-		# Fond marin : sable pres du rivage, gravier en profondeur.
+		# Fond marin : sable pres du rivage, gravier en profondeur. La falaise
+		# ne s'y applique pas : le talus continental est une pente enorme, il
+		# rendrait un fond marin gris sur la moitie de sa surface, et personne
+		# ne verra jamais la difference entre du gravier et de la roche par
+		# douze blocs de fond.
 		return SAND if above > -12.0 else GRAVEL
+
+	# La roche de falaise, avant toute matiere de terre ferme.
+	#
+	# **Elle passe devant Lava Lands, et c'est un choix.** Dans la source, le
+	# bloc 6 est force par l'appelant, donc apres tout le reste ; ici cela
+	# reviendrait a peindre en roche une paroi qui porte une coulee, ce qui est
+	# ce qu'on veut, et un bassin de magma, ce qui ne l'est pas. Les bassins
+	# sont plats par construction (`above < MAGMA_LEVEL`) et ne passent donc
+	# jamais le seuil : la difference entre les deux ordres est nulle sur le
+	# magma, et sur les coulees elle joue dans le bon sens — une coulee de lave
+	# descend un ravin, elle ne tient pas sur une falaise.
+	if cliff > CLIFF_RIDGE:
+		return STONE
 
 	if biome == CWBiome.LAVALANDS:
 		if above < MAGMA_LEVEL or lava_flow(x, z):
@@ -612,9 +661,10 @@ static func surface_of(biome: int, above: float, temperature: float,
 ## qui n'ont pas deja le biome sous la main — le chemin de generation, lui, le
 ## calcule une fois et appelle `surface_of` directement.
 static func surface_index(height: float, temperature: float, humidity: float,
-		sea_level: int, x: int, z: int) -> int:
+		sea_level: int, x: int, z: int, cliff: float) -> int:
 	var biome: int = CWBiome.at(height, temperature, humidity, sea_level)
-	return surface_of(biome, height - float(sea_level), temperature, humidity, x, z)
+	return surface_of(biome, height - float(sea_level), temperature, humidity,
+			x, z, cliff)
 
 
 ## Bloc juste sous la surface (quelques blocs d'epaisseur).

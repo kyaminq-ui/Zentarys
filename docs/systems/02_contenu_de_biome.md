@@ -653,7 +653,10 @@ surface `WATER` n'est jamais rendue par `surface_index`. Les décors de mur
    climatique > 0,75, ou si le terme de bruit à 0,01 croisé au niveau est
    positif ; **10** si ce paramètre < 0,3 ; **12** si le poids d'influence de
    la cellule de région dépasse 0,5 ; et **6** que l'appelant force quand le
-   facteur de falaise dépasse 0,5. Avec §5.3 (bloc 10 → `snow-bush`, bloc 12
+   facteur de falaise dépasse 0,5 — **portée au jalon 1.13** : le seuil est
+   celui-ci, la *mesure* du facteur est de ce projet (une pente sur un treillis
+   de 4 blocs, `CWTerrainField.cliff_factor`), et elle rend 4,4 % des terres en
+   roche nue. Avec §5.3 (bloc 10 → `snow-bush`, bloc 12
    → `fire-scrub`), cela donne : 4 = sol végétalisé tempéré, 6 = roche,
    9 = second sol végétalisé, 10 = neige, 12 = sol de région spéciale,
    2 = eau, 3 = sol humide. Reste à décider lequel de `param_5`/`param_6` est

@@ -189,35 +189,37 @@ const SPECIES: Dictionary = {
 			"pieces": [1, 2],
 			"poids": 0.20,
 		},
-		{
-			"nom": "saule givre",
-			"montage": Montage.GRAND,
-			"tronc": "snowlands/saule_givre_charpente",
-			"couronnes": ["snowlands/saule_givre_dome"],
-			"branches": [Vector3i(14, 0, 17), Vector3i(-14, 0, 20),
-					Vector3i(0, 13, 15), Vector3i(0, -13, 18)],
-			"pieces": [0, 0],
-			"poids": 0.10,
-		},
-		{
-			"nom": "arbre pourpre",
-			"montage": Montage.GRAND,
-			"tronc": "snowlands/arbre_pourpre_charpente",
-			"couronnes": ["snowlands/arbre_pourpre_dome"],
-			"branches": [Vector3i(13, 0, 21), Vector3i(-11, 0, 18),
-					Vector3i(0, 13, 24), Vector3i(0, -11, 20)],
-			"pieces": [0, 0],
-			"poids": 0.06,
-		},
+		# **Snowlands n'a pas de montage GRAND, et c'est delibere depuis le
+		# 2026-09-06.** Le saule givre et l'arbre pourpre y ont ete poses avec
+		# le lot des dix grands arbres, puis retires apres les avoir vus : un
+		# arbre a cinq masses etalees est une silhouette d'ete — il tient sa
+		# lecture de la largeur de son houppage, et sous la neige il n'y a
+		# justement pas de houppage large. Une taiga se lit a ses fleches, et
+		# les trois especes qui restent en sont : deux coniferes entiers et un
+		# bouleau. Les quatre modeles sont retires du disque et du generateur.
 	],
+	# **Le cactus geant est retire le 2026-09-06**, et le desert n'a plus que des
+	# arbres. Il etait le plus lourd des quatre (0,6) et il n'etait pas un
+	# arbre : un cactus a la maille du bloc — un fut de 2,5 blocs de large et
+	# trois moignons — rendait un poteau vert de la taille d'un chene, ce qu'un
+	# saguaro n'est pas. Le desert garde ses cactus, mais **par la couche de
+	# flore**, ou ils sont dessines a quatre voxels par bloc et ou ils ont la
+	# taille d'une plante (`generer_flore.cactus_01` et `cactus_02`, refaits le
+	# meme jour).
+	#
+	# Les trois poids qui restent sont redistribues, et l'acacia passe devant :
+	# a poids constants, le dattier — un arbre d'oasis — serait devenu l'espece
+	# dominante du desert, ce qui est le contraire de ce qu'il decrit.
 	CWBiome.DESERTS: [
 		{
-			"nom": "cactus geant",
-			"montage": Montage.ENTIER,
-			"tronc": "deserts/cactus_geant",
-			"couronnes": [],
+			"nom": "acacia",
+			"montage": Montage.GRAND,
+			"tronc": "deserts/acacia_charpente",
+			"couronnes": ["deserts/acacia_dome"],
+			"branches": [Vector3i(11, 0, 27), Vector3i(-11, 0, 24),
+					Vector3i(0, 11, 29), Vector3i(0, -10, 25)],
 			"pieces": [0, 0],
-			"poids": 0.6,
+			"poids": 0.5,
 		},
 		# Le dattier d'oasis. Meme montage que le palmier de jungle, teintes du
 		# desert : c'est un lot par biome, pas un lot partage.
@@ -227,17 +229,7 @@ const SPECIES: Dictionary = {
 			"tronc": "deserts/palmier_tronc",
 			"couronnes": ["deserts/palme", "deserts/palme_diagonale"],
 			"pieces": [3, 4],
-			"poids": 0.4,
-		},
-		{
-			"nom": "acacia",
-			"montage": Montage.GRAND,
-			"tronc": "deserts/acacia_charpente",
-			"couronnes": ["deserts/acacia_dome"],
-			"branches": [Vector3i(11, 0, 27), Vector3i(-11, 0, 24),
-					Vector3i(0, 11, 29), Vector3i(0, -10, 25)],
-			"pieces": [0, 0],
-			"poids": 0.16,
+			"poids": 0.3,
 		},
 		{
 			"nom": "baobab",
@@ -247,7 +239,7 @@ const SPECIES: Dictionary = {
 			"branches": [Vector3i(14, 0, 17), Vector3i(-14, 0, 20),
 					Vector3i(0, 13, 15), Vector3i(0, -13, 18)],
 			"pieces": [0, 0],
-			"poids": 0.08,
+			"poids": 0.2,
 		},
 	],
 	CWBiome.JUNGLES: [

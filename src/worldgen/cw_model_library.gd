@@ -53,13 +53,28 @@ const FLORA_DIR: String = "res://assets/models/flore/"
 ## doublant les densites (`nextsteps.md`, §6.5). Des plantes deux fois et demie
 ## plus hautes couvrent six fois plus de sol : Greenlands redescend de 12 a 9,
 ## Jungles de 16 a 14.
+##
+## -- Et **tout le lot est multiplie par 0,6 le 2026-09-06** ------------------
+##
+## Vu en jeu, pas deduit : le sol ne se voyait plus. Le reglage precedent avait
+## corrige la taille des plantes — c'etait le bon geste — mais pas assez loin,
+## parce qu'on ne compare pas une densite a une autre densite : on la compare a
+## la **surface de sol qui reste libre**. Une prairie ou l'on distingue chaque
+## touffe se lit comme une prairie ; une prairie ou les touffes se touchent se
+## lit comme un tapis, et le relief sous elle disparait.
+##
+## Le facteur est **uniforme** parce que le rapport entre biomes, lui, n'etait
+## pas en cause : une jungle doit rester six fois plus fournie qu'une plaine de
+## neige, et c'est le seul repere qu'on ait de l'original. Ce qui a bouge est
+## l'echelle commune, et elle a bouge d'un seul coup pour que la comparaison
+## d'un biome a l'autre reste lisible.
 const DENSITY: Dictionary = {
-	CWBiome.GREENLANDS: 9.0,
-	CWBiome.SNOWLANDS: 2.5,
-	CWBiome.DESERTS: 1.4,
-	CWBiome.JUNGLES: 14.0,
-	CWBiome.LAVALANDS: 1.2,
-	CWBiome.OCEANS: 2.5,
+	CWBiome.GREENLANDS: 5.4,
+	CWBiome.SNOWLANDS: 1.5,
+	CWBiome.DESERTS: 0.85,
+	CWBiome.JUNGLES: 8.4,
+	CWBiome.LAVALANDS: 0.7,
+	CWBiome.OCEANS: 1.5,
 }
 
 ## Modeles par **biome** et par role. Les roles viennent de `CWDecorRules`, qui

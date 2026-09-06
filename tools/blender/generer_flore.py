@@ -226,37 +226,85 @@ def cotonnier_neige(g, rng):
 # =============================================================================
 
 def cactus_01(g, rng):
-    """Le saguaro : trois blocs de fut et deux bras.
+    """Le saguaro : quatre blocs de fut cannele, deux bras, des areoles.
 
-    **Les bras sont doubles le 2026-09-06.** Ils faisaient un voxel de section
-    et remontaient de trois : sur un fut de trois de large, ils ne se
-    detachaient pas, et la planche a lu une colonne verte. Un bras de saguaro
-    est un fut plus mince, pas une brindille — d'ou `colonne_pleine` pour la
-    partie dressee, et deux voxels de section pour le coude.
+    **Refait le 2026-09-06**, et c'est le seul modele du lot a qui la refonte
+    des arbres a laisse une place a prendre. Le desert avait deux cactus : le
+    `cactus_geant` de la couche des arbres, dessine a un voxel par bloc, et
+    celui-ci. Le premier est retire — a la maille du bloc, un saguaro n'a ni
+    cannelure ni epine, il a la forme que la grille lui laisse — et c'est donc
+    **ici** que le desert doit trouver sa silhouette. Il monte a quatre blocs,
+    le plafond de la flore, ce qui le rend plus grand qu'un personnage sans
+    faire de lui un arbre.
+
+    Trois choses le distinguent d'un poteau vert, et aucune ne coute cher :
+
+      1. **les cannelures.** `colonne_cannelee` prend sa teinte sur l'azimut :
+         quatre cretes claires, quatre sillons sombres, sur toute la hauteur.
+         C'est ce qui se lit de loin ;
+      2. **le fuselage.** Le pied fait un voxel et demi de rayon, la cime un.
+         Un cactus qui ne s'affine pas est un tuyau ;
+      3. **les bras a des hauteurs differentes.** Deux coudes au meme niveau
+         rendent un chandelier symetrique, qui est exactement le cliche qu'on
+         cherche a eviter. Ils partent de 4 et de 7, et le plus bas monte le
+         plus haut sans jamais depasser la cime — un bras qui double le fut
+         casse la silhouette.
+
+    > **Le fut est mince parce que les bras en dependent.** Premier essai, fut
+    > a deux voxels de rayon et bras a trois : les deux premiers voxels du coude
+    > tombaient *dans* le fut, et le bras se posait contre lui sans un voxel
+    > d'air entre les deux. Il n'y avait donc pas de bras, seulement une bosse.
+    > Ce qui fait lire un saguaro n'est pas le bras, c'est **le jour qu'on voit
+    > entre le bras et le fut** — d'ou un fut de trois voxels de large et un
+    > coude qui va chercher son bras deux voxels plus loin qu'il n'en a besoin.
     """
-    fb.colonne_pleine(g, rng, 13.0, 1.2, 172, 175)
+    fb.colonne_cannelee(g, rng, 16, 1.5, 1.1, 172, 175)
     a0 = rng.uniform(0.0, math.tau)
-    for cote in (0.0, math.pi):
-        a = a0 + cote + rng.uniform(-0.4, 0.4)
-        base = rng.randint(3, 5)
+    for cote, base, monte in ((0.0, 4, 8), (math.pi, 7, 5)):
+        a = a0 + cote + rng.uniform(-0.5, 0.5)
+        cx, cy = math.cos(a), math.sin(a)
         # Le coude : deux voxels d'epaisseur, sinon il disparait contre le fut.
-        for k in range(3):
+        for k in range(1, 5):
             for dz in (0, 1):
-                g.pose(math.cos(a) * (1 + k), math.sin(a) * (1 + k), base + dz,
-                       teinte(172, 174, 0.45 + 0.1 * dz))
-        # Le bras dresse, aux deux tiers de la hauteur du fut.
-        fb.colonne_pleine(g, rng, 6.0, 0.8, 172, 175,
-                          x0=math.cos(a) * 3, y0=math.sin(a) * 3)
-        for k in range(6):
-            g.pose(math.cos(a) * 3, math.sin(a) * 3, base + 1 + k,
-                   teinte(172, 175, 0.4 + 0.1 * k))
+                g.pose(cx * k, cy * k, base + dz,
+                       teinte(172, 175, 0.55 - 0.15 * dz))
+        fb.colonne_cannelee(g, rng, monte, 1.0, 1.0, 172, 175,
+                            x0=cx * 4, y0=cy * 4, depuis=base + 1)
+    fb.epines(g, rng, part=0.07)
 
 
 def cactus_02(g, rng):
-    """Le cactus tonneau : deux blocs, trapu, une fleur au sommet."""
-    fb.colonne_pleine(g, rng, 8.0, 2.0, 172, 175)
-    g.pose(0, 0, 8, 156)
-    g.pose(1, 0, 8, 157)
+    """Le figuier de barbarie : trois raquettes empilees et leurs fruits.
+
+    **Refait le 2026-09-06.** C'etait un tonneau — une `colonne_pleine` de deux
+    blocs coiffee de deux voxels de fleur —, et un tonneau a cette grille est un
+    seau : la planche de validation ne pouvait pas le lire autrement, un
+    cylindre de huit de haut sur quatre de large n'ayant aucun trait a montrer.
+
+    L'oponce resout les deux problemes a la fois. Il donne au desert la seule
+    silhouette **large et basse** de son lot, ce qui le distingue enfin du
+    saguaro au lieu d'en etre une version courte ; et c'est deja le nom que la
+    table de recolte lui donne — `CWFloraDrops` rend « prickly pear » pour les
+    deux cactus depuis le jalon 1.7, sans qu'aucun des deux modeles n'en ait
+    jamais eu la forme.
+
+    Les trois raquettes se recouvrent volontairement d'un voxel ou deux : c'est
+    ainsi qu'elles poussent, et c'est aussi ce qui evite a la passe de soudure
+    d'inventer un petiole entre deux palettes qui n'en ont pas.
+    """
+    a0 = rng.uniform(0.0, math.tau)
+    ux, uy = math.cos(a0), math.sin(a0)
+    # La raquette de pied, la plus grande, posee sur sa tranche.
+    fb.raquette(g, rng, 0, 0, 4, a0, 3.4, 4.0, 172, 175, epaisseur=2)
+    # Les deux filles, en haut de sa tranche, chacune vrillee de son cote : deux
+    # raquettes dans le meme plan rendraient une planche.
+    fb.raquette(g, rng, ux * 2.2, uy * 2.2, 9, a0 + rng.uniform(0.5, 0.9),
+                2.8, 3.2, 172, 175, epaisseur=2)
+    fb.raquette(g, rng, -ux * 2.0, -uy * 2.0, 8, a0 - rng.uniform(0.6, 1.0),
+                2.3, 2.7, 172, 175, epaisseur=2)
+    fb.epines(g, rng, part=0.07)
+    # Les figues, sur la tranche haute des raquettes et nulle part ailleurs.
+    fb.semis(g, rng, 5, 156, hauteur_min=9.0, lateral=False)
 
 
 def broussaille_seche(g, rng):

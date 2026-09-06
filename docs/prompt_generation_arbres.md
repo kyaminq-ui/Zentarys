@@ -127,8 +127,7 @@ le nom ne porte ni le biome — c'est le dossier — ni la taille.
 | | `sapin_enneige` | 9 × 19, sept étages | 135 – 139 + neige |
 | | `bouleau_givre_tronc` | 3 × 12 | 14 – 16, marques 153 |
 | | `bouleau_givre_houppier` | 11 – 12 × 6 – 7 | **136 – 139**, pas d'orange |
-| `deserts/` | `cactus_geant` | 5 – 7 × 10 | cactus 172 – 175 |
-| | `palmier_tronc` | 3 – 4 × 14 | écorce 150 – 153 |
+| `deserts/` | `palmier_tronc` | 3 – 4 × 14 | écorce 150 – 153 |
 | | `palme` `palme_diagonale` | 13 – 17 × 3 | 133 – 139 |
 | `jungles/` | `tropical_tronc` | 6 – 7 × 13, **base large** | écorce 148 – 152 |
 | | `tropical_houppier_01` `_02` | 14 – 18 × 6 – 8 | feuillage 129 – 138 |

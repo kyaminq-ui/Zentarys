@@ -27,8 +27,8 @@ Statuts : ✅ fait · 🔶 partiel · ⬜ à faire · ⛔ hors périmètre
 Le terrain conditionne tout le reste : physique, rendu, placement des créatures
 et des structures.
 
-**Les douze systèmes du monde sont portés et vérifiés.** Le monde se génère, se
-creuse, se sauvegarde, s'éclaire, se garnit, se cartographie et se boise :
+**Les treize systèmes du monde sont portés et vérifiés.** Le monde se génère,
+se creuse, se sauvegarde, s'éclaire, se garnit, se cartographie et se boise :
 
 - **1.1 à 1.10**, le terrain ;
 - **1.11**, la grande végétation — un lot d'assets, une seconde couche de
@@ -37,11 +37,16 @@ creuse, se sauvegarde, s'éclaire, se garnit, se cartographie et se boise :
 - **1.12**, les six biomes — une couche de classification climatique au-dessus
   des matières de surface, et la refonte des deux lots d'assets qui en découle.
   **Fait le 2026-09-06**, et les deux lots revus un par un sur planche le même
-  jour.
+  jour ;
+- **1.13**, la falaise — la cinquième et dernière règle de la table de surface
+  d'origine, qui rend au relief la roche que 1.12 lui avait retirée, et la lui
+  rend **sur la pente et non sur l'altitude**. **Fait le 2026-09-06.**
 
 **Le jalon 1 est clos.** Ce qui reste est de la finition, listée en dette
 technique, plus les questions d'analyse encore pendantes de `docs/systems/02`,
-§9. La porte suivante est **2.6, l'apparition**.
+§9 — dont les deux qui restent devant : `World_generateWaterOrPathFeature`,
+d'où sortiront les lacs et les chemins, et la collision, objet par objet. La
+porte suivante côté entités est **2.6, l'apparition**.
 
 | # | Système | Source analysée | Statut | Note |
 |---|---|---|---|---|
@@ -57,6 +62,7 @@ technique, plus les questions d'analyse encore pendantes de `docs/systems/02`,
 | 1.10 | Carte du monde | `WorldMap.cpp`, `loadLandscapeTile` @006024d0, `NameGen_generateRegionName` | ✅ | pièces de Voronoï, découverte, noms ; `docs/systems/05` |
 | 1.11 | **Arbres et grande végétation** | voie des entités, `docs/systems/02` §5.2 | ✅ | assets, dispersion, montage, et **le tronc écrit dans le terrain** ; reste la pose des filons, qui appartient à 2.6 |
 | 1.12 | **Les six biomes** | climat de 1.3 + biomes de l'alpha 2013 | ✅ | couche `CWBiome` au-dessus des matières, Lava Lands et ses coulées, **42 modèles de flore et 24 d'arbres regénérés** (la flore a été refaite le soir même : 38 modèles, à 4 voxels par bloc et 6 pour les petits props) |
+| 1.13 | **La falaise** | `terrain_surfaceColor_blend` @005c56e0, 5ᵉ branche | ✅ | seuil relevé (0,5), pente mesurée sur un treillis de 4 blocs ; 4,4 % des terres en roche nue |
 
 ### 1.6 — Éléments de tuile (fait)
 
@@ -797,6 +803,13 @@ givré, arbre pourpre, acacia, baobab, flamboyant, jacaranda, arbre de cendre,
 arbre de braise. L'invariant n° 29 tient : les deux espèces de Snowlands
 prennent le blanc-bleu et le violet, jamais l'orange d'automne.
 
+> **Ils sont dix à la production et huit le soir même.** Snowlands a rendu les
+> siens — le saule givré et l'arbre pourpre —, et la raison n'est pas leur
+> exécution mais leur montage : un `GRAND` tient sa lecture de l'étalement de ses
+> cinq masses, c'est une silhouette d'été, et une taïga se lit à l'inverse par
+> des flèches étroites. Les peindre en froid n'y changeait rien. Le biome garde
+> ses deux conifères entiers et son bouleau. Voir `nextsteps.md`, §7ter.2.
+
 **Le lot entier est corrigé et agrandi le même jour**, sur deux défauts vus en
 regardant le paysage :
 
@@ -820,11 +833,11 @@ regardant le paysage :
   s'y cogne n'existe pas encore. Surtout, tout n'est pas de la matière — le
   tronc **et son branchage** le sont (les branches sont dans le modèle de
   charpente, donc estampées avec le fût), les neuf filons le seront par
-  construction, mais les **houppiers**, les six **modèles entiers** (`pin`,
-  `sapin_enneige`, `pin_enneige`, `cactus_geant`, `arbre_epineux`,
-  `rocher_geant`) et les cactus de flore sont instanciés, donc traversables.
+  construction, mais les **houppiers**, les cinq **modèles entiers** (`pin`,
+  `sapin_enneige`, `pin_enneige`, `arbre_epineux`, `rocher_geant`) et les cactus
+  de flore sont instanciés, donc traversables.
   Décompte, coûts mesurés et arbitrage — matière contre volume approché — en
-  `nextsteps.md`, §7bis.3. Le résumé : les six modèles entiers sont à passer en
+  `nextsteps.md`, §7bis.3. Le résumé : les cinq modèles entiers sont à passer en
   matière (186 à 1 907 voxels, une ligne de code), le feuillage ne l'est
   probablement pas (×12 sur ce qu'un arbre écrit dans le monde) et relève d'un
   volume approché au jalon 3.1.
@@ -1033,6 +1046,92 @@ et le buisson de feu se lisait comme un rocher noir ; et deux fûts de bouleau
 tenaient sur **un bloc de section** sur quatorze de haut, parce qu'un rayon de
 1,0 décroissant ne garde qu'un voxel par étage. Verdict modèle par modèle,
 mesures et remèdes dans `nextsteps.md`, §6quater.
+
+### 1.13 — La falaise (fait, 2026-09-06)
+
+**La cinquième et dernière règle de la table de surface d'origine**, et la seule
+que le jalon 1.12 n'avait pas portée. `terrain_surfaceColor_blend` (@005c56e0)
+laisse son appelant forcer le bloc **6 — la roche** quand « le facteur de
+falaise dépasse 0,5 » (`docs/systems/02`, §9.1).
+
+Elle referme un trou ouvert volontairement le matin même. Les trois bandes
+d'altitude avaient été retirées parce qu'**une matière qui ne porte rien est un
+trou dans le monde** : la roche nue et la calotte de neige rendaient des
+plateaux où l'on marchait sans rien rencontrer. Le raisonnement était juste et
+le remède trop large — une montagne *a* de la roche, simplement elle en a sur
+ses **flancs raides**, pas sur ses sommets plats. **L'exception est la pente,
+pas l'altitude**, et c'est la source qui le dit.
+
+#### Le seuil est relevé, la mesure est de ce projet
+
+La décompilation donne 0,5 et le nom du facteur ; elle ne donne pas son calcul.
+Ce qui est écrit ici est donc une pente mesurée sur le champ d'altitude, et le
+seuil est **gardé à 0,5** pour que tout ce qui est inventé tienne dans une seule
+constante — `CWTerrainField.CLIFF_SLOPE_REF`, la pente qui vaut un facteur de 1.
+
+La pente ne se prend pas entre deux colonnes voisines, et pour deux raisons dont
+la seconde est la vraie :
+
+1. **elle coûterait le monde.** Une colonne vaut ~75 µs et c'est le verrou du
+   chargement ; deux colonnes de plus par colonne générée, c'est un terrain
+   trois fois plus lent ;
+2. **une pente d'un bloc ne décrit pas une falaise.** Le champ porte un octave
+   de détail à 1e-2 : d'une colonne à la suivante il monte et redescend partout,
+   y compris au milieu d'une plaine.
+
+Elle se prend donc sur un **treillis de 4 blocs**, dont les sommets sont
+partagés — seize colonnes se répartissent quatre échantillons, en cache. Borne
+haute du surcoût : +6 % par colonne ; mesuré sur le banc de la suite, +1 %,
+c'est-à-dire **sous le bruit de mesure** (±6 % d'une passe à l'autre).
+
+#### Ce que la mesure a corrigé, et qu'aucun raisonnement n'aurait donné
+
+Comme au jalon 1.12, `tools/biome_stats.gd` a contredit la valeur qui se lisait
+juste. Premier essai : `CLIFF_SLOPE_REF = 2,0`, soit un seuil à quarante-cinq
+degrés — la définition qu'on donne d'une falaise sans y réfléchir. Résultat :
+**0,62 % des terres**, c'est-à-dire rien.
+
+La raison n'est pas le treillis, elle est le **terrain**. Ce monde n'a pas de
+parois verticales : mesuré sur huit mille colonnes en ligne, le plus grand
+dénivelé d'un bloc au suivant est de **0,65 bloc**. Un relief fait de bruit de
+valeur à interpolation cosinus est lisse par construction ; ce qu'il a de plus
+raide est un flanc, et un flanc de montagne de ce monde est à un demi. Chercher
+quarante-cinq degrés, c'était chercher ce qui n'existe pas.
+
+À `CLIFF_SLOPE_REF = 1,0` — quatre blocs de dénivelé sur huit parcourus — la
+roche prend **4,4 % des terres**, 3,4 % du monde : assez pour que chaque massif
+ait ses flancs nus, assez peu pour qu'une colline reste verte jusqu'en haut.
+
+Le pas du treillis a été essayé à 8 avant d'être ramené à 4. La part qui bascule
+ne bouge pas (4,5 % contre 4,4 %) mais la **queue** de la distribution se
+remplit : au-delà d'un facteur de 0,9, huit blocs donnent 0,02 % des terres et
+quatre en donnent 0,29 %, quinze fois plus. Un pas long ne mesure pas la paroi,
+il mesure le flanc qui la porte. Ce qui l'a tranché est une capture : à huit, la
+frontière entre la roche et l'herbe est un découpage à huit blocs posé en
+travers de terrasses qui en font trois ; à quatre, elle s'engrène avec elles.
+
+#### Deux écarts assumés à l'ordre de la source
+
+Dans l'original le bloc 6 est forcé **par l'appelant**, donc après tout le reste.
+Ici la falaise passe avant les matières de terre ferme, et deux cas s'en
+écartent :
+
+- **le fond marin n'a pas de falaise.** Le talus continental est la plus grande
+  pente du monde ; sans l'exception, la moitié du fond passerait en roche, et
+  personne ne verra jamais la différence entre du gravier et de la roche par
+  douze blocs de fond ;
+- **elle passe devant Lava Lands.** Les bassins de magma sont plats par
+  construction et ne passent jamais le seuil, donc la différence est nulle de ce
+  côté ; sur les coulées elle joue dans le bon sens — une coulée descend un
+  ravin, elle ne tient pas sur une falaise.
+
+Trois vérifications de `tests/decor_test.gd` tiennent la règle par ses deux
+bouts : à plat, aucun biome ne produit de matière nue (c'est le balayage du
+jalon 1.12, désormais explicitement « à plat ») ; au-dessus du seuil, **toute**
+terre ferme est de la roche ; au seuil exact, rien ne bascule encore. Et
+`--ici x z` a été ajouté à la démo pour viser une capture sur un point nommé :
+une falaise est un objet local, et jusque-là on relançait la recherche de biome
+jusqu'à tomber dessus.
 
 ---
 
@@ -1342,6 +1441,7 @@ de le résoudre.
 
 | Date | Fait |
 |---|---|
+| 2026-09-06 (matin, 2) | **Jalon 1.13 : la falaise, et trois assets retires.** (1) **La cinquieme et derniere regle de la table de surface d'origine est portee.** `terrain_surfaceColor_blend` force le bloc 6 — la roche — quand « le facteur de falaise depasse 0,5 » ; le seuil est relevé, la *mesure* est de ce projet. Elle referme un trou ouvert volontairement la veille : les bandes d'altitude avaient ete retirees parce qu'une matiere qui ne porte rien est un trou dans le monde, et le remede etait trop large — une montagne a de la roche sur ses **flancs**, pas sur ses sommets plats. **L'exception est la pente, pas l'altitude.** (2) **La pente se prend sur un treillis de 4 blocs**, dont les sommets sont partages : seize colonnes se repartissent quatre echantillons, en cache. Prendre la colonne voisine aurait triple le cout d'une colonne — le verrou du chargement — *et* donne un moins bon resultat, l'octave de detail montant et redescendant partout, y compris en pleine plaine. Borne haute du surcout : +6 % ; mesure, +1 %, sous le bruit de mesure (±6 % d'une passe a l'autre). (3) **Deux mesures ont corrige deux intuitions.** Premier essai a quarante-cinq degres : **0,62 % des terres**, c'est-a-dire rien. La cause n'est pas le treillis mais le terrain — sur huit mille colonnes en ligne, le plus grand denivele d'un bloc au suivant est de **0,65 bloc** ; un relief fait de bruit de valeur a interpolation cosinus est lisse par construction, et ce qu'il a de plus raide est un flanc. A 1,0 la roche prend 4,4 % des terres. Et le pas du treillis, essaye a 8, est ramene a 4 : la part qui bascule ne bouge pas (4,5 contre 4,4 %) mais la **queue** de la distribution se remplit quinze fois, un pas long mesurant le flanc et non la paroi. Tranche sur capture — a huit, la frontiere roche/herbe est un decoupage a huit blocs pose en travers de terrasses qui en font trois. (4) **`surface_of` prend un septieme parametre, sans valeur par defaut** (invariant n° 37) : un defaut a zero aurait laisse compiler les sept sites d'appel et rendu un monde sans une falaise, que rien n'aurait signale. L'ATH de la demo est celui qu'on oublie — il n'est dans aucun test. (5) **Trois assets retires et deux refaits, demandes le meme jour.** Les deux grands arbres de Snowlands : un montage GRAND se lit a l'etalement de ses cinq masses, une taiga se lit a ses fleches, et les peindre en froid n'y changeait rien. Le `cactus_geant` : a un voxel par bloc un saguaro n'a ni cannelure ni epine, il a la forme que la grille lui laisse. Le desert garde ses cactus par la couche de flore, ou ils sont refaits a 4 voxels par bloc — un saguaro cannele de 4 blocs et un **figuier de barbarie**, qui est deja le nom que `CWFloraDrops` leur donne depuis le jalon 1.7 sans qu'aucun n'en ait eu la forme. (6) **La densite de flore baisse de 40 %, uniformement.** Le reglage du jalon 1.12 avait vu juste et pas assez loin : on ne compare pas une densite a une densite, on la compare a la **surface de sol qui reste libre**. **332 verifications, 0 echec**, verifie en capture sur Greenlands, Snowlands et Deserts. |
 | 2026-09-06 (nuit, 2) | **Une seconde grille pour la flore, la fleche des coniferes, et les bandes d'altitude.** (1) **Quatre voxels par bloc etait juste pour la moitie du lot.** Un buisson, un cactus, un champignon sont des *masses* : leur forme est leur volume, et un volume se lit a n'importe quelle resolution. Ce qui s'y perdait, ce sont les objets **dont la forme tient dans un trait** — une touffe est cinq lignes, une fleur une tige et une corolle, et a quatre voxels une corolle n'est plus qu'une croix de cinq. **Quinze modeles passent a six voxels par bloc** (herbes, fleurs, ginseng, roseau), le reste garde quatre ; une touffe passe de sept a onze voxels sans revenir au cheveu, un brin faisant un sixieme de bloc et non un treizieme. **Consequence d'architecture** : la grille n'est plus decidee par la bibliotheque mais **par modele** (`CWModelLibrary.GRILLE_FINE`, `_grid_of`). Cette table et la colonne `FIN` du catalogue du generateur sont deux sources qui doivent s'accorder — une divergence sort la plante a une taille fausse d'un facteur un et demi, assez pour se voir, pas assez pour qu'on remonte a la cause ; deux verifications tiennent les deux sens. Une **liste** et non une regle sur le role, parce que le partage passe par le role a deux modeles pres et que ces deux-la suffisent a le disqualifier (`feuille_large` est un COUVERT mais c'est une feuille, `herbe_de_lave` est rangee en SOUS_BOIS alors que c'en est). (2) **La fleche des coniferes etait une boule**, et le profil en Z le disait mot pour mot : sur `sapin_enneige`, 9, 9, **1**, 5, **9**, 5, 1 — la silhouette se pincait a un voxel puis regonflait a neuf. Deux causes, et il fallait les deux : le fut se reduisait a un fil entre les deux derniers etages (sous un rayon de 1,0, un disque ne pose plus qu'un voxel), et **la fleche etait plus large que l'etage qui la portait** — un rayon constant de 1,8 contre un dernier etage a 1,3-1,5. *Une pointe qui s'elargit avant de se fermer est une boule, par definition.* Le rayon haut du fut est planchei a 1,0 et la fleche part de l'**avant-dernier** etage en **remplacant le dernier** : rayons strictement decroissants, silhouette monotone, et l'arbre perd exactement un bloc — ce qui etait l'autre moitie de la demande. C'est la **troisieme** reprise du sommet des coniferes en trois jours, et a chaque fois le diagnostic etait juste et le remede partiel parce qu'il traitait le symptome visible sans regarder le profil entier. (3) **Les bandes d'altitude sont retirees** : plus de roche nue ni de calotte de neige hors des biomes dont c'est la matiere. **Le motif n'est pas celui des franges d'humidite** retirees plus tot le meme jour, et c'est ce qui rend le cas interessant : les franges se *contredisaient* (« Greenlands » sur un sol kaki), les bandes non — une montagne a de la roche, le raisonnement de vraisemblance etait bon. Elles ne **portaient rien** : `decor_allowed` refuse le decor sur la roche et la neige hors Snowlands, donc chaque relief un peu haut rendait un plateau nu ou l'on marchait sans rien rencontrer. *Une matiere qui ne porte rien n'est pas un sous-biome, c'est un trou dans le monde* — et le raisonnement de vraisemblance tenait tant qu'on regardait une carte de hauteurs, pas des qu'on marche dessus. Les trois constantes restent pour Lava Lands, dont la regle decrit un volcan et non une altitude, et serviront de point de depart le jour ou la **falaise** aura la sienne — ce sera une pente a mesurer, et c'est probablement la que la roche nue doit revenir. Repartition mesuree : herbe 37,2 %, neige 27,0 %, gravier 23,9 %, marais 6,6 %, scorie 2,4 %, sable 2,0 %, jungle 0,5 %, magma 0,5 % — **plus une seule colonne de roche** hors Lava Lands. Le nouveau balayage de `decor_test` refuse la formulation generale du defaut : aucun biome hors Oceans et Lava Lands ne produit une matiere que `decor_allowed` rejette. **315 verifications, 0 echec**, verifie en capture sur Greenlands et Snowlands. |
 | 2026-09-06 (nuit) | **Trois remaniements de rendu, tous decides en regardant le jeu.** (1) **La flore passe a 4 voxels par bloc, et c'est le premier ecart assume entre ce projet et une valeur mesuree dans l'original.** Le lot avait ete regenere le matin « avec moins de detail » — deux fois et demie plus grand, cinq brins au lieu de onze — et le resultat en jeu etait *indiscernable*. Verifie avant de rien changer : les `.vox` du disque etaient octet pour octet ceux du generateur, donc le lot avait bien ete refait et c'est le remede qui ne portait pas. **Il agissait sur le nombre d'elements, et le defaut etait dans la maille** : a 40/3 voxels par bloc un brin fait 0,08 bloc, soit un cheveu a cote d'un cube de terrain, et cinq cheveux au lieu de onze font une touffe plus claire, pas plus grosse. Aucun reglage d'un lot dessine a cette finesse ne pouvait donner ce qu'on cherchait. Le lot est redessine a **4 voxels par bloc** — `tools/blender/flore_blocs.py`, exactement comme `arbres_blocs.py` trois jours plus tot et pour la meme raison, *les formes sont a repenser, pas a reduire* — et le generateur passe en **Python pur**. La taille des plantes **en blocs** ne bouge pas, et l'enveloppe de `tests/flora_test.gd` non plus, parce qu'elle est dite en blocs : le genre de detail qui ne se remarque que le jour ou il paye. 3/40 n'est pas conteste — c'est bien l'echelle du decor de l'alpha ; c'est le rendu qui la refuse, et la note le dit dans ce sens-la (`CWVoxelModel.VOXELS_PER_BLOCK_FLORE`). Lot a **38 modeles**. (2) **Le role `CAILLOU` est supprime**, et les quatre blocs erratiques avec lui — dont le `deserts/caillou_gres` produit le matin meme. Disperses a la densite de la flore, ils rendaient des **champs de rochers** ou l'on ne passait plus. La cause est la lecon du matin prise par l'autre bout : on avait grossi le caillou de 8 a 30 voxels **sans toucher a sa densite**, reglee quand il faisait la taille d'un galet. *Changer une taille, c'est changer une densite* — invariant n° 33, et aucun test ne peut l'attraper, une densite trop forte etant une densite valide. Le mineral pose du monde est desormais le seul `rocher_geant`, qui passe par la couche des arbres : 14 blocs d'espacement, poids 0,05. (3) **Un biome n'a plus qu'une matiere de plaine** : `GRASS_DRY` et `TUNDRA` sont retirees de `surface_of`. C'etaient les deux franges d'humidite heritees d'avant 1.12, et le defaut se voyait a l'ATH avant le sol — « Greenlands / herbe seche » sur un sol kaki, un nom de biome et une couleur qui se contredisent. Depuis que `CWBiome` classe le climat, une seconde matiere de plaine ne dit rien que le biome ne dise deja ; les trois bandes d'altitude restent, elles disent autre chose. **Les deux index restent alloues** — les liberer decalerait les plages 14-19, 20-24 et 25-27 peintes dans les 62 `.vox` du depot, soit l'arbitrage de l'invariant n° 31 tranche dans le meme sens ; aucun modele ne les employait, verifie avant. Un balayage de `tests/decor_test.gd` refuse desormais que `surface_of` les rende, sur 4 096 climats x 6 biomes x 6 altitudes. Au passage, `herbe_seche` et `broussaille` quittent la rampe « automne » : une tache orange sur une prairie desormais toujours verte, c'etait l'invariant n° 29 transpose de Snowlands a Greenlands. **313 verifications, 0 echec**, verifie en capture sur Greenlands et Deserts. |
 | 2026-09-06 (soir) | **Les trois defauts de pose vus en jeu apres le commit du jalon 1.12, corriges.** (1) **La fleche des coniferes flottait, et ce n'etait pas elle qui etait mal placee.** Les deux derniers etages du `pin` sont espaces de 2,8 blocs pour un bloc d'epaisseur, et le fut — raccourci a 0,82 de la hauteur le matin meme, pour ne pas depasser du feuillage — ne comblait plus l'ecart : les trois quarts superieurs de l'arbre flottaient en un seul morceau. Le fut monte desormais **jusqu'au dernier etage pose**, ce qui est la seule des deux contraintes qui compte et la seule qui se dise sans fraction. (2) **La capture d'apres a montre la moitie qui manquait au diagnostic.** Le profil en Z disait « plus de trou » et il avait raison ; il ne pouvait rien dire du fait que le trou etait comble **en ecorce**, et que les deux a trois blocs entre etages laissaient voir une colonne brune — l'arbre se lisait comme une pile d'assiettes enfilees sur un piquet. Le commentaire du code portait deja la regle juste, « un conifere ne montre son tronc qu'entre le sol et son premier etage », et le code ne la faisait pas. *Une mesure ne repond qu'a la question qu'on lui pose ; la capture sert aussi a verifier le remede.* (3) **Les palmes flottaient : l'ancre est en haut du modele.** Une paire de frondes retombe, donc son point d'attache est son voxel le plus **haut**, et `_piece` pose une piece par sa base — la couronne se posait `height - 1` blocs au-dessus du stipe, trois pour le dattier, quatre pour le palmier de jungle. Le decalage d'attache avait ete traite **dans le dessin** la veille (une paire est centree sur son attache) et l'affaire passait pour close : elle ne l'etait que sur deux axes sur trois. D'ou l'invariant n° 32 — *une correction partielle est plus dangereuse qu'une absence de correction, parce qu'elle ferme la question.* (4) **Ne garder que les gros cailloux** : `greenlands/caillou_02` (dalle plate de 19 voxels) et `deserts/gres` (colonne a chapeau de 34) supprimes. Le second etait le seul modele du role `CAILLOU` de Deserts ; plutot que de vider le role — ce que `tests/decor_test.gd` refuse, invariant n° 22 —, il est **remplace** par `deserts/caillou_gres`, un bloc erratique a la matiere du gres. Les quatre mineraux du monde sont maintenant une famille : meme masse basse et large, quatre matieres. *Un lot n'est pas une collection de bonnes idees.* Lot de flore a **42 modeles**. **312 verifications, 0 echec**, et les trois remedes verifies en capture sur Greenlands, Deserts et Jungles. |

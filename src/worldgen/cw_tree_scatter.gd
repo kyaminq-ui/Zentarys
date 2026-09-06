@@ -356,7 +356,8 @@ func _build_cell(cx: int, cz: int) -> Array:
 		# bosquet de Greenlands ne monte pas sur la roche nue de sa propre
 		# montagne, ni sur sa calotte de neige.
 		var surface: int = CWPalette.surface_of(biome_c,
-				col.x - float(sea), col.y, col.z, x, z)
+				col.x - float(sea), col.y, col.z, x, z,
+				_field.cliff_factor(x, z))
 		if not CWDecorRules.decor_allowed(biome_c, surface):
 			continue
 		var sp: Dictionary = CWTreeRules.species_at(biome_c, float(c["pick"]))

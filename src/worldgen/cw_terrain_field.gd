@@ -86,9 +86,110 @@ const FALLOFF_SEED_Z: float = 112.0
 ## Marge ajoutee au rayon d'un element pour le relevement oceanique.
 const LIFT_RADIUS_MARGIN: float = 256.0
 
+# -- Le facteur de falaise (jalon 1.13) ---------------------------------------
+#
+# `terrain_surfaceColor_blend` (@005c56e0) est la regle de surface de
+# l'original, et sa cinquieme et derniere branche est la seule que ce projet
+# n'avait pas portee : l'appelant force le bloc 6 — la roche — quand « le
+# facteur de falaise depasse 0,5 » (`docs/systems/02`, Sec. 9.1).
+#
+# **Le seuil est de la source, la mesure est de ce projet.** La decompilation
+# donne 0,5 et le nom du facteur ; elle ne donne pas comment il se calcule. Ce
+# qui suit est donc une lecture de pente sur le champ d'altitude, et le fait
+# d'avoir garde le seuil a 0,5 n'est pas cosmetique : il isole en une seule
+# constante — `CLIFF_SLOPE_REF` — ce que ce projet a invente, et laisse la
+# valeur relevee lisible la ou elle est employee (`CWPalette.CLIFF_RIDGE`).
+#
+# -- Pourquoi un treillis, et pas la colonne voisine --------------------------
+#
+# La pente evidente est la difference d'altitude entre deux colonnes adjacentes.
+# Elle est inutilisable ici pour deux raisons, et la seconde est la vraie :
+#
+#   1. **elle couterait le monde.** Une colonne vaut ~75 us et c'est le verrou
+#      du chargement ; deux colonnes de plus par colonne generee, c'est un
+#      terrain trois fois plus lent. La regle de surface est appelee une fois
+#      par colonne du monde, plus une fois par candidat de dispersion ;
+#   2. **une pente d'un bloc ne decrit pas une falaise.** Le champ d'altitude
+#      porte un octave de detail a 1e-2 : d'une colonne a la suivante, il monte
+#      et redescend de deux ou trois blocs partout, y compris au milieu d'une
+#      plaine. Mesuree a un bloc, la « pente » est ce detail et rien d'autre, et
+#      le monde entier passerait le seuil ou aucun endroit ne le passerait.
+#
+# La pente est donc prise sur un **treillis** de `CLIFF_STEP` blocs, dont les
+# sommets sont partages par toutes les colonnes de la maille : seize colonnes se
+# repartissent quatre echantillons, et ces quatre-la sont en cache. Le resultat
+# est aussi meilleur, et pas seulement moins cher — une denivellation de quatre
+# blocs sur quatre *est* une falaise la ou un bosselage d'un bloc sur un n'en
+# est pas.
+#
+# **Ce que ca coute, mesure honnetement** : amorti sur le monde, un sommet de
+# treillis est calcule toutes les seize colonnes, soit une borne haute de
+# +6 % ; sur le banc de la suite (2 048 colonnes), la mediane de cinq passes
+# est de **76,9 us avec la falaise contre 76,1 sans**, +1 %. La dispersion d'une
+# passe a l'autre est de +-6 % — plus grande que l'effet —, donc le seul
+# enonce defendable est : **le surcout est sous le bruit de mesure, et sa borne
+# haute est de six pour cent**. La version naive, elle, aurait triple le cout
+# d'une colonne, et cela se serait vu sans banc.
+#
+# **Le pas a ete essaye a huit avant d'etre ramene a quatre**, et les deux
+# mesures disent la meme chose de deux facons. La part de terre ferme qui
+# bascule en roche ne bouge pas — 4,5 % contre 4,4 % —, mais la **queue** de la
+# distribution, elle, se remplit : au-dela d'un facteur de 0,9, huit blocs
+# donnent 0,02 % des terres et quatre en donnent 0,29 %, quinze fois plus. Un
+# pas long ne mesure pas la paroi, il mesure le flanc qui la porte, et il noie
+# ce qu'on cherche precisement a distinguer.
+#
+# Ce qui l'a tranche est une capture : a huit, la frontiere entre la roche et
+# l'herbe est un decoupage a huit blocs pose en travers de terrasses qui en font
+# trois ; a quatre, elle s'engrene avec elles. Le cout de 2 % de plus par
+# colonne est paye pour cela, et pour rien d'autre.
+const CLIFF_STEP: int = 4
+
+## Pente — en blocs de denivele par bloc parcouru — qui vaut un facteur de 1.
+## A 1,0, le seuil de 0,5 de la source tombe donc sur une pente de **0,5**,
+## soit quatre blocs de denivele sur huit parcourus, vingt-sept degres moyens.
+##
+## C'est la seule valeur libre de la regle, et elle a ete **mesuree avant d'etre
+## choisie**, ce que `nextsteps.md` demandait en propres termes : « biome_stats
+## dira si le seuil de 0,5 rend 2 % ou 30 % du monde en roche ».
+##
+## Le premier essai etait a 2,0 — quarante-cinq degres, la definition qu'on
+## donne d'une falaise sans y reflechir — et il rendait **0,62 % des terres**.
+## C'est-a-dire rien : une paroi tous les quelques kilometres, invisible a
+## l'echelle ou l'on joue, et un jalon qui n'aurait servi a rien.
+##
+## La raison n'est pas le treillis, elle est le **terrain** : ce monde n'a pas
+## de parois verticales. Mesure sur huit mille colonnes en ligne, le plus grand
+## denivele d'un bloc au suivant est de **0,65 bloc**. Un relief fait de bruit
+## de valeur a interpolation cosinus est lisse par construction ; ce qu'il a de
+## plus raide est un flanc, et un flanc de montagne de ce monde est a un demi.
+## Chercher quarante-cinq degres, c'etait chercher ce qui n'existe pas.
+##
+## A 1,0 la roche prend **4,4 % des terres**, 3,4 % du monde. C'est l'ordre de
+## grandeur voulu : assez pour que chaque massif ait ses flancs nus, assez peu
+## pour qu'une colline reste verte jusqu'en haut.
+const CLIFF_SLOPE_REF: float = 1.0
+
+## Plafond du cache de sommets du treillis. Un sommet couvre 16 colonnes, donc
+## 65 536 sommets couvrent un million de colonnes, soit un carre de 1 024 blocs
+## de cote — largement l'empreinte chargee a 384 blocs de vue, empreinte de
+## dispersion comprise. Meme eviction en deux generations que le cache de
+## colonnes du generateur, et pour la meme raison qu'a l'invariant n. 5 : vider
+## d'un coup coute une reconstruction, s'auto-evincer en boucle coute le
+## chargement.
+const CLIFF_CACHE_CAP: int = 65536
+
+## Demi-domaine de la cle de cache, en indices de sommet. 2^24 sommets a quatre
+## blocs couvrent 67 millions de blocs de chaque cote de l'origine, soit huit
+## fois le decalage du monde de depart.
+const CLIFF_KEY_BIAS: int = 16777216
+
 var _p: CWWorldParams
 var _sites: CWRegionSiteGrid
 var _features: CWTileFeatureGrid
+var _cliff: Dictionary = {}
+var _cliff_prev: Dictionary = {}
+var _cliff_mutex: Mutex = Mutex.new()
 
 
 func _init(world_params: CWWorldParams, site_grid: CWRegionSiteGrid = null) -> void:
@@ -327,6 +428,72 @@ func height_at(x: int, z: int) -> float:
 func climate_at(x: int, z: int) -> Vector2:
 	var c: Vector3 = sample_column(x, z)
 	return Vector2(c.y, c.z)
+
+
+# -- Le facteur de falaise ----------------------------------------------------
+
+## Altitude d'un sommet du treillis de falaise, memoisee.
+##
+## La cle est l'indice du sommet, pas sa coordonnee : deux sommets voisins sont
+## a `CLIFF_STEP` blocs l'un de l'autre, et c'est l'indice qui se partage.
+##
+## Le decalage de `CLIFF_KEY_BIAS` rend la seconde moitie de la cle positive :
+## sans lui, un indice negatif en Z se replierait sur la cle d'un autre sommet,
+## et deux endroits du monde partageraient une altitude. Le monde reellement
+## engendre est a huit millions d'unites de l'origine et n'y touche jamais —
+## c'est exactement pourquoi ca ne se verrait pas.
+func _cliff_height(gx: int, gz: int) -> float:
+	var key: int = gx * (CLIFF_KEY_BIAS * 2) + (gz + CLIFF_KEY_BIAS)
+	_cliff_mutex.lock()
+	var hit: Variant = _cliff.get(key)
+	if hit == null:
+		hit = _cliff_prev.get(key)
+		if hit != null:
+			_cliff[key] = hit
+	_cliff_mutex.unlock()
+	if hit != null:
+		return float(hit)
+
+	# **Hors du verrou.** Un echantillon de colonne descend dans la grille
+	# d'elements de tuile, qui a son propre verrou : tenir celui-ci pendant ce
+	# temps serait la maniere la plus directe d'inventer un interblocage entre
+	# les fils de generation. Deux fils qui demandent le meme sommet le calculent
+	# donc deux fois, ce qui est sans consequence — le champ est pur.
+	var h: float = sample_column(gx * CLIFF_STEP, gz * CLIFF_STEP).x
+
+	_cliff_mutex.lock()
+	if _cliff.size() >= CLIFF_CACHE_CAP:
+		_cliff_prev = _cliff
+		_cliff = {}
+	_cliff[key] = h
+	_cliff_mutex.unlock()
+	return h
+
+
+## Facteur de falaise en (x, z), coordonnees **monde**. Zero sur un sol plat,
+## 1 pour une pente de `CLIFF_SLOPE_REF`, sans plafond au-dela.
+##
+## La pente est celle de la maille de treillis qui contient le point : on prend
+## la plus forte denivellation le long de chaque axe — et non la moyenne —,
+## parce qu'une maille dont un seul cote tombe est deja une falaise, et que la
+## moyenne la noierait dans les trois cotes plats.
+##
+## **Pure fonction de (x, z)**, memoisation mise a part. C'est ce qui permet aux
+## deux consommateurs de `CWVoxelGenerator.voxel_of` de s'accorder (invariant
+## n. 18) : le bloc genere et la requete ponctuelle mesurent la meme falaise.
+func cliff_factor(x: int, z: int) -> float:
+	@warning_ignore("integer_division")
+	var gx: int = (x if x >= 0 else x - CLIFF_STEP + 1) / CLIFF_STEP
+	@warning_ignore("integer_division")
+	var gz: int = (z if z >= 0 else z - CLIFF_STEP + 1) / CLIFF_STEP
+	var h00: float = _cliff_height(gx, gz)
+	var h10: float = _cliff_height(gx + 1, gz)
+	var h01: float = _cliff_height(gx, gz + 1)
+	var h11: float = _cliff_height(gx + 1, gz + 1)
+	var dx: float = maxf(absf(h10 - h00), absf(h11 - h01))
+	var dz: float = maxf(absf(h01 - h00), absf(h11 - h10))
+	var slope: float = sqrt(dx * dx + dz * dz) / float(CLIFF_STEP)
+	return slope / CLIFF_SLOPE_REF
 
 
 # -- Champ d'altitude ---------------------------------------------------------

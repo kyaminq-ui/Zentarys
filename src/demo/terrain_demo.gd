@@ -231,7 +231,8 @@ func _ready() -> void:
 ##
 ## `--biome` prend un index de `CWBiome` : 0 Greenlands, 1 Snowlands,
 ## 2 Deserts, 3 Jungles, 4 Lava Lands, 5 Oceans. Ce sont les memes que les
-## touches 1 a 6, decalees d'un.
+## touches 1 a 6, decalees d'un. `--ici x z` se pose a un point nomme, en
+## coordonnees monde — celles que l'ATH affiche en haut a gauche.
 func _read_cmdline() -> void:
 	var args: PackedStringArray = OS.get_cmdline_user_args()
 	var i: int = 0
@@ -254,6 +255,16 @@ func _read_cmdline() -> void:
 				if i + 1 < args.size():
 					i += 1
 					set_view_distance(int(args[i]))
+			# Se poser a un endroit **nomme**, la ou `--biome` se pose au
+			# premier endroit qui convient. Ajoute au jalon 1.13 : une falaise
+			# est un objet local, et jusque-la rien ne permettait de viser une
+			# capture — on relancait la recherche de biome jusqu'a tomber
+			# dessus. Les coordonnees sont celles de l'ATH, donc celles qu'on
+			# lit sur une capture precedente ou dans un apercu.
+			"--ici":
+				if i + 2 < args.size():
+					place_at(Vector2i(int(args[i + 1]), int(args[i + 2])))
+					i += 2
 			"--sans-arbres":
 				if trees != null:
 					trees.enabled = false
@@ -691,12 +702,20 @@ func _finish_biome_search() -> void:
 		_search_status = "%s introuvable a moins de %d zones" % [
 			CWBiome.name_of(_search_target), SEARCH_ZONE_RINGS]
 		return
-	var h: float = generator.field().sample_column(_search_result.x, _search_result.y).x
-	camera.position = Vector3(
-			float(_search_result.x - params.world_origin.x),
-			maxf(h, float(params.sea_level)) + 26.0,
-			float(_search_result.y - params.world_origin.y))
+	place_at(_search_result)
 	_search_status = ""
+
+
+## Pose la camera au-dessus d'un point du monde, en coordonnees **monde**.
+## C'est la seconde moitie de `_finish_biome_search`, extraite pour que `--ici`
+## et la recherche de biome posent la camera de la meme facon — deux hauteurs de
+## survol differentes donneraient deux captures qu'on ne peut pas comparer.
+func place_at(world_xz: Vector2i) -> void:
+	var h: float = generator.field().sample_column(world_xz.x, world_xz.y).x
+	camera.position = Vector3(
+			float(world_xz.x - params.world_origin.x),
+			maxf(h, float(params.sea_level)) + 26.0,
+			float(world_xz.y - params.world_origin.y))
 
 
 func _world_position() -> Vector2i:
@@ -877,7 +896,7 @@ func _update_hud() -> void:
 	var c: Vector3 = generator.field().sample_column(wx, wz)
 	var biome: int = CWBiome.at(c.x, c.y, c.z, params.sea_level)
 	var surface: int = CWPalette.surface_of(biome, c.x - float(params.sea_level),
-			c.y, c.z, wx, wz)
+			c.y, c.z, wx, wz, generator.field().cliff_factor(wx, wz))
 
 	var busy: String = ""
 	if _search_status != "":
