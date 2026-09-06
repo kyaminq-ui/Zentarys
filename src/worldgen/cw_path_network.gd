@@ -132,6 +132,47 @@ const RELAX_REACH: float = 420.0
 ## qui contourne un massif reste un chemin, pas un detour de deux zones.
 const LENGTH_WEIGHT: float = 0.55
 
+# -- Le trace connait les massifs (2026-09-09) --------------------------------
+#
+# Jusqu'ici la fonction de cout ignorait totalement la couche de massifs : un
+# chemin allait tout droit, et s'il rencontrait une masse de quarante blocs il
+# la percait. Le tunnel qui en sortait etait joli ; *ce n'etait pas une raison
+# pour le laisser au hasard.*
+#
+# La masse entre donc dans le cout, et le poids repond a une question qui a une
+# reponse naturelle : **percer un bloc de roche doit couter ce que couterait le
+# monter.** Le denivele est deja compte en blocs (`montee`), donc le poids est
+# de l'ordre de 1 — a 0,9, contourner est legerement prefere a percer, a
+# denivele egal.
+#
+# **Ce que ca produit n'est pas un contournement construit, et c'est mieux
+# ainsi.** La penalite etant proportionnelle a l'**epaisseur** traversee, la
+# relaxation ne fuit pas la masse : elle glisse vers la ou elle est mince,
+# c'est-a-dire vers son contour. Le trace decrit donc un arc dont le rayon suit
+# celui de la masse — un chemin de corniche — et il finit par la percer quand
+# meme lorsque le detour couterait plus cher que le tunnel. C'est le mot
+# « orbitale » du 2026-09-08, obtenu par le cout plutot que par une regle.
+const MESA_WEIGHT: float = 0.9
+
+## Pas de sondage de la masse **le long** d'un segment, en blocs.
+##
+## -- Pourquoi la masse ne se lit pas au jalon --------------------------------
+##
+## La premiere version lisait l'epaisseur **au jalon**, comme l'altitude. Elle
+## n'a presque rien change : 0,21 bloc d'epaisseur moyenne traversee contre 0,17.
+## La raison est une affaire d'echelle, et c'est la meme que celle du piege deja
+## note dans `nextsteps` — *chercher un itineraire et epouser un sol ne se font
+## pas a la meme echelle*. Les jalons sont espaces de `SEGMENT_LEN`, soit 256
+## blocs ; un massif fait 70 a 140 blocs de rayon. **Une masse tient donc tout
+## entiere entre deux jalons**, et le cout ne la voyait jamais.
+##
+## L'altitude, elle, peut se lire au jalon : c'est un champ lisse a grande
+## echelle. La masse est un objet local, et un objet local se manque.
+##
+## On integre donc l'epaisseur le long des deux segments adjacents, a 32 blocs
+## de pas — quatre sondages par rayon de massif, de quoi ne pas en manquer un.
+const MESA_PROBE: int = 48
+
 ## Nombre maximum d'agglomerations raccordees au reseau d'une zone, en plus du
 ## bourg et des donjons. Chaque noeud de plus est une arete de plus a relaxer.
 const MAX_HAMEAUX: int = 4
@@ -463,7 +504,9 @@ func _relaxe(a: Vector2i, b: Vector2i, field: CWTerrainField,
 	for _pass in RELAX_PASSES:
 		for i in range(1, n):
 			var best_c: float = _cout(hs[i - 1], hs[i], hs[i + 1],
-					px[i], pz[i], px[i - 1], pz[i - 1], px[i + 1], pz[i + 1])
+					px[i], pz[i], px[i - 1], pz[i - 1], px[i + 1], pz[i + 1],
+					_masse_arc(field, px[i], pz[i], px[i - 1], pz[i - 1],
+							px[i + 1], pz[i + 1]))
 			var best_x: float = px[i]
 			var best_z: float = pz[i]
 			var best_h: float = hs[i]
@@ -476,7 +519,9 @@ func _relaxe(a: Vector2i, b: Vector2i, field: CWTerrainField,
 				cz = clampf(cz, float(z0), float(z0 + ZONE_SIZE))
 				var ch: float = field.sample_column(int(cx), int(cz)).x
 				var c: float = _cout(hs[i - 1], ch, hs[i + 1], cx, cz,
-						px[i - 1], pz[i - 1], px[i + 1], pz[i + 1])
+						px[i - 1], pz[i - 1], px[i + 1], pz[i + 1],
+						_masse_arc(field, cx, cz, px[i - 1], pz[i - 1],
+								px[i + 1], pz[i + 1]))
 				if c < best_c:
 					best_c = c
 					best_x = cx
@@ -662,12 +707,69 @@ static func _ferme(zone: Zone, pont: PackedFloat32Array) -> void:
 
 
 ## Cout d'un point : ce qu'il fait monter, plus ce qu'il fait rallonger.
-static func _cout(h0: float, h: float, h1: float, x: float, z: float,
+## Epaisseur de massif au-dessus d'une colonne, en blocs, ou zero.
+##
+## **Pas de recursion a craindre**, et c'est ce qui autorise a l'appeler d'ici :
+## la grille de massifs echantillonne le champ d'altitude, et le champ
+## d'altitude ne consulte ni les massifs ni les chemins. La chaine va dans un
+## seul sens — chemins -> massifs -> champ — et elle ne revient pas.
+##
+## C'est du chemin **froid** : la relaxation d'une zone, une fois. Six passes sur
+## une vingtaine de jalons, deux candidats chacun, soit quelques centaines de
+## consultations par arete.
+static func _masse(field: CWTerrainField, x: int, z: int) -> float:
+	var e: int = 0
+	for m in field.mesas().mesas_at(x, z, field):
+		e = maxi(e, m.thickness(x, z))
+	return float(e)
+
+
+## Epaisseur de massif **moyenne le long des deux segments adjacents** a un
+## jalon. C'est ce que voit la fonction de cout — voir `MESA_PROBE` pour la
+## raison, qui est la seule chose interessante de cette fonction.
+static func _masse_arc(field: CWTerrainField, x: float, z: float,
 		x0: float, z0: float, x1: float, z1: float) -> float:
+	var somme: float = 0.0
+	var n: int = 0
+	# La fenetre de massifs est prise **une fois par cellule traversee**, pas une
+	# fois par sondage : deux sondages distants de 32 blocs tombent presque
+	# toujours dans la meme cellule de 512, et `mesas_at` alloue un tableau de
+	# neuf cellules a chaque appel sous verrou. Meme economie que celle du
+	# generateur sur la meme fenetre, et elle vaut cher ici — la relaxation
+	# evalue quelques centaines de candidats par arete.
+	var last_cx: int = 0x7FFFFFFF
+	var last_cz: int = 0x7FFFFFFF
+	var win: Array[CWMesa] = []
+	for bout in 2:
+		var bx: float = x0 if bout == 0 else x1
+		var bz: float = z0 if bout == 0 else z1
+		var d: float = Vector2(bx - x, bz - z).length()
+		@warning_ignore("integer_division")
+		var pas: int = maxi(1, int(d) / MESA_PROBE)
+		for k in range(1, pas + 1):
+			var t: float = float(k) / float(pas)
+			var qx: int = int(lerpf(x, bx, t))
+			var qz: int = int(lerpf(z, bz, t))
+			var ccx: int = CWMesaGrid.cell_of(qx)
+			var ccz: int = CWMesaGrid.cell_of(qz)
+			if ccx != last_cx or ccz != last_cz:
+				win = field.mesas().get_window(ccx, ccz, field)
+				last_cx = ccx
+				last_cz = ccz
+			var e: int = 0
+			for m in win:
+				e = maxi(e, m.thickness(qx, qz))
+			somme += float(e)
+			n += 1
+	return somme / float(maxi(1, n))
+
+
+static func _cout(h0: float, h: float, h1: float, x: float, z: float,
+		x0: float, z0: float, x1: float, z1: float, mass: float) -> float:
 	var montee: float = absf(h - h0) + absf(h1 - h)
 	var l: float = Vector2(x - x0, z - z0).length() \
 			+ Vector2(x1 - x, z1 - z).length()
-	return montee + l * LENGTH_WEIGHT * 0.02
+	return montee + l * LENGTH_WEIGHT * 0.02 + mass * MESA_WEIGHT
 
 
 ## Range un trace dans la zone : ses segments, et les cellules d'index qu'ils

@@ -154,6 +154,47 @@ func _init() -> void:
 		print("longueur mediane %.0f blocs, rapport de section median %.2f"
 				% [longueurs[longueurs.size() / 2],
 				sections[sections.size() / 2]])
+	# -- Ce que les chemins traversent (2026-09-09) --------------------------
+	#
+	# Depuis que la fonction de cout connait les massifs, le trace glisse vers la
+	# ou la masse est mince. On mesure ce qu'il traverse reellement : sur les
+	# segments construits de quelques zones, l'epaisseur de massif sous chaque
+	# point. C'est le seul moyen de dire si le poids fait quelque chose — un
+	# chemin qui contourne bien et un chemin qui n'a rencontre aucun massif se
+	# ressemblent beaucoup dans une capture.
+	var pts: int = 0
+	var sous: int = 0
+	var somme: float = 0.0
+	var pire: float = 0.0
+	for i in 9:
+		@warning_ignore("integer_division")
+		var zx: int = CWWorldParams.zone_of(p.start_point.x) + (i % 3) - 1
+		@warning_ignore("integer_division")
+		var zz: int = CWWorldParams.zone_of(p.start_point.y) + (i / 3) - 1
+		var zone: CWPathNetwork.Zone = f.paths().get_zone(zx, zz, f)
+		var nseg: int = zone.segments.size() / 6
+		for k in nseg:
+			# Les deux bouts du segment, plus son milieu : trois sondages par
+			# segment suffisent a dire si le reseau passe sous la roche.
+			for u in 3:
+				var t: float = float(u) * 0.5
+				var x: int = int(lerpf(zone.segments[k * 6],
+						zone.segments[k * 6 + 3], t))
+				var z: int = int(lerpf(zone.segments[k * 6 + 1],
+						zone.segments[k * 6 + 4], t))
+				var e: int = 0
+				for m in f.mesas().mesas_at(x, z, f):
+					e = maxi(e, m.thickness(x, z))
+				pts += 1
+				somme += float(e)
+				pire = maxf(pire, float(e))
+				if e > 0:
+					sous += 1
+	if pts > 0:
+		print("chemins : %d points sondes, %.1f %% sous un massif, epaisseur moyenne %.2f, pire %.0f (poids %.2f)"
+				% [pts, 100.0 * float(sous) / float(pts), somme / float(pts),
+				pire, CWPathNetwork.MESA_WEIGHT])
+
 	var line: String = "pentes  "
 	for b in 12:
 		line += " %.1f:%4.1f%%" % [b * 0.1, 100.0 * slopes[b] / maxi(n_land, 1)]

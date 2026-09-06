@@ -163,10 +163,12 @@ func _test_surplombs() -> void:
 func _caracteres(f: CWTerrainField) -> void:
 	var o: Vector2i = f.params().world_origin
 	var vus: Array[CWMesa] = []
-	for i in range(0, 26):
-		for j in range(0, 26):
-			var cx: int = CWMesaGrid.cell_of(o.x) + i - 13
-			var cz: int = CWMesaGrid.cell_of(o.y) + j - 13
+	# Douze cellules de cote suffisent : elles rendent une quarantaine de masses,
+	# assez pour un eventail, et chaque cellule de plus echantillonne le terrain.
+	for i in range(0, 12):
+		for j in range(0, 12):
+			var cx: int = CWMesaGrid.cell_of(o.x) + i - 6
+			var cz: int = CWMesaGrid.cell_of(o.y) + j - 6
 			for m in f.mesas().get_cell(cx, cz, f):
 				vus.append(m)
 	_ok("de quoi juger l'eventail des caracteres", vus.size() >= 12,
@@ -516,6 +518,44 @@ func _test_tramage() -> void:
 					x * 3 + 90000, z * 3 + 70000) == CWPalette.GRASS:
 				b += 1
 	var part: float = float(b) / float(n)
+	# -- L'alesage d'un tunnel est un cercle (2026-09-09) --------------------
+	#
+	# Le degagement rendait une hauteur constante sur toute la largeur du ruban :
+	# une fente rectangulaire. Il rend maintenant la fleche d'une voute centree
+	# sur l'axe, donc il **decroit** avec la distance a celui-ci et **deborde**
+	# la chaussee des que le rayon depasse sa demi-largeur. Les trois
+	# verifications qui suivent tiennent ces trois proprietes ; ce sont des
+	# fonctions pures, on les exerce directement.
+	var sous_terre: int = 60      # dessus de la chaussee
+	var sous_masse: int = 60 + 40 # dessus d'une masse de quarante blocs
+	var r: int = CWVoxelGenerator.tunnel_bore(sous_terre, sous_masse)
+	_ok("sous une masse, l'alesage a un rayon",
+			r >= CWPathNetwork.CLEARANCE, "%d blocs" % r)
+	# Proportionnel a la masse : deux fois plus de roche, un alesage plus large.
+	var r2: int = CWVoxelGenerator.tunnel_bore(sous_terre, 60 + 80)
+	_ok("l'alesage est proportionnel a la masse traversee", r2 > r,
+			"%d contre %d" % [r2, r])
+	# Et il garde son toit : la voute ne coupe pas la masse en deux.
+	_ok("l'alesage garde son toit",
+			sous_terre + r <= sous_masse - CWPathNetwork.TUNNEL_ROOF_MIN,
+			"voute a %d, dessus a %d" % [sous_terre + r, sous_masse])
+	# La voute decroit du centre vers le piedroit, et elle deborde la chaussee.
+	var axe: int = CWVoxelGenerator.tunnel_arch(sous_terre, sous_terre,
+			sous_masse, 0.0)
+	var bord: int = CWVoxelGenerator.tunnel_arch(sous_terre, sous_terre,
+			sous_masse, CWPathNetwork.HALF_WIDTH)
+	var dehors: int = CWVoxelGenerator.tunnel_arch(sous_terre, sous_terre,
+			sous_masse, float(r) + 1.0)
+	_ok("la voute est plus haute sur l'axe qu'au piedroit", axe > bord,
+			"%d contre %d" % [axe, bord])
+	_ok("la voute deborde la chaussee", bord > 0 and float(r)
+			> CWPathNetwork.HALF_WIDTH, "rayon %d, demi-largeur %.1f"
+			% [r, CWPathNetwork.HALF_WIDTH])
+	_ok("et elle s'arrete a son rayon", dehors == 0, "%d" % dehors)
+	# A ciel ouvert, rien de tout cela : pas de masse, pas d'alesage.
+	_ok("a ciel ouvert, il n'y a pas d'alesage",
+			CWVoxelGenerator.tunnel_bore(sous_terre, -0x7FFFFFFF) == 0)
+
 	_ok("a mi-chemin, les deux matieres se partagent le sol",
 			absf(part - 0.5) < 0.07, "%.3f" % part)
 

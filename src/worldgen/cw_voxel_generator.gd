@@ -425,27 +425,75 @@ static func road_shape(road: Vector2, ground_top: int, prof: Vector3i,
 		return Vector4i(ground_top, 1, 0,
 				maxi(roundi(road.y), water_top + CWPathNetwork.BRIDGE_CLEAR))
 	var top: int = CWPathNetwork.shaped_top(ground_top, road)
+	# Le dessus de la **chaussee**, meme hors d'elle : c'est le centre du cercle
+	# de l'alesage, et il ne depend pas de la colonne qu'on regarde.
+	var road_top: int = CWPathNetwork.shaped_top(ground_top,
+			Vector2(0.0, road.y))
 	if not on:
-		return Vector4i(top, 1, 0, DECK_NONE)
-	return Vector4i(top, top + 1, top + tunnel_height(top, slab_hi), DECK_NONE)
+		# Hors chaussee, un chemin ne creuse rien — **sauf sous une masse**,
+		# ou la voute du tunnel deborde le ruban. Sans ce debordement, un
+		# tunnel reste la fente rectangulaire que le reproche visait.
+		var arche: int = tunnel_arch(top, road_top, slab_hi, road.x)
+		if arche <= 0:
+			return Vector4i(top, 1, 0, DECK_NONE)
+		return Vector4i(top, top + 1, top + arche, DECK_NONE)
+	return Vector4i(top, top + 1,
+			top + maxi(CWPathNetwork.CLEARANCE,
+					tunnel_arch(top, road_top, slab_hi, road.x)), DECK_NONE)
 
 
-## Hauteur degagee au-dessus de la chaussee.
+## -- L'alesage d'un tunnel : un rayon, pas une hauteur -----------------------
 ##
-## A ciel ouvert, c'est `CLEARANCE` : de quoi effacer ce qui traine au-dessus du
-## chemin. **Sous un massif, c'est une part de la masse traversee** — un tunnel
-## de six blocs sous quarante blocs de roche est un terrier, pas un passage.
+## La premiere version rendait une **hauteur** : le chemin creusait une tranche
+## rectangulaire au-dessus de sa chaussee, de largeur constante. Sous quarante
+## blocs de roche, ca donne une fente, pas une arche — et c'est le reproche du
+## 2026-09-08, *« un degagement proportionnel, avec un diametre, sans couper la
+## montagne en deux »*.
 ##
-## Et il garde un toit : au moins `TUNNEL_ROOF_MIN` blocs de matiere au-dessus
-## de la voute, sinon le chemin ne perce plus le massif, il le **coupe en deux**
-## et laisse une tranchee a ciel ouvert la ou on attendait une arche.
-static func tunnel_height(top: int, slab_hi: int) -> int:
-	var mass: int = slab_hi - top
+## Le tunnel a donc un **rayon**, et sa section est un cercle centre sur l'axe de
+## la chaussee a hauteur de celle-ci. Le degagement au point de distance `d` vaut
+## `sqrt(R² - d²)` : maximal sur l'axe, nul au piedroit. La voute deborde la
+## chaussee des que `R > HALF_WIDTH`, ce qui est le cas sous toute masse un peu
+## haute — c'est ce debordement qui fait la difference entre une arche et une
+## fente.
+##
+## **Et il garde un toit.** Au moins `TUNNEL_ROOF_MIN` blocs de matiere au-dessus
+## de la voute, sinon le chemin ne perce plus le massif : il le **coupe en deux**
+## et laisse une tranchee a ciel ouvert la ou on attendait une arche. C'est la
+## seconde moitie du reproche, et elle etait deja tenue.
+
+## Rayon de l'alesage sous une masse, en blocs, ou zero s'il n'y a pas de masse
+## a percer.
+static func tunnel_bore(road_top: int, slab_hi: int) -> int:
+	var mass: int = slab_hi - road_top
 	if mass < CWPathNetwork.CLEARANCE + CWPathNetwork.TUNNEL_ROOF_MIN:
-		return CWPathNetwork.CLEARANCE
+		return 0
 	return maxi(CWPathNetwork.CLEARANCE,
 			mini(int(float(mass) * CWPathNetwork.TUNNEL_SHARE),
 					mass - CWPathNetwork.TUNNEL_ROOF_MIN))
+
+
+## Degagement au-dessus de la colonne, a la distance laterale `d` de l'axe.
+##
+## Rend zero hors de l'alesage. `top` est le dessus de **cette** colonne une fois
+## le chemin passe, `road_top` celui de la chaussee : la voute se mesure depuis
+## la chaussee — c'est un cercle, il a un centre — et le degagement se compte
+## depuis la colonne, qui est plus haute des qu'on quitte le ruban.
+static func tunnel_arch(top: int, road_top: int, slab_hi: int, d: float) -> int:
+	var r: int = tunnel_bore(road_top, slab_hi)
+	if r <= 0 or d >= float(r):
+		return 0
+	var voute: int = road_top + floori(sqrt(float(r * r) - d * d))
+	return maxi(0, voute - top)
+
+
+## Hauteur degagee au-dessus de la chaussee, sur l'axe.
+##
+## A ciel ouvert, c'est `CLEARANCE` : de quoi effacer ce qui traine au-dessus du
+## chemin. Sous un massif, c'est le rayon de l'alesage — la fleche de la voute,
+## qui est maximale la.
+static func tunnel_height(road_top: int, slab_hi: int) -> int:
+	return maxi(CWPathNetwork.CLEARANCE, tunnel_bore(road_top, slab_hi))
 
 
 ## Garde-corps : le bord exterieur du tablier. Un pont sans lui se lit comme une
