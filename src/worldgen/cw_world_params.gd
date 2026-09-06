@@ -88,7 +88,7 @@ const OFFSET_COUNT: int = 32
 ## champ d'altitude — cette couche est posee au-dessus de lui, jamais dedans.
 @export var overhangs: bool = true
 
-## Active le **reseau de chemins** (jalon 1.16) et ses ponts.
+## Active le **reseau de chemins** (jalon 1.16) et ses levees.
 @export var road_network: bool = true
 
 ## Active la **roche de pente** (la falaise, jalon 1.15).

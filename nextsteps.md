@@ -228,9 +228,6 @@ python tools/blender/generer_flore.py
 # 1.12 : à 1 voxel = 1 bloc, Blender n'apporte rien. Mêmes garde-fous.
 python tools/blender/generer_arbres.py
 
-# Regénération du lot d'ouvrages : la travée de pont, a 6 voxels par bloc.
-python tools/blender/generer_ponts.py
-
 # Regénération des neuf filons (~1 s). Python pur : à 1 voxel = 1 bloc, Blender
 # n'apporte rien. N'importe quel Python 3 fait l'affaire, celui de Blender aussi.
 "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" --background --factory-startup --python tools/blender/generer_filons.py
@@ -243,7 +240,7 @@ python tools/blender/generer_ponts.py
 # Le PNG sort dans user://shots.
 ./godot.windows.editor.double.x86_64.exe --path . scenes/terrain_demo.tscn \
     --resolution 1600x900 -- --biome 7 --shot 32 --vue 256
-#   options : --sans-arbres, --sans-flore, --sans-ponts, --sans-surplombs,
+#   options : --sans-arbres, --sans-flore, --sans-surplombs,
 #   --sans-chemins,
 #   --sans-falaise, pour isoler une couche. Les trois dernieres servent aussi a
 #   mesurer ce qu'elle coute au chargement — voir Sec. 7sexies.8.
@@ -257,7 +254,7 @@ python tools/blender/generer_ponts.py
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/mesa_stats.gd
 
 # Reperer un surplomb (deux points de vue : l'objet de loin, sa grotte de pres),
-# un pays de canyons, ou un chemin (chaussee, pont, tranchee dans un surplomb).
+# un pays de canyons, ou un chemin (chaussee, levee, tranchee dans un surplomb).
 # Les trois rendent des lignes pretes a coller derriere `--`, **sur la graine
 # 2024** — celle de la demo, invariant n. 37.
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/find_mesa.gd -- 4
@@ -475,8 +472,7 @@ src/worldgen/
   cw_biome.gd              les six biomes et la règle qui les décide (1.12)
   cw_mesa.gd               un surplomb : chapeau, socle, grottes (1.15)
   cw_mesa_grid.gd          la grille de surplombs, et les pays de canyons (1.15)
-  cw_path_network.gd       le réseau de chemins, ses portes et ses ponts (1.16)
-  cw_bridge_renderer.gd    les travées de pont, à 6 voxels par bloc (1.16)
+  cw_path_network.gd       le réseau de chemins, ses portes et ses levées (1.16)
   cw_palette.gd            palette, matières de surface, coulées de lave (1.12)
   cw_voxel_generator.gd    VoxelGeneratorScript, cache de colonnes, troncs estampes
   cw_voxel_model.gd        modèle .vox préparé : deux grilles de dessin (1.12)
@@ -504,7 +500,7 @@ tests/tree_test.gd         lot, enveloppes, grille, dispersion, espacement, mont
 tests/edit_test.gd         règles d'édition, requête ponctuelle, persistance (1.8)
 tests/light_test.gd        les deux passes, l'atténuation, les cases à repeindre (1.9)
 tests/map_test.gd          échelle, découverte, puzzle, rendu, noms (1.10)
-tests/relief_test.gd       surplombs, grottes, chemins, ponts, tramage (1.15-1.16)
+tests/relief_test.gd       surplombs, grottes, chemins, levées, tramage (1.15-1.16)
 tools/export_palette.gd    régénère assets/palette/* depuis CWPalette
 tools/biome_stats.gd       répartition des biomes et des matières, mesurée (1.12)
 tools/preview_features.gd  gros plan ombré, avec et sans la couche d'éléments
@@ -514,7 +510,7 @@ tools/preview_map.gd       aperçu de la carte, vierge et après une diagonale
 tools/mesa_stats.gd        surplombs, grottes, roche de pente, pentes (1.15)
 tools/find_mesa.gd         un surplomb et sa grotte, en points de vue (1.15)
 tools/find_canyon.gd       le pays de canyons le plus dense à portée (1.15)
-tools/find_path.gd         une chaussée, un pont, une tranchée (1.16)
+tools/find_path.gd         une chaussée, une levée, une tranchée (1.16)
 tools/blender/             générateurs des lots de modèles
   flore_vox.py               palette verbatim, écriture .vox, garde-fous
   flore_formes.py            brins, tiges, feuilles, corolles, cailloux
@@ -525,14 +521,12 @@ tools/blender/             générateurs des lots de modèles
   arbres_blocs.py            formes à la maille du bloc : disques, dômes, palmes
   generer_arbres.py          le catalogue des 24 arbres, à 1 voxel = 1 bloc
   generer_filons.py          les 9 filons, à 1 voxel = 1 bloc
-  generer_ponts.py           la travée de pont, à 6 voxels par bloc (1.16)
 docs/prompt_generation_flore.md   la commande du lot de flore
 docs/prompt_generation_arbres.md  la commande du lot d'arbres
 assets/palette/            palette de projet + PALETTE.md
 assets/models/flore/<biome>/  38 modèles, un dossier par biome (six)
 assets/models/arbres/<biome>/ 39 modèles d'arbres, à la maille du bloc
 assets/models/filons/      9 filons, estampables (1 voxel = 1 bloc)
-assets/models/structures/  le lot d'ouvrages : la travée de pont (6 vox/bloc)
 assets/models/             MODELS.md (échelle, palette et conventions)
 docs/images/               gabarit, carte et composition de flore, en jeu
 ```
@@ -3396,6 +3390,137 @@ La verification de `tests/flora_test.gd` a change de forme avec la regle. Elle
 exigeait l'egalite au sol de la colonne ; elle exige maintenant **au plus le sol,
 et jamais plus bas que `ASSIETTE_MAX`** — au-dela, le candidat aurait du etre
 ecarte, pas enterre.
+
+---
+
+## 7nonies. La quatrieme passe — **2026-09-09, seconde soiree**
+
+Trois demandes faites apres une seconde session de jeu. Elles ne corrigent pas
+des defauts d'implementation : elles **retirent** deux decisions et en changent
+une troisieme, et c'est pour ca qu'elles valent d'etre ecrites en entier.
+
+### 7nonies.1 « Les bords sont creuses, l'interieur ne l'est pas » — la chaussee
+
+Le reproche est litteral : *les bords sont bien creuses d'un bloc minimum sous le
+sol, mais l'interieur n'est pas creuse*. Il etait juste, et **aucune
+verification ne pouvait le voir** — elles mesuraient ce que le chemin *tranche
+au plus* (`MAX_CUT`), jamais ce qu'il tranche *au moins*.
+
+La mesure, avant correction, sur la zone de depart :
+
+```
+  distance a l'axe   0    1    2    3    4    5    6    7    8    9   10
+  ecart au terrain -0,26 -0,27 -0,26 -0,27 -0,25 -0,25 -0,32 -0,43 -0,67 -0,94 -1,00
+```
+
+C'est **l'inverse d'une tranchee** : une levre d'un bloc a la limite exterieure
+de l'accotement, et un ruban a peine entame au milieu. Et 35,3 % des colonnes de
+chaussee etaient carrement en **remblai**, au-dessus du terrain.
+
+**La cause est un ordre, pas une borne manquante.** `shaped_top` interpolait
+entre le terrain et *le profil*, puis rabattait le resultat d'un bloc :
+
+```
+    y     = lerp(sol, profil, t)
+    creux = sol - ceil(MIN_CUT x t)
+    rendu = min(y, creux)          # sauf si y > sol, ou l'on rendait y
+```
+
+Deux choses s'y liguaient. Le `ceil` fait de `creux` une **marche** — il vaut
+`-1` des que `t > 0`, donc a la limite exterieure de l'accotement, la ou l'on
+attendait `0` — c'est la levre. Et l'echappatoire `y > sol`, ajoutee le matin
+meme pour la rampe d'acces d'un pont, rendait le profil **sans rien rabattre** :
+le profil etant lisse, il passe au-dessus du terrain une colonne sur trois, et
+sur ces colonnes-la le chemin n'etait plus creuse du tout.
+
+La correction :
+
+```
+    creux    = sol - MIN_CUT
+    chaussee = clamp(profil, sol - MAX_CUT, creux)
+    rendu    = round(lerp(sol, chaussee, t))
+```
+
+**Le rabattement est dans la cible, et non applique par-dessus.** Il n'y a plus
+ni levre ni echappatoire, et le raccord reste continu parce qu'il n'y a plus
+qu'une seule interpolation. Apres :
+
+```
+  distance a l'axe   0    1    2    3    4    5    6    7    8    9   10
+  ecart au terrain -1,26 -1,24 -1,25 -1,27 -1,26 -1,25 -1,19 -0,88 -0,15 -0,02 +0,00
+```
+
+Un fond plat sur toute la chaussee, une berge qui remonte, et **100 % des
+colonnes de chaussee creusees** contre 64,7 % avant.
+
+### 7nonies.2 « Supprimer les ponts, remplir le gap par le chemin » — la levee
+
+*Les ponts sont trop compliques a integrer.* Ce qui part est un systeme entier,
+et c'est le plus gros retrait du jalon 1.16 :
+
+* `CWBridgeRenderer` et son noeud dans la demo ;
+* `assets/models/structures/pont_travee.vox` et `tools/blender/generer_ponts.py` ;
+* le **tablier de matiere** de `road_shape`, son garde-corps, la constante
+  `DECK_NONE`, le tableau `ColumnPatch.decks` et les deux parametres de
+  `voxel_of` qui les portaient ;
+* et l'option `--sans-ponts` de la demo.
+
+Ce qui reste tient en une phrase : **la ou le chemin rencontrait l'eau, il la
+comble.** Le remblai qui montait deja a l'approche — la rampe d'acces du pont,
+fabriquee par le lissage du profil — ne redescend plus. C'est une **levee**.
+
+> **Une levee est un barrage, et c'est dit en clair.** Ce monde ne simule pas
+> l'ecoulement, donc rien ne monte derriere elle ; mais une riviere coupee reste
+> une riviere coupee. C'etait l'argument qui avait fait choisir le pont le
+> 2026-09-07 (*« la combler ferait un barrage »*), et il est ecarte
+> deliberement : un pont qui ne s'integre pas coute plus cher au paysage qu'une
+> riviere coupee.
+
+**Le releve des franchissements reste, et il ne sert plus a la meme chose.** Il
+donnait *ou poser du bois* ; il donne maintenant *ou le chemin remblaie au lieu
+de creuser*. Trois choses ont du changer avec lui :
+
+1. **il porte deux rampes.** Le releve s'arretait au premier point sec de chaque
+   rive, et `causeway_at` tenait alors son altitude constante sur ses dix blocs
+   de portee, contre un terrain qui continuait de monter. Mesure : **5 blocs de
+   marche a la culee, 60 culees sur 135 qui ressautaient**. La levee se prolonge
+   donc jusqu'a **rencontrer le sol**, en descendant d'au plus un bloc tous les
+   deux, puis s'eteint par un **point mort** — un point d'axe si bas que
+   `maxf(span, creux)` rend `creux` des qu'on l'approche. Le raccord n'est plus
+   a accorder, il est *exact* : les deux regles rendent le meme nombre ;
+2. **sa portee laterale est celle du chemin entier**, accotement compris. Avec
+   la seule demi-chaussee, le remblai s'arretait net et la levee avait des
+   parois verticales de dix blocs ; avec `reach()`, ses flancs descendent
+   rejoindre le lit sur toute la largeur de l'accotement ;
+3. **son pas de raffinement passe de quatre blocs a un.** Quatre suffisait a un
+   tablier — il fallait seulement savoir *qu'il y avait une riviere ici*. Une
+   levee demande plus, et une mare peut faire deux blocs de large.
+
+**Et un plancher local, parce que le releve ne peut pas tout voir.** Meme au pas
+d'un bloc, il suit *l'axe du trace* : il ignore les colonnes d'accotement et les
+mares que le champ de chenaux ne signale pas. Sept colonnes de chaussee
+restaient noyees, toutes dans une mare d'un bloc de fond. `shaped_top` prend
+donc la surface libre de **sa** colonne (`CWTerrainField.free_water`, point
+unique de cette regle a trois branches, ecrite quatre fois jusque-la) et passe
+toujours deux blocs au-dessus. Le partage est net : *le releve donne la rampe*,
+qui demande de connaitre l'ouvrage entier ; *la colonne donne le plancher*, qui
+ne demande rien d'autre qu'elle.
+
+Ce que ca rend, sur les 63 franchissements de la zone de depart :
+
+| | avant (pont) | apres (levee) |
+|---|---|---|
+| plus grande marche a la culee | 2 blocs | **1 bloc** |
+| culees qui ressautent | 3 sur ~130 | **0 sur 52** |
+| colonnes de chaussee noyees | — | **0 sur 3 643** |
+| colonnes portees par du remblai | — | **3 643 sur 3 643** |
+
+**Et la verification a change de forme avec la chose.** Elle parcourait l'axe
+d'un ouvrage en relevant *le tablier s'il y en a un, la chaussee sinon* ; elle
+parcourt le meme axe en exigeant trois choses d'une levee — pas de marche a la
+culee, **le pied au-dessus de la surface libre**, et **ce qui porte le pied est
+du remblai et non le lit**. La lecon de la veille tient toujours : une marche ne
+se voit pas sur une colonne seule, elle se voit en marchant.
 
 ---
 

@@ -5,7 +5,7 @@ extends SceneTree
 ## celle de la demo, invariant n. 37.
 ##
 ## Trois sujets, parce que ce sont trois choses differentes a regarder : un
-## bout de chaussee, un **pont** au-dessus de l'eau, et une **tranchee** la ou
+## bout de chaussee, une **levee** au-dessus de l'eau, et une **tranchee** la ou
 ## le chemin traverse le socle d'un surplomb.
 ##
 ## Usage : -s tools/find_path.gd -- [graine]
@@ -35,7 +35,7 @@ func _init() -> void:
 	# Le segment le plus proche du depart, pour une capture de chaussee.
 	var best: int = 0
 	var best_d: float = INF
-	var pont: int = -1
+	var levee: int = -1
 	var tranchee: int = -1
 	for i in n:
 		var mx: float = (s[i * 6] + s[i * 6 + 3]) * 0.5
@@ -44,12 +44,12 @@ func _init() -> void:
 		if d < best_d:
 			best_d = d
 			best = i
-		if pont < 0:
+		if levee < 0:
 			var c: Vector4 = f.sample_column_full(int(mx), int(mz))
 			var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
 			var prof: Vector3i = CWTerrainField.column_profile(c.x, c.w, sea, biome)
 			if prof.y <= prof.z or c.x < float(sea):
-				pont = i
+				levee = i
 		if tranchee < 0:
 			var rel: Vector4i = CWMesaGrid.relief(
 					f.mesas().mesas_at(int(mx), int(mz), f), int(mx), int(mz),
@@ -58,10 +58,10 @@ func _init() -> void:
 				tranchee = i
 
 	_montre(f, s, best, "chaussee")
-	if pont >= 0:
-		_montre(f, s, pont, "pont")
+	if levee >= 0:
+		_montre(f, s, levee, "levee")
 	else:
-		print("# aucun pont dans cette zone")
+		print("# aucune levee dans cette zone")
 	if tranchee >= 0:
 		_montre(f, s, tranchee, "tranchee dans un surplomb")
 	else:

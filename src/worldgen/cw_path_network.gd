@@ -86,16 +86,58 @@ const TUNNEL_ROOF_MIN: int = 8
 ## de dix.
 const MIN_CUT: int = 1
 
-## Hauteur du tablier d'un pont au-dessus de la surface de l'eau.
-const BRIDGE_CLEAR: int = 2
+## Hauteur de la chaussee au-dessus de la surface libre, sur un franchissement.
+##
+## **Il n'y a plus de pont** (2026-09-09) : la ou le chemin rencontrait l'eau, il
+## la **comble**. La demande est directe — *les ponts sont trop compliques a
+## integrer, remplacer par remplir le gap par le chemin* — et ce qu'elle retire
+## est un systeme entier : un modele a six voxels par bloc, son noeud de rendu,
+## un tablier de matiere, un garde-corps, et la condition « y a-t-il un ouvrage
+## ici » qu'il fallait porter jusqu'au generateur et jusqu'aux deux dispersions.
+##
+## Ce qui reste est une **levee** : le remblai de la chaussee, qui montait deja
+## a l'approche, ne redescend plus. Deux blocs au-dessus de l'eau, pour qu'on ne
+## marche pas dedans.
+##
+## > **Ce que ca coute, et c'est dit en clair : une levee est un barrage.** Ce
+## > monde ne simule pas l'ecoulement, donc rien ne monte derriere elle — mais
+## > une riviere coupee reste une riviere coupee, et c'est le prix demande.
+const CAUSEWAY_RISE: int = 2
 
 ## Seuil du champ de chenaux au-dela duquel on ne cherche meme pas d'eau sous le
-## trace. Genereux : le champ est lisse, et rater un pont coute plus cher que
-## sonder quelques segments pour rien.
+## trace. Genereux : le champ est lisse, et rater un franchissement coute plus
+## cher que sonder quelques segments pour rien.
 const CHAN_PROCHE: float = 0.14
-## Pas du raffinement, en blocs. Quatre : une riviere de ce monde fait six blocs
-## de large au minimum, donc elle ne peut pas passer entre deux sondages.
-const BRIDGE_STEP: int = 4
+## Pas du raffinement, en blocs.
+##
+## **Un, depuis que la levee remplace le pont** (2026-09-09). Quatre suffisait a
+## un tablier : il fallait seulement savoir *qu'il y avait une riviere ici*, et
+## une riviere de ce monde fait six blocs de large. Une levee demande plus — son
+## altitude doit **rester au-dessus de la surface libre colonne par colonne**,
+## faute de quoi on marche dans l'eau — et une mare, elle, peut faire deux blocs
+## de large. Mesure a quatre : trois colonnes noyees sur 3 232 ; a un : aucune,
+## pour 0,2 s de plus sur la construction d'une zone (1,7 s a 1,9 s).
+const CROSSING_STEP: int = 1
+
+## Longueur maximale de la **rampe d'acces** ajoutee a chaque bout d'un
+## franchissement, et son pas, en blocs.
+##
+## -- Pourquoi un franchissement ne s'arrete pas a sa derniere colonne mouillee
+##
+## Le releve s'arrete au premier point sec de chaque rive, et `causeway_at`
+## tient alors son altitude constante sur toute sa portee — dix blocs de plus.
+## Le terrain, lui, ne s'arrete pas : il monte ou descend pendant ces dix blocs,
+## et la ou l'influence de la levee cesse, la chaussee retombe d'un coup sur
+## `sol - MIN_CUT`. Mesure : **5 blocs de marche a la culee, et 60 culees sur
+## 135 ressautaient**.
+##
+## La levee se prolonge donc jusqu'a **rencontrer le sol**, en descendant d'au
+## plus un bloc tous les deux : le remblai rejoint la tranchee la ou les deux
+## regles rendent le meme nombre, et le raccord n'est plus a accorder, il est
+## **exact**. C'est la meme idee que le raccord tangentiel d'un massif — une
+## surface qui rejoint une autre doit y arriver a la bonne pente, pas y tomber.
+const RAMP_LEN: int = 64
+const RAMP_STEP: int = 2
 
 ## Longueur visee d'un segment de **trace**, en unites monde, et bornes du
 ## nombre de segments par arete. C'est la maille a laquelle le chemin cherche
@@ -191,21 +233,23 @@ class Zone extends RefCounted:
 	## Cellule d'index -> indices de segment (et non decalages : l'appelant
 	## multiplie par six).
 	var index: Dictionary = {}
-	## Les **ponts** : une entree par franchissement, trois flottants par point
-	## — x, z, et l'altitude du tablier.
+	## Les **franchissements** : une entree chacun, trois flottants par point —
+	## x, z, et l'altitude de la chaussee au-dessus de l'eau.
 	##
 	## Ils sont releves au trace, la ou l'eau et le profil sont connus ensemble,
-	## et depuis le 2026-09-09 ils servent **aux deux** : la travee instanciee
-	## par `CWBridgeRenderer` et la matiere du tablier que pose
-	## `CWVoxelGenerator.road_shape`. C'etait la seule facon de les faire
-	## coincider — et surtout de donner au tablier une **etendue**. Voir
-	## `deck_at`.
-	var bridges: Array[PackedFloat32Array] = []
-	## Boite englobante de chaque ouvrage, quatre flottants : x0, z0, x1, z1,
-	## deja elargie de la demi-largeur de chaussee. Un pont couvre une poignee de
-	## colonnes du monde ; sans ce test prealable, chaque colonne de chaussee
-	## parcourrait tous les points de tous les ouvrages de sa zone.
-	var bridge_bounds: PackedFloat32Array = PackedFloat32Array()
+	## et c'est la seule chose que le generateur ait besoin de savoir d'eux : ou
+	## le chemin **comble** au lieu de creuser. Depuis le 2026-09-09 il n'y a
+	## plus de pont, donc plus de travee a instancier ni de tablier a poser — un
+	## franchissement n'est plus qu'une portion de chemin dont l'altitude est
+	## imposee par l'eau plutot que par le sol. Voir `causeway_at`.
+	var crossings: Array[PackedFloat32Array] = []
+	## Boite englobante de chaque franchissement, quatre flottants : x0, z0, x1,
+	## z1, deja elargie de la **portee** d'un chemin — accotement compris, parce
+	## que le remblai d'une levee descend rejoindre le lit par ses flancs. Un
+	## franchissement couvre une poignee de colonnes du monde ; sans ce test
+	## prealable, chaque colonne de chaussee parcourrait tous les points de tous
+	## les franchissements de sa zone.
+	var crossing_bounds: PackedFloat32Array = PackedFloat32Array()
 
 	func is_empty() -> bool:
 		return segments.is_empty()
@@ -336,15 +380,60 @@ static func on_roadway(road: Vector2) -> bool:
 
 ## Dessus de la colonne une fois le chemin passe.
 ##
-## Sur la chaussee, c'est exactement l'altitude du chemin — un ruban plat. Sur
-## l'accotement, le terrain y remonte par une courbe en S : sans elle, chaque
-## bord de chemin serait une marche verticale de plusieurs blocs, et le chemin
-## se lirait comme une tranchee.
+## -- La chaussee est **toujours** en contrebas, et l'accotement l'y rejoint ---
+##
+## Sur la chaussee, le dessus est l'altitude du profil, rabattue d'au moins
+## `MIN_CUT` sous le terrain de la colonne. Sur l'accotement, le terrain
+## redescend vers elle par une courbe en S : sans elle, chaque bord de chemin
+## serait une marche verticale de plusieurs blocs.
+##
+## > **La version precedente creusait ses bords et pas son milieu, et c'est ce
+## > qu'on voyait en jeu.** Elle interpolait entre le terrain et *le profil*,
+## > puis rabattait le resultat d'un bloc. Or le profil est lisse : il passe
+## > au-dessus du terrain une colonne sur trois, et la regle du 2026-09-09 qui
+## > autorisait le remblai pour la rampe d'un pont le laissait alors remonter
+## > sans rien rabattre du tout. Mesure sur la zone de depart : **35,3 % des
+## > colonnes de chaussee etaient en remblai**, et l'ecart moyen au terrain
+## > valait **-0,26 bloc au milieu du ruban contre -1,00 a son bord**. Un chemin
+## > avec une levre a son contour et rien au centre — exactement le reproche.
+## >
+## > **La correction est un ordre, pas une borne de plus.** On calcule d'abord
+## > l'altitude de la *chaussee dans cette colonne* — profil, borne par ce qu'un
+## > chemin s'autorise a trancher, puis rabattu sous le terrain —, et l'
+## > accotement interpole *vers elle*. Le rabattement est donc dans la cible et
+## > non applique par-dessus : il n'y a plus ni levre ni palier, la tranchee est
+## > pleine largeur, et le raccord reste continu d'un bout a l'autre.
+##
+## -- Sauf sur un franchissement, ou le chemin **comble** ---------------------
+##
+## `span` est l'altitude relevee du franchissement (`causeway_at`), et `NAN`
+## partout ailleurs. La, le chemin ne creuse pas : il remblaie, et le remblai
+## descend rejoindre le lit par l'accotement — c'est ce qui donne a une levee
+## ses flancs en pente plutot qu'un mur.
+##
+## Les deux branches se rejoignent **par construction** : la ou le remblai
+## retombe sous `creux`, `maxf` rend `creux`, qui est ce que rend l'autre
+## branche. Une culee n'a donc pas de marche, et il n'y a rien a accorder.
+##
+## -- Et un plancher **local** : on ne marche jamais dans l'eau ---------------
+##
+## `libre` est la surface libre de la colonne (`CWTerrainField.free_water`), et
+## la chaussee passe toujours `CAUSEWAY_RISE` au-dessus d'elle. Le releve des
+## franchissements ne peut pas s'en charger seul : il suit **l'axe du trace** et
+## ne connait ni les colonnes d'accotement, ni les mares que le champ de chenaux
+## ne signale pas. Mesure avec le seul releve : sept colonnes de chaussee noyees
+## sur la zone de depart, toutes dans une mare d'un bloc de fond que le gabarit
+## de raffinement n'avait pas vue.
+##
+## Le partage est donc net, et chacun fait ce qu'il sait faire : **le releve
+## donne la rampe** — la pente douce, qui demande de connaitre l'ouvrage entier
+## — et **la colonne donne le plancher**, qui ne demande rien d'autre qu'elle.
 ##
 ## **Point unique de la regle** : le generateur et les deux dispersions passent
 ## par ici, faute de quoi la flore d'accotement flotte ou s'enterre — le meme
 ## piege que le creusement des etangs au jalon 1.14.
-static func shaped_top(ground_top: int, road: Vector2) -> int:
+static func shaped_top(ground_top: int, road: Vector2, span: float = NAN,
+		libre: int = CWTerrainField.NO_WATER) -> int:
 	if road.x >= reach():
 		return ground_top
 	var t: float = clampf((reach() - road.x) / SHOULDER, 0.0, 1.0)
@@ -354,29 +443,14 @@ static func shaped_top(ground_top: int, road: Vector2) -> int:
 	# ecart au sol tous les 32 blocs, mais entre deux de ses jalons l'altitude
 	# du chemin est une corde, et le terrain a le droit d'y bomber. Mesure sur
 	# la zone de depart avant ce bornage : 4 colonnes de chaussee sur 340
-	# tranchaient plus de quatre blocs. Ce n'est pas beaucoup, et c'est
-	# exactement le genre d'ecart qui devient une paroi verticale au milieu d'un
-	# chemin. Le chemin prefere onduler.
-	var y: int = roundi(clampf(lerpf(float(ground_top), road.y, t),
-			float(ground_top - MAX_CUT), float(ground_top + MAX_FILL)))
-	# -- Sauf quand le chemin passe **au-dessus** du sol (2026-09-09) ---------
-	#
-	# La chaussee etait *toujours* en contrebas (`MIN_CUT`). C'est juste pour un
-	# chemin qui suit le terrain, et faux pour une rampe d'acces de pont : le
-	# profil y monte au-dessus du sol pour rejoindre le tablier, et forcer le
-	# ruban un bloc sous le terrain rouvrait la marche que la rampe existait
-	# pour supprimer.
-	#
-	# Quand le profil est au-dessus du sol, la chaussee est donc un **remblai**,
-	# borne par `MAX_FILL` comme le reste. C'est ce qui fait qu'une culee est en
-	# gravier et non en bois : le tablier ne sert que la ou il y a de l'eau
-	# dessous, et la rampe qui l'y amene est de la terre.
-	if y > ground_top:
-		return y
-	# Sur l'accotement, la borne se releve avec le raccord, sinon le bord du
-	# chemin serait une marche au lieu d'une pente.
-	var creux: int = ground_top - int(ceilf(float(MIN_CUT) * t))
-	return mini(y, creux)
+	# tranchaient plus de quatre blocs. Le chemin prefere onduler.
+	var creux: float = float(ground_top - MIN_CUT)
+	var chaussee: float = clampf(road.y, float(ground_top - MAX_CUT), creux)
+	if not is_nan(span):
+		chaussee = maxf(span, creux)
+	if libre != CWTerrainField.NO_WATER:
+		chaussee = maxf(chaussee, float(libre + CAUSEWAY_RISE))
+	return roundi(lerpf(float(ground_top), chaussee, t))
 
 
 # -- Construction -------------------------------------------------------------
@@ -570,8 +644,8 @@ func _relaxe(a: Vector2i, b: Vector2i, field: CWTerrainField,
 ## s'arreter a quatre blocs. Ici, il s'y arrete.
 ##
 ## **Au-dessus de l'eau, la reference n'est pas le fond mais la surface.** Sans
-## quoi le profil plongerait dans chaque riviere qu'il croise, et le tablier du
-## pont serait un escalier.
+## quoi le profil plongerait dans chaque riviere qu'il croise, et la levee qui
+## la comble serait un escalier.
 func _profil(px: PackedFloat32Array, pz: PackedFloat32Array,
 		field: CWTerrainField, zone: Zone) -> PackedFloat32Array:
 	var n: int = px.size() - 1
@@ -591,15 +665,11 @@ func _profil(px: PackedFloat32Array, pz: PackedFloat32Array,
 	sol.resize(m + 1)
 
 	var sea: int = _params.sea_level
-	# Un drapeau par point : cette portion du trace est-elle au-dessus de l'eau ?
-	# C'est ici, et nulle part ailleurs, que le profil et l'eau sont connus
-	# ensemble — les relever plus tard couterait une seconde descente dans le
-	# champ pour chaque point de chaque chemin.
-	var mouille := PackedByteArray()
-	var libre := PackedFloat32Array()
+	# Le champ de chenaux, un par point : c'est lui qui dira au releve des
+	# franchissements quels segments valent un raffinement. Le relever plus tard
+	# couterait une seconde descente dans le champ pour chaque point de chaque
+	# chemin.
 	var chan := PackedFloat32Array()
-	mouille.resize(m + 1)
-	libre.resize(m + 1)
 	chan.resize(m + 1)
 	var seg: int = 0
 	var acc: float = 0.0
@@ -622,27 +692,17 @@ func _profil(px: PackedFloat32Array, pz: PackedFloat32Array,
 		var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
 		var prof: Vector3i = CWTerrainField.column_profile(c.x, c.w, sea, biome)
 		chan[k] = c.w
-		# **Au-dessus de l'eau, le profil porte deja le degagement du pont**
-		# (2026-09-09), et non un bloc au-dessus de la surface. Sans cela, le
-		# tablier de matiere se posait a `surface + BRIDGE_CLEAR` alors que la
-		# chaussee de la rive etait a `sol - MIN_CUT` : l'ouvrage flottait, et
-		# ni le lissage ni le bornage ne pouvaient l'apprendre, la difference
-		# n'existant que dans `road_shape`.
-		#
-		# En la mettant **ici**, elle traverse le lissage et le bornage comme le
-		# reste du profil : les trois passes de lissage etalent la marche sur
-		# une centaine de blocs de part et d'autre, ce qui est exactement la
-		# rampe d'acces qu'on veut, et `road_shape` n'a plus qu'a suivre le
-		# profil.
+		# **Au-dessus de l'eau, le profil vise la surface libre et non le fond**
+		# (2026-09-09). C'est ici que la chose se decide, et nulle part ailleurs
+		# : en la mettant dans le profil, elle traverse le lissage et le bornage
+		# comme le reste du chemin, et les trois passes de lissage etalent la
+		# marche sur une centaine de blocs de part et d'autre. C'est la **rampe
+		# d'acces de la levee**, fabriquee toute seule, et `shaped_top` n'a plus
+		# qu'a suivre le profil.
 		var ref: float = float(prof.x)
-		if prof.y <= prof.z:
-			ref = float(prof.z + BRIDGE_CLEAR)
-			mouille[k] = 1
-			libre[k] = float(prof.z)
-		elif ref < float(sea):
-			ref = float(sea + BRIDGE_CLEAR)
-			mouille[k] = 1
-			libre[k] = float(sea)
+		var eau: int = CWTerrainField.free_water(prof, sea)
+		if eau != CWTerrainField.NO_WATER:
+			ref = float(eau + CAUSEWAY_RISE)
 		sol[k] = ref
 		fh[k] = ref
 
@@ -654,7 +714,7 @@ func _profil(px: PackedFloat32Array, pz: PackedFloat32Array,
 	for k in m + 1:
 		fh[k] = clampf(fh[k], sol[k] - float(MAX_CUT), sol[k] + float(MAX_FILL))
 
-	_releve_ponts(zone, field, fx, fz, fh, chan)
+	_releve_franchissements(zone, field, fx, fz, fh, chan)
 
 	var out := PackedFloat32Array()
 	out.resize((m + 1) * 3)
@@ -671,8 +731,7 @@ func _profil(px: PackedFloat32Array, pz: PackedFloat32Array,
 ##
 ## Le profil pose un jalon tous les 32 blocs. Une riviere de ce monde en fait
 ## six de large : elle passe donc **entre deux jalons** neuf fois sur dix, et le
-## premier releve n'a trouve aucun des ponts qu'on voyait en jeu — la matiere
-## du tablier, elle, se decide colonne par colonne, et elle les posait bien.
+## premier releve n'a trouve aucun des franchissements qu'on voyait en jeu.
 ##
 ## On raffine donc, mais **seulement la ou il peut y avoir de l'eau**. Le champ
 ## de chenaux est deja lu a chaque jalon (`chan`), et il est lisse : un jalon a
@@ -680,24 +739,35 @@ func _profil(px: PackedFloat32Array, pz: PackedFloat32Array,
 ## les segments dont un bout passe sous `CHAN_PROCHE`, et on y avance de quatre
 ## blocs en quatre blocs. Sur la zone de depart, cela represente moins d'un
 ## segment sur dix.
-func _releve_ponts(zone: Zone, field: CWTerrainField, fx: PackedFloat32Array,
-		fz: PackedFloat32Array, fh: PackedFloat32Array,
-		chan: PackedFloat32Array) -> void:
+##
+## -- Ce que l'altitude relevee doit contenir, depuis qu'il n'y a plus de pont -
+##
+## Elle est **plancherisee par l'eau ici meme** : `maxf(y, libre + RISE)`. Le
+## profil vise deja la surface libre, mais il est ensuite lisse et borne, et
+## une riviere plus creuse que ne le disait le jalon voisin le ferait passer
+## sous l'eau. C'est le seul endroit ou le trace et la surface libre sont connus
+## **a la maille de quatre blocs**, donc c'est ici que le plancher se pose — et
+## non dans `road_shape`, ou il l'etait tant qu'il y avait un tablier. Ainsi
+## `causeway_at` rend un nombre deja juste, et le generateur comme les deux
+## dispersions le lisent sans avoir a le corriger chacun de son cote.
+func _releve_franchissements(zone: Zone, field: CWTerrainField,
+		fx: PackedFloat32Array, fz: PackedFloat32Array,
+		fh: PackedFloat32Array, chan: PackedFloat32Array) -> void:
 	var sea: int = _params.sea_level
 	var n: int = fx.size()
-	var pont := PackedFloat32Array()
+	var passage := PackedFloat32Array()
 	var sec: int = 0
 	for k in n - 1:
 		if minf(chan[k], chan[k + 1]) > CHAN_PROCHE:
-			# Loin de tout chenal : rien a raffiner, et le pont en cours se
-			# termine.
+			# Loin de tout chenal : rien a raffiner, et le franchissement en
+			# cours se termine.
 			sec += 1
 			if sec >= 2:
-				_ferme(zone, pont)
-				pont = PackedFloat32Array()
+				_ferme(zone, passage, field)
+				passage = PackedFloat32Array()
 			continue
 		var d: float = Vector2(fx[k + 1] - fx[k], fz[k + 1] - fz[k]).length()
-		var pas: int = maxi(1, int(d) / BRIDGE_STEP)
+		var pas: int = maxi(1, int(d) / CROSSING_STEP)
 		for i in pas:
 			var t: float = float(i) / float(pas)
 			var px: float = lerpf(fx[k], fx[k + 1], t)
@@ -706,90 +776,179 @@ func _releve_ponts(zone: Zone, field: CWTerrainField, fx: PackedFloat32Array,
 			var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
 			var prof: Vector3i = CWTerrainField.column_profile(
 					c.x, c.w, sea, biome)
-			var libre: int = -0x7FFFFFFF
-			if prof.y <= prof.z:
-				libre = prof.z
-			elif prof.x < sea:
-				libre = sea
+			var libre: int = CWTerrainField.free_water(prof, sea)
 			var y: float = lerpf(fh[k], fh[k + 1], t)
-			if libre == -0x7FFFFFFF:
+			if libre == CWTerrainField.NO_WATER:
 				sec += 1
 				# Une culee de chaque cote : le premier point sec qui suit
-				# l'eau reste dans l'ouvrage, le suivant le ferme.
-				if sec == 1 and not pont.is_empty():
-					pont.append(px)
-					pont.append(pz)
-					pont.append(y)
+				# l'eau reste dans le franchissement, le suivant le ferme.
+				if sec == 1 and not passage.is_empty():
+					passage.append(px)
+					passage.append(pz)
+					passage.append(y)
 				elif sec >= 2:
-					_ferme(zone, pont)
-					pont = PackedFloat32Array()
+					_ferme(zone, passage, field)
+					passage = PackedFloat32Array()
 				continue
-			if pont.is_empty() and i > 0:
+			if passage.is_empty() and i > 0:
 				# La culee amont : le point sec juste avant l'eau.
 				var t0: float = float(i - 1) / float(pas)
-				pont.append(lerpf(fx[k], fx[k + 1], t0))
-				pont.append(lerpf(fz[k], fz[k + 1], t0))
-				pont.append(lerpf(fh[k], fh[k + 1], t0))
+				passage.append(lerpf(fx[k], fx[k + 1], t0))
+				passage.append(lerpf(fz[k], fz[k + 1], t0))
+				passage.append(lerpf(fh[k], fh[k + 1], t0))
 			sec = 0
-			pont.append(px)
-			pont.append(pz)
-			# Le profil porte deja le degagement : le relever ici une seconde
-			# fois ferait diverger la travee instanciee du tablier de matiere,
-			# qui suit `road.y`. **Un seul nombre pour les deux.**
-			pont.append(roundf(y))
-	_ferme(zone, pont)
+			passage.append(px)
+			passage.append(pz)
+			passage.append(roundf(maxf(y, float(libre + CAUSEWAY_RISE))))
+	_ferme(zone, passage, field)
 
 
-## Un ouvrage n'est garde qu'a partir de deux points : un pont d'un seul point
-## n'a pas d'axe, donc pas de lacet, donc pas de travee posable.
-static func _ferme(zone: Zone, pont: PackedFloat32Array) -> void:
-	if pont.size() < 6:
+## Un franchissement n'est garde qu'a partir de deux points : un point seul n'a
+## pas d'axe, donc rien a interpoler.
+##
+## C'est ici que la levee recoit ses **deux rampes d'acces** — voir `RAMP_LEN`.
+func _ferme(zone: Zone, passage: PackedFloat32Array,
+		field: CWTerrainField) -> void:
+	if passage.size() < 6:
 		return
-	zone.bridges.append(pont)
+	var n: int = passage.size() / 3
+	var tete := Vector2(passage[0], passage[1])
+	var queue := Vector2(passage[(n - 1) * 3], passage[(n - 1) * 3 + 1])
+	var amont: PackedFloat32Array = _rampe(field, tete,
+			tete - Vector2(passage[3], passage[4]), passage[2])
+	var aval: PackedFloat32Array = _rampe(field, queue,
+			queue - Vector2(passage[(n - 2) * 3], passage[(n - 2) * 3 + 1]),
+			passage[(n - 1) * 3 + 2])
+
+	# La rampe amont est construite du dedans vers le dehors : elle se recolle
+	# a l'envers.
+	var complet := PackedFloat32Array()
+	for i in range(amont.size() / 3 - 1, -1, -1):
+		complet.append(amont[i * 3])
+		complet.append(amont[i * 3 + 1])
+		complet.append(amont[i * 3 + 2])
+	complet.append_array(passage)
+	complet.append_array(aval)
+
+	zone.crossings.append(complet)
 	var x0: float = INF
 	var z0: float = INF
 	var x1: float = -INF
 	var z1: float = -INF
-	for i in pont.size() / 3:
-		x0 = minf(x0, pont[i * 3])
-		x1 = maxf(x1, pont[i * 3])
-		z0 = minf(z0, pont[i * 3 + 1])
-		z1 = maxf(z1, pont[i * 3 + 1])
-	zone.bridge_bounds.append(x0 - HALF_WIDTH)
-	zone.bridge_bounds.append(z0 - HALF_WIDTH)
-	zone.bridge_bounds.append(x1 + HALF_WIDTH)
-	zone.bridge_bounds.append(z1 + HALF_WIDTH)
+	for i in complet.size() / 3:
+		x0 = minf(x0, complet[i * 3])
+		x1 = maxf(x1, complet[i * 3])
+		z0 = minf(z0, complet[i * 3 + 1])
+		z1 = maxf(z1, complet[i * 3 + 1])
+	# Elargie de la **portee** du chemin et non de sa demi-largeur : le remblai
+	# d'une levee descend rejoindre le lit par l'accotement, donc le
+	# franchissement concerne des colonnes que la chaussee ne couvre pas.
+	zone.crossing_bounds.append(x0 - reach())
+	zone.crossing_bounds.append(z0 - reach())
+	zone.crossing_bounds.append(x1 + reach())
+	zone.crossing_bounds.append(z1 + reach())
 
 
-## Altitude du tablier au-dessus de (x, z), ou `NAN` si aucun ouvrage n'y passe.
+## La rampe d'acces d'un bout de levee : des points qui prolongent l'axe vers
+## l'exterieur, en descendant d'au plus un bloc tous les `RAMP_STEP`, jusqu'a
+## rencontrer `sol - MIN_CUT`.
 ##
-## -- Pourquoi le tablier vient d'ici et non d'un test par colonne -------------
+## Elle s'arrete **des que le remblai passe sous la tranchee**, et pas avant :
+## c'est la que `maxf(span, creux)` de `shaped_top` bascule sur `creux`, donc la
+## que les deux regles rendent deja le meme nombre. Au-dela, le franchissement
+## n'a plus rien a dire.
+func _rampe(field: CWTerrainField, tete: Vector2, sortant: Vector2,
+		y0: float) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	if sortant.length_squared() <= 0.0:
+		return out
+	var dir: Vector2 = sortant.normalized()
+	var sea: int = _params.sea_level
+	var y: float = y0
+	var k: int = RAMP_STEP
+	while k <= RAMP_LEN:
+		var q: Vector2 = tete + dir * float(k)
+		var c: Vector4 = field.sample_column_full(int(q.x), int(q.y))
+		var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
+		var prof: Vector3i = CWTerrainField.column_profile(c.x, c.w, sea, biome)
+		# **Une rampe qui retombe dans l'eau n'est pas une rampe.** Le releve
+		# ferme un franchissement au second point sec, et une rive peut
+		# retrouver de l'eau deux blocs plus loin — un bras mort, une mare de la
+		# berge. Tant qu'il y en a, la rampe garde son altitude au-dessus de la
+		# surface libre au lieu de descendre.
+		var eau: int = CWTerrainField.free_water(prof, sea)
+		if eau != CWTerrainField.NO_WATER:
+			y = maxf(y, float(eau + CAUSEWAY_RISE))
+			out.append(q.x)
+			out.append(q.y)
+			out.append(y)
+			k += RAMP_STEP
+			continue
+		var creux: float = float(prof.x - MIN_CUT)
+		if y <= creux:
+			out.append(q.x)
+			out.append(q.y)
+			out.append(creux)
+			break
+		y = maxf(creux, y - 1.0)
+		out.append(q.x)
+		out.append(q.y)
+		out.append(y)
+		k += RAMP_STEP
+	_eteint(out, tete, dir, k + RAMP_STEP)
+	return out
+
+
+## Ferme une rampe par un **point mort** : un point d'axe dont l'altitude est
+## si basse que `maxf(span, creux)` de `shaped_top` rend `creux` des qu'on
+## l'approche.
+##
+## Sans lui, `causeway_at` tient l'altitude du dernier point sur toute sa portee
+## — dix blocs de plus —, contre un terrain qui, lui, continue de monter et de
+## descendre. C'est ce qui restait de la marche a la culee une fois la rampe
+## posee. Avec lui, la levee s'eteint **dans** son dernier segment plutot qu'au
+## bord d'un disque.
+static func _eteint(out: PackedFloat32Array, tete: Vector2, dir: Vector2,
+		k: int) -> void:
+	if out.is_empty():
+		return
+	var q: Vector2 = tete + dir * float(k)
+	out.append(q.x)
+	out.append(q.y)
+	out.append(-1.0e9)
+
+
+## Altitude de la chaussee au-dessus de (x, z) sur un franchissement, ou `NAN`
+## si aucun n'y passe. C'est le `span` de `shaped_top`.
+##
+## -- Pourquoi le remblai vient d'ici et non d'un test par colonne -------------
 ##
 ## Il se decidait sur « y a-t-il de l'eau **sous cette colonne** ». C'est une
 ## condition qui **clignote** : sur un franchissement de la zone de depart, elle
-## changeait 140 fois d'avis la ou un pont a deux culees, et le tablier avait
-## des trous. Un pont n'est pas une propriete de colonne, c'est un **objet qui a
-## une etendue** — et cette etendue, le releve des franchissements la connait
-## depuis le jalon 1.16. Elle n'etait simplement pas lue par le generateur.
+## changeait 140 fois d'avis la ou l'ouvrage a deux culees, et il en sortait des
+## trous. Un franchissement n'est pas une propriete de colonne, c'est un **objet
+## qui a une etendue** — et cette etendue, le releve la connait depuis le jalon
+## 1.16.
 ##
-## L'altitude rendue est celle de la ligne brisee, interpolee : c'est exactement
-## le nombre dont la travee instanciee se sert, donc les deux moities de
-## l'ouvrage ne peuvent plus diverger.
-static func deck_at(zone: Zone, x: float, z: float) -> float:
-	for b in zone.bridges.size():
+## **La portee laterale est celle du chemin entier**, accotement compris. Avec
+## la seule demi-chaussee, le remblai s'arretait net a `HALF_WIDTH` et la levee
+## avait des parois verticales de dix blocs ; avec `reach()`, ses flancs
+## descendent rejoindre le lit sur toute la largeur de l'accotement, et le
+## raccord est celui de tout le reste du reseau.
+static func causeway_at(zone: Zone, x: float, z: float) -> float:
+	var portee: float = reach()
+	for b in zone.crossings.size():
 		var k: int = b * 4
-		if x < zone.bridge_bounds[k] or x > zone.bridge_bounds[k + 2] \
-				or z < zone.bridge_bounds[k + 1] \
-				or z > zone.bridge_bounds[k + 3]:
+		if x < zone.crossing_bounds[k] or x > zone.crossing_bounds[k + 2] 				or z < zone.crossing_bounds[k + 1] 				or z > zone.crossing_bounds[k + 3]:
 			continue
-		var pont: PackedFloat32Array = zone.bridges[b]
+		var passage: PackedFloat32Array = zone.crossings[b]
 		var best: float = NAN
-		var best_d2: float = HALF_WIDTH * HALF_WIDTH
-		for i in pont.size() / 3 - 1:
-			var ax: float = pont[i * 3]
-			var az: float = pont[i * 3 + 1]
-			var vx: float = pont[(i + 1) * 3] - ax
-			var vz: float = pont[(i + 1) * 3 + 1] - az
+		var best_d2: float = portee * portee
+		for i in passage.size() / 3 - 1:
+			var ax: float = passage[i * 3]
+			var az: float = passage[i * 3 + 1]
+			var vx: float = passage[(i + 1) * 3] - ax
+			var vz: float = passage[(i + 1) * 3 + 1] - az
 			var len2: float = vx * vx + vz * vz
 			var t: float = 0.0
 			if len2 > 0.0:
@@ -799,8 +958,7 @@ static func deck_at(zone: Zone, x: float, z: float) -> float:
 			var d2: float = dx * dx + dz * dz
 			if d2 < best_d2:
 				best_d2 = d2
-				best = pont[i * 3 + 2] \
-						+ (pont[(i + 1) * 3 + 2] - pont[i * 3 + 2]) * t
+				best = passage[i * 3 + 2] 						+ (passage[(i + 1) * 3 + 2] - passage[i * 3 + 2]) * t
 		if not is_nan(best):
 			return best
 	return NAN

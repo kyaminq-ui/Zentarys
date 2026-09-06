@@ -893,6 +893,25 @@ static func pond_gate(height: float, chan: float, sea: int, biome: int) -> bool:
 	return above > 0.0 and chan <= pond_gate_at(above)
 
 
+## Valeur de `free_water` qui dit « cette colonne est seche ».
+const NO_WATER: int = -0x7FFFFFFF
+
+
+## Surface libre d'une colonne : le dessus de son etang s'il en a un, le niveau
+## de la mer si son sol est dessous, `NO_WATER` sinon.
+##
+## **Point unique de la regle**, comme `pond_gate` l'est de la porte. Elle etait
+## ecrite quatre fois — dans le profil des chemins, dans le releve des
+## franchissements, dans le generateur et dans la suite — et quatre copies d'une
+## regle a trois branches, c'est trois occasions de les desaccorder.
+static func free_water(prof: Vector3i, sea: int) -> int:
+	if prof.y <= prof.z:
+		return prof.z
+	if prof.x < sea:
+		return sea
+	return NO_WATER
+
+
 ## Profil complet d'une colonne, etang compris, en altitudes de bloc
 ## **absolues**. C'est le point unique ou la porte, le niveau de la mer et la
 ## rampe se rencontrent ; tout le reste du projet passe par ici.

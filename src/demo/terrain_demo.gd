@@ -124,7 +124,6 @@ var edits: CWWorldEdits
 var stream: VoxelStream
 var flora: CWFloraRenderer
 var trees: CWFloraRenderer
-var bridges: CWBridgeRenderer
 var world_map: CWWorldMap
 var map_overlay: CWMapOverlay
 var camera: Camera3D
@@ -293,9 +292,6 @@ func _read_cmdline() -> void:
 			"--sans-falaise":
 				params.cliff_slope = false
 				generator.clear_caches()
-			"--sans-ponts":
-				if bridges != null:
-					bridges.set_enabled(false)
 			"--sans-arbres":
 				if trees != null:
 					trees.enabled = false
@@ -452,14 +448,6 @@ func _build_flora() -> void:
 	if terrain != null and terrain.has_method("get_voxel_tool"):
 		flora.set_terrain(terrain.get_voxel_tool())
 	add_child(flora)
-
-	# Les ouvrages : les travees de pont, a six voxels par bloc. Une poignee par
-	# zone, donc pas de dispersion ni de file — voir `CWBridgeRenderer`.
-	bridges = CWBridgeRenderer.new()
-	bridges.name = "Bridges"
-	bridges.view_distance = float(view_distance) + 128.0
-	bridges.setup(generator.field(), params.world_origin, camera)
-	add_child(bridges)
 
 	# La couche des arbres : le meme rendu, une autre dispersion. Elle a sa
 	# cellule (64 blocs), sa bibliotheque et sa marge — voir `CWTreeScatter`.

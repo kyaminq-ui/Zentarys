@@ -398,7 +398,13 @@ func _build_cell(cx: int, cz: int) -> Array:
 						road_zone, road_cells, float(x), float(z))
 				if CWPathNetwork.on_roadway(road):
 					continue
-				prof.x = CWPathNetwork.shaped_top(prof.x, road)
+				# Le franchissement compte autant que la chaussee : sur une
+				# levee, l'accotement est un flanc de remblai, et une touffe
+				# posee sur le lit de la riviere serait a dix blocs sous lui.
+				prof.x = CWPathNetwork.shaped_top(prof.x, road,
+						CWPathNetwork.causeway_at(road_zone, float(x),
+								float(z)),
+						CWTerrainField.free_water(prof, sea))
 			surface = CWVoxelGenerator.pond_surface(surface, biome_c, prof,
 					CWTerrainField.pond_gate(col.x, col.w, sea, biome_c))
 		# La matiere exacte du point est verifiee, comme pour la flore : le

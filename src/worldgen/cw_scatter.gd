@@ -302,7 +302,9 @@ func _sol_pose(x: int, z: int, sea: int, mesas: Array[CWMesa],
 		rel = CWMesaGrid.relief(mesas, x, z, prof.x)
 	if rel.y < rel.x and not road_cells.is_empty():
 		prof.x = CWPathNetwork.shaped_top(prof.x, CWPathNetwork.nearest(
-				road_zone, road_cells, float(x), float(z)))
+				road_zone, road_cells, float(x), float(z)),
+				CWPathNetwork.causeway_at(road_zone, float(x), float(z)),
+				CWTerrainField.free_water(prof, sea))
 	return CWVoxelGenerator.standing_top(rel, prof.x) + 1
 
 
@@ -546,7 +548,13 @@ func _build_cell(cx: int, cz: int) -> Array:
 						road_zone, road_cells, float(x), float(z))
 				if CWPathNetwork.on_roadway(road):
 					continue
-				prof.x = CWPathNetwork.shaped_top(prof.x, road)
+				# Le franchissement compte autant que la chaussee : sur une
+				# levee, l'accotement est un flanc de remblai, et une touffe
+				# posee sur le lit de la riviere serait a dix blocs sous lui.
+				prof.x = CWPathNetwork.shaped_top(prof.x, road,
+						CWPathNetwork.causeway_at(road_zone, float(x),
+								float(z)),
+						CWTerrainField.free_water(prof, sea))
 			# Sous l'eau, seul le fond marin se garnit : le reste de la flore
 			# n'aurait pas de sens et se verrait de loin a travers l'eau.
 			if c.x < float(sea) and surface != CWPalette.GRAVEL:

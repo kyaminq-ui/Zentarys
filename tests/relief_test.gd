@@ -412,7 +412,9 @@ func _test_chemins() -> void:
 	var trop: int = 0
 	var gravier: int = 0
 	var degages: int = 0
-	var ponts: int = 0
+	var levees: int = 0
+	var pas_creuses: int = 0
+	var somme_creux: int = 0
 	for i in range(0, s.size() / 6, 7):
 		var x: int = int((s[i * 6] + s[i * 6 + 3]) * 0.5)
 		var z: int = int((s[i * 6 + 1] + s[i * 6 + 4]) * 0.5)
@@ -425,20 +427,29 @@ func _test_chemins() -> void:
 		var c: Vector4 = f.sample_column_full(x, z)
 		var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
 		var prof: Vector3i = CWTerrainField.column_profile(c.x, c.w, sea, biome)
-		var shape: Vector4i = CWVoxelGenerator.road_shape(road, prof.x, prof,
-				sea, -0x7FFFFFFF,
-				CWPathNetwork.deck_at(zone, float(x), float(z)))
+		var span: float = CWPathNetwork.causeway_at(zone, float(x), float(z))
+		var shape: Vector3i = CWVoxelGenerator.road_shape(road, prof.x,
+				-0x7FFFFFFF, span, CWTerrainField.free_water(prof, sea))
 		vus += 1
-		if shape.w != CWVoxelGenerator.DECK_NONE:
-			ponts += 1
-			# Un pont passe **au-dessus** de la surface libre, jamais dedans.
-			var libre: int = prof.z if prof.y <= prof.z else sea
-			if shape.w >= libre + CWPathNetwork.BRIDGE_CLEAR:
-				degages += 1
-			continue
-		if absi(shape.x - prof.x) > maxi(CWPathNetwork.MAX_CUT,
-				CWPathNetwork.MAX_FILL):
-			trop += 1
+		# -- Le creusement, sur la **chaussee** et non sur son bord -----------
+		#
+		# C'est le reproche du 2026-09-09 : *les bords sont bien creuses d'un
+		# bloc minimum sous le sol, mais l'interieur ne l'est pas*. Il etait
+		# juste, et aucune verification ne pouvait le voir — elles mesuraient ce
+		# que le chemin **tranche au plus**, jamais ce qu'il tranche **au
+		# moins**. Mesure d'alors : 35,3 % des colonnes de chaussee etaient en
+		# remblai, et l'ecart moyen au terrain valait -0,26 bloc au milieu du
+		# ruban contre -1,00 a son bord.
+		#
+		# Un franchissement est exclu, et lui seul : la, le chemin comble.
+		if not is_nan(span):
+			levees += 1
+		else:
+			if shape.x > prof.x - CWPathNetwork.MIN_CUT:
+				pas_creuses += 1
+			somme_creux += prof.x - shape.x
+			if absi(shape.x - prof.x) > CWPathNetwork.MAX_CUT:
+				trop += 1
 		var surf: int = g.generated_voxel(x - p.world_origin.x, shape.x,
 				z - p.world_origin.y)
 		if surf == CWPalette.GRAVEL:
@@ -456,11 +467,18 @@ func _test_chemins() -> void:
 	_ok("des colonnes de chaussee ont ete trouvees", vus > 8, "%d" % vus)
 	_ok("un chemin ne tranche jamais plus de quatre blocs", trop == 0,
 			"%d colonnes sur %d" % [trop, vus])
-	_ok("la chaussee est en gravier", gravier * 4 >= (vus - ponts) * 3,
-			"%d sur %d" % [gravier, vus - ponts])
-	_ok("la chaussee est degagee, ponts compris", degages == vus,
+	# **Le contrat du creusement, et il porte sur le milieu du ruban.** Hors
+	# franchissement, aucune colonne de chaussee ne doit etre a moins de
+	# `MIN_CUT` sous le terrain qui la borde.
+	_ok("la chaussee est creusee sur toute sa largeur, et pas seulement au bord",
+			pas_creuses == 0, "%d colonnes sur %d" % [pas_creuses, vus - levees])
+	_ok("la chaussee est en gravier", gravier * 4 >= vus * 3,
+			"%d sur %d" % [gravier, vus])
+	_ok("la chaussee est degagee, levees comprises", degages == vus,
 			"%d sur %d" % [degages, vus])
-	print("     chaussee : %d colonnes sondees, dont %d en pont" % [vus, ponts])
+	print("     chaussee : %d colonnes sondees, dont %d en levee ; creusement moyen %.2f bloc"
+			% [vus, levees,
+			float(somme_creux) / float(maxi(1, vus - levees))])
 
 	# Et rien n'y pousse : c'est ce qui la rend lisible de loin.
 	var sur_chaussee: int = 0
@@ -486,75 +504,81 @@ func _test_chemins() -> void:
 				sur_chaussee += 1
 	_ok("rien ne pousse sur la chaussee", sur_chaussee == 0,
 			"%d plantes" % sur_chaussee)
-	_test_culees(f, zone, g)
+	_test_levees(f, zone, g)
 
 
-## L'ouvrage rejoint ses deux rives (2026-09-09).
+## La levee comble le gap et rejoint ses deux rives (2026-09-09).
 ##
-## **Le reproche, et pourquoi aucun test ne le voyait.** Le tablier se posait a
-## `surface + BRIDGE_CLEAR` au-dessus de l'eau et nulle part ailleurs ; la
-## chaussee de la rive etait a `sol - MIN_CUT`. Entre les deux il y avait une
-## marche, et l'ouvrage flottait. Les verifications d'alors regardaient chaque
-## colonne **isolement** — le tablier est-il au-dessus de l'eau, la chaussee
-## est-elle degagee — et une marche ne se voit pas sur une colonne seule. Elle se
-## voit en **marchant**, donc en comparant deux colonnes voisines.
+## **Il n'y a plus de pont.** La ou le chemin rencontrait l'eau, il la comble :
+## le remblai qui montait deja a l'approche ne redescend plus, et la travee de
+## bois, son noeud de rendu et son tablier de matiere sont retires.
 ##
-## C'est ce que fait celle-ci : elle parcourt l'axe d'un franchissement d'un bout
-## a l'autre, releve a chaque pas la surface sur laquelle on pose le pied — le
-## tablier s'il y en a un, la chaussee sinon — et exige qu'elle ne saute jamais
-## de plus d'un bloc.
-func _test_culees(f: CWTerrainField, zone: CWPathNetwork.Zone,
+## Ce qui se verifie ici est donc ce qu'on demande a une levee, et c'est la meme
+## chose qu'a un pont : **qu'on la traverse a pied sec et sans marche**. On
+## parcourt l'axe d'un franchissement d'un bout a l'autre, on releve a chaque pas
+## la surface sur laquelle on pose le pied, et on exige trois choses — qu'elle ne
+## saute jamais de plus d'un bloc a la culee, qu'elle passe **au-dessus de la
+## surface libre**, et qu'elle soit bien un **remblai** au milieu, sans quoi le
+## chemin plongerait dans la riviere au lieu de la combler.
+##
+## > **Une marche ne se voit pas sur une colonne seule** — c'est la lecon du
+## > 2026-09-09, et elle vaut toujours. Les verifications qui regardaient chaque
+## > colonne isolement ont laisse passer un ouvrage flottant pendant deux jours ;
+## > celle-ci compare deux colonnes qui se suivent, donc elle marche.
+func _test_levees(f: CWTerrainField, zone: CWPathNetwork.Zone,
 		g: CWVoxelGenerator) -> void:
-	if zone.bridges.is_empty():
+	if zone.crossings.is_empty():
 		_ok("une zone porte au moins un franchissement", false, "aucun")
 		return
 	_ok("une zone porte au moins un franchissement", true,
-			"%d" % zone.bridges.size())
+			"%d" % zone.crossings.size())
 
 	var sea: int = f.params().sea_level
 	var pires: int = 0
 	var pire: int = 0
 	var ou: String = ""
 	var pas_vus: int = 0
+	var mouilles: int = 0
+	var remblais: int = 0
+	var sur_eau: int = 0
 	## La plus grande marche rencontree **partout**, culee ou non. Elle n'est
 	## pas un contrat : elle est la pour qu'on sache ce que le reseau fait
 	## ailleurs, et pour qu'une regression du bornage general se voie.
 	var pire_tout: int = 0
-	for pont in zone.bridges:
-		var n: int = pont.size() / 3
+	for passage in zone.crossings:
+		var n: int = passage.size() / 3
 		if n < 2:
 			continue
-		# -- On suit l'axe de l'ouvrage, pas sa corde -------------------------
+		# -- On suit l'axe du franchissement, pas sa corde --------------------
 		#
 		# Le premier essai marchait en ligne droite du premier point au dernier.
 		# Un franchissement est **courbe** : la corde sort du ruban, y rentre, et
-		# retraverse l'eau ailleurs. Elle a rendu 141 passages bois/terre la ou
-		# un pont en a deux, et les marches qu'elle relevait etaient celles de
-		# colonnes qui ne se suivent pas.
+		# retraverse l'eau ailleurs. Les marches qu'elle relevait etaient celles
+		# de colonnes qui ne se suivent pas.
 		#
 		# On parcourt donc la ligne brisee elle-meme, bloc par bloc, prolongee
 		# de `marge` blocs de chaque cote dans l'axe de ses segments de bout —
 		# c'est la que se trouve la culee.
 		var marge: float = 48.0
 		var voie: Array[Vector2] = []
-		var d0: Vector2 = (Vector2(pont[0], pont[1])
-				- Vector2(pont[3], pont[4])).normalized()
+		var d0: Vector2 = (Vector2(passage[0], passage[1])
+				- Vector2(passage[3], passage[4])).normalized()
 		for k in range(int(marge), 0, -1):
-			voie.append(Vector2(pont[0], pont[1]) + d0 * float(k))
+			voie.append(Vector2(passage[0], passage[1]) + d0 * float(k))
 		for k in n - 1:
-			var a := Vector2(pont[k * 3], pont[k * 3 + 1])
-			var b := Vector2(pont[(k + 1) * 3], pont[(k + 1) * 3 + 1])
+			var a := Vector2(passage[k * 3], passage[k * 3 + 1])
+			var b := Vector2(passage[(k + 1) * 3], passage[(k + 1) * 3 + 1])
 			var l: int = maxi(1, int(a.distance_to(b)))
 			for j in l:
 				voie.append(a.lerp(b, float(j) / float(l)))
-		var last := Vector2(pont[(n - 1) * 3], pont[(n - 1) * 3 + 1])
-		var d1: Vector2 = (last - Vector2(pont[(n - 2) * 3],
-				pont[(n - 2) * 3 + 1])).normalized()
+		var last := Vector2(passage[(n - 1) * 3], passage[(n - 1) * 3 + 1])
+		var d1: Vector2 = (last - Vector2(passage[(n - 2) * 3],
+				passage[(n - 2) * 3 + 1])).normalized()
 		for k in range(1, int(marge) + 1):
 			voie.append(last + d1 * float(k))
 
 		var prev: int = 0x7FFFFFFF
-		var sur_bois_prev: bool = false
+		var sur_levee_prev: bool = false
 		for q in voie:
 			var x: int = int(q.x)
 			var z: int = int(q.y)
@@ -569,12 +593,29 @@ func _test_culees(f: CWTerrainField, zone: CWPathNetwork.Zone,
 			var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
 			var prof: Vector3i = CWTerrainField.column_profile(
 					c.x, c.w, sea, biome)
-			var shape: Vector4i = CWVoxelGenerator.road_shape(
-					road, prof.x, prof, sea, -0x7FFFFFFF,
-					CWPathNetwork.deck_at(zone, float(x), float(z)))
+			var span: float = CWPathNetwork.causeway_at(zone, float(x),
+					float(z))
+			var libre: int = CWTerrainField.free_water(prof, sea)
+			var shape: Vector3i = CWVoxelGenerator.road_shape(
+					road, prof.x, -0x7FFFFFFF, span, libre)
+			var sur_levee: bool = not is_nan(span)
 			# La surface sur laquelle on pose le pied.
-			var sur_bois: bool = shape.w != CWVoxelGenerator.DECK_NONE
-			var sous_pied: int = shape.w if sur_bois else shape.x
+			var sous_pied: int = shape.x
+
+			# -- Au milieu de l'eau, on marche au sec et au-dessus du lit -----
+			#
+			# `libre` est la surface libre de la colonne : l'etang s'il y en a
+			# un, la mer sinon. Les deux exigences sont distinctes — *le pied
+			# est au-dessus de l'eau* et *le chemin a bien remblaye* — parce que
+			# la seconde peut manquer sans la premiere sur une riviere peu
+			# profonde.
+			if libre != CWTerrainField.NO_WATER:
+				mouilles += 1
+				if sous_pied > libre:
+					sur_eau += 1
+				if sous_pied > prof.x:
+					remblais += 1
+
 			if prev != 0x7FFFFFFF:
 				var marche: int = absi(sous_pied - prev)
 				if marche > pire_tout:
@@ -584,9 +625,10 @@ func _test_culees(f: CWTerrainField, zone: CWPathNetwork.Zone,
 				# profil borne son ecart au sol tous les 32 blocs, et entre deux
 				# jalons `shaped_top` reprend le bornage colonne par colonne
 				# contre un terrain qui a le droit de bomber. Ce qui se juge ici
-				# est le **passage du bois a la terre**, et il n'a pas cette
-				# excuse : les deux surfaces sortent du meme profil.
-				if sur_bois != sur_bois_prev:
+				# est le **passage de la levee a la tranchee**, et il n'a pas
+				# cette excuse : les deux surfaces sortent du meme profil, et la
+				# regle de dessus les fait se rejoindre par construction.
+				if sur_levee != sur_levee_prev:
 					pas_vus += 1
 					if marche > pire:
 						pire = marche
@@ -594,26 +636,31 @@ func _test_culees(f: CWTerrainField, zone: CWPathNetwork.Zone,
 					if marche > 1:
 						pires += 1
 			prev = sous_pied
-			sur_bois_prev = sur_bois
+			sur_levee_prev = sur_levee
 	_ok("de quoi juger une culee", pas_vus >= 2,
-			"%d passages bois/terre" % pas_vus)
+			"%d entrees/sorties de levee" % pas_vus)
+	_ok("de quoi juger une levee", mouilles >= 8,
+			"%d colonnes mouillees" % mouilles)
 	# **Deux blocs au pire, et presque toujours zero.** Le contrat n'est pas
-	# « aucune marche », et il ne peut pas l'etre : le tablier est plancher par
-	# `surface + BRIDGE_CLEAR`, et une riviere plus profonde que ne le disait le
-	# jalon voisin du profil releve le bois d'un bloc ou deux au-dessus du
-	# remblai. C'est le meme seuil que l'escalade d'un massif — on monte sur
-	# deux blocs — et le chemin lui-meme fait des marches de trois ailleurs, ce
-	# que la ligne imprimee rappelle.
-	#
-	# Avant le 2026-09-09 : 103 marches, la pire de quatre blocs.
-	_ok("on passe de la rive au tablier sans marche infranchissable",
+	# « aucune marche », et il ne peut pas l'etre : l'altitude de la levee est
+	# plancheree par la surface libre au releve, et une riviere plus creuse que
+	# ne le disait le jalon voisin du profil releve le remblai d'un bloc ou deux.
+	# C'est le meme seuil que l'escalade d'un massif — on monte sur deux blocs —
+	# et le chemin lui-meme fait des marches de trois ailleurs, ce que la ligne
+	# imprimee rappelle.
+	_ok("on passe de la rive a la levee sans marche infranchissable",
 			pire <= 2, "la pire fait %d bloc(s) en %s" % [pire, ou])
 	_ok("et la culee est a niveau dans la quasi-totalite des cas",
 			pires * 20 <= pas_vus,
 			"%d culees ressautent sur %d" % [pires, pas_vus])
-	print("     culees : %d ouvrages, %d passages bois/terre, plus grande marche %d bloc(s) ; le long du chemin, %d"
-			% [zone.bridges.size(), pas_vus, pire, pire_tout])
-
+	# Les deux moities de « remplir le gap par le chemin » : on ne marche pas
+	# dans l'eau, et ce qui nous porte est bien de la matiere ajoutee.
+	_ok("on traverse l'eau a pied sec", sur_eau == mouilles,
+			"%d colonnes sur %d" % [sur_eau, mouilles])
+	_ok("et ce qui porte le pied est un remblai, pas le lit",
+			remblais == mouilles, "%d colonnes sur %d" % [remblais, mouilles])
+	print("     levees : %d franchissements, %d colonnes au-dessus de l'eau, %d entrees/sorties, plus grande marche %d bloc(s) ; le long du chemin, %d"
+			% [zone.crossings.size(), mouilles, pas_vus, pire, pire_tout])
 
 
 static func _touche(zone: CWPathNetwork.Zone, p: Vector2i, tol: float) -> bool:
