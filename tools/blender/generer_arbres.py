@@ -85,12 +85,16 @@ RACINE_ARBRES = os.path.join(fv.RACINE, "arbres")
 # Plafonds par classe, en blocs — un voxel valant un bloc, ce sont aussi des
 # voxels. Ils doublent ceux de `tests/tree_test.gd` : le generateur refuse a
 # l'ecriture, le test refuse au chargement, et les deux disent le meme nombre.
-PLAFOND_ARBRE = (34, 12)
-PLAFOND_HOUPPIER = (12, 11)
-PLAFOND_PALME = (8, 10)
+# **Portes de 40 % le 2026-09-06** avec le lot lui-meme : les arbres restaient
+# petits contre ceux du jeu d'origine, releve a l'oeil sur des captures. Un
+# plafond n'est pas une taille visee, c'est une borne — mais une borne qui ne
+# laisse pas passer la taille visee est un plafond faux.
+PLAFOND_ARBRE = (48, 18)
+PLAFOND_HOUPPIER = (20, 17)
+PLAFOND_PALME = (12, 16)
 # Une charpente porte ses branches : son rayon est celui de sa portee, pas celui
 # de son fut. Sa hauteur reste sous celle d'un arbre entier.
-PLAFOND_CHARPENTE = (34, 12)
+PLAFOND_CHARPENTE = (48, 18)
 
 # Les bouts de branche de chaque grand arbre, **en coordonnees Godot** et avant
 # rotation : (dx, dz, dy), en blocs depuis la colonne du tronc et depuis sa base.
@@ -122,9 +126,9 @@ PLAFOND_CHARPENTE = (34, 12)
 # ferme avant le sommet —, donc 6,5 pour cinq blocs. Un rapport de deux entre
 # largeur et hauteur est ce qui se lit comme une masse ; a trois pour un, c'est
 # un plateau.
-BRANCHES_GRANDES = [(9, 0, 15), (-8, 0, 13), (0, 9, 17), (0, -8, 14)]
-BRANCHES_LARGES = [(10, 0, 12), (-10, 0, 14), (0, 9, 11), (0, -9, 13)]
-BRANCHES_HAUTES = [(8, 0, 19), (-8, 0, 17), (0, 8, 21), (0, -7, 18)]
+BRANCHES_GRANDES = [(13, 0, 21), (-11, 0, 18), (0, 13, 24), (0, -11, 20)]
+BRANCHES_LARGES = [(14, 0, 17), (-14, 0, 20), (0, 13, 15), (0, -13, 18)]
+BRANCHES_HAUTES = [(11, 0, 27), (-11, 0, 24), (0, 11, 29), (0, -10, 25)]
 
 # Index autorises pour un arbre : le feuillage et l'ecorce de la plage
 # vegetation, la roche nue (pour la neige et le rocher geant), le gres et le
@@ -142,17 +146,17 @@ INDEX_ARBRES = frozenset(list(range(14, 32)) + list(range(128, 176)))
 
 def chene_tronc(g, rng):
     """Le fut du chene : trapu, deux blocs de section, douze de haut."""
-    ab.colonne(g, rng, 12, 1.6, 1.0, 149, 153, penche=0.8)
+    ab.colonne(g, rng, 17, 2.2, 1.4, 149, 153, penche=0.8)
 
 
 def chene_houppier_01(g, rng):
     """Parasol large : quinze blocs pour sept de haut."""
-    ab.houppier(g, rng, 15.0, 7.0, 128, 136, creux=2.0)
+    ab.houppier(g, rng, 21.0, 9.8, 128, 136, creux=2.0)
 
 
 def chene_houppier_02(g, rng):
     """Le meme, plus petit et plus fonce : c'est lui qui coiffe la pile."""
-    ab.houppier(g, rng, 12.0, 6.0, 130, 138, creux=1.0, bosses=0.3)
+    ab.houppier(g, rng, 16.8, 8.4, 130, 138, creux=1.0, bosses=0.3)
 
 
 def bouleau_tronc(g, rng):
@@ -170,7 +174,7 @@ def bouleau_tronc(g, rng):
     flotte. A 1,4 - 1,05, la section est une croix de cinq voxels sur toute la
     hauteur : trois blocs de large, un de moins que le chene.
     """
-    centres = ab.colonne(g, rng, 14, 1.4, 1.05, 14, 16, penche=0.5)
+    centres = ab.colonne(g, rng, 20, 2.0, 1.5, 14, 16, penche=0.5)
     for (x, y, z) in centres:
         if z % 3 == 1:
             g.pose(x + rng.choice((-1, 0, 1)), y, z, 152)
@@ -178,18 +182,18 @@ def bouleau_tronc(g, rng):
 
 def bouleau_houppier(g, rng):
     """Feuilles lime : le haut de la rampe de feuillage, le plus clair."""
-    ab.houppier(g, rng, 11.0, 6.0, 128, 131, creux=1.0, bosses=0.3)
+    ab.houppier(g, rng, 15.4, 8.4, 128, 131, creux=1.0, bosses=0.3)
 
 
 def pin(g, rng):
     """Le pin de Greenlands : vingt blocs, six plateaux."""
-    ab.conifere(g, rng, 20.0, 5.0, 133, 139, etages=6, ecorce=(150, 154),
-                fut_r=1.0)
+    ab.conifere(g, rng, 28.0, 7.0, 133, 139, etages=6, ecorce=(150, 154),
+                fut_r=1.4)
 
 
 def rocher_geant(g, rng):
     """Le Giant Rock : douze blocs de roche lichenee."""
-    ab.rocher(g, rng, 11.0, 12.0, 15, 19)
+    ab.rocher(g, rng, 15.4, 16.8, 15, 19)
     # Le lichen : la plage n'a que deux entrees, 28 clair et 29 sombre, donc il
     # se pose en taches et non en degrade.
     for (x, y, z), c in list(g.v.items()):
@@ -199,7 +203,7 @@ def rocher_geant(g, rng):
 
 def arbre_geant_tronc(g, rng):
     """Le fut de l'arbre geant : vingt-deux blocs, trois de section."""
-    ab.colonne(g, rng, 22, 2.8, 1.6, 148, 153, penche=0.6)
+    ab.colonne(g, rng, 31, 3.9, 2.2, 148, 153, penche=0.6)
     # Des contreforts au pied : c'est ce qui donne l'echelle d'en bas.
     for i in range(5):
         a = math.tau * i / 5 + rng.uniform(-0.3, 0.3)
@@ -210,7 +214,7 @@ def arbre_geant_tronc(g, rng):
 
 def arbre_geant_houppier(g, rng):
     """La couronne de l'arbre geant : vingt et un blocs de large."""
-    ab.houppier(g, rng, 21.0, 9.0, 128, 137, creux=2.0, bosses=0.18)
+    ab.houppier(g, rng, 29.4, 12.6, 128, 137, creux=2.0, bosses=0.18)
 
 
 # =============================================================================
@@ -219,21 +223,21 @@ def arbre_geant_houppier(g, rng):
 
 def pin_enneige(g, rng):
     """Le pin sous la neige : la meme pile de plateaux, blanchie au sommet."""
-    ab.conifere(g, rng, 20.0, 5.2, 134, 139, etages=6, ecorce=(151, 155),
-                fut_r=1.0)
+    ab.conifere(g, rng, 28.0, 7.3, 134, 139, etages=6, ecorce=(151, 155),
+                fut_r=1.4)
     af.neige_dessus(g, rng, part=0.7, seuil_z=3)
 
 
 def sapin_enneige(g, rng):
     """Plus court et plus serre que le pin : sept etages sur dix-sept blocs."""
-    ab.conifere(g, rng, 17.0, 4.6, 135, 139, etages=7, ecorce=(152, 155),
-                fut_r=0.9)
+    ab.conifere(g, rng, 23.8, 6.4, 135, 139, etages=7, ecorce=(152, 155),
+                fut_r=1.3)
     af.neige_dessus(g, rng, part=0.85, seuil_z=2)
 
 
 def bouleau_givre_tronc(g, rng):
     # Meme correction de section que `bouleau_tronc`.
-    centres = ab.colonne(g, rng, 12, 1.4, 1.05, 14, 16, penche=0.4)
+    centres = ab.colonne(g, rng, 17, 2.0, 1.5, 14, 16, penche=0.4)
     for (x, y, z) in centres:
         if z % 3 == 2:
             g.pose(x + rng.choice((-1, 0, 1)), y, z, 153)
@@ -249,7 +253,7 @@ def bouleau_givre_houppier(g, rng):
     geant et non comme un arbre. C'est la meme regle que pour toute la flore de
     Snowlands — voir `generer_flore.herbe_gelee`.
     """
-    ab.houppier(g, rng, 11.0, 7.0, 136, 139, creux=1.5, bosses=0.35)
+    ab.houppier(g, rng, 15.4, 9.8, 136, 139, creux=1.5, bosses=0.35)
     af.neige_dessus(g, rng, part=0.85, seuil_z=0)
 
 
@@ -264,7 +268,7 @@ def cactus_geant(g, rng):
     il est range ici parce qu'il se pose par la couche des arbres — sa taille et
     son espacement sont ceux d'un arbre, pas ceux d'une touffe.
     """
-    ab.colonne(g, rng, 10, 1.8, 1.4, 172, 175)
+    ab.colonne(g, rng, 14, 2.5, 2.0, 172, 175)
     a = rng.uniform(0.0, math.tau)
     # Les bras sortent sur **deux axes** et non sur un seul : alignes, ils
     # rendaient une plaque verte vue de face et rien du tout vue de cote.
@@ -284,15 +288,15 @@ def palmier_tronc_desert(g, rng):
     L'ecorce et non la rampe d'automne : a 145-147 le stipe rendait un poteau
     rouge brique au milieu du sable, la ou un dattier est gris-brun.
     """
-    ab.colonne(g, rng, 14, 1.2, 0.9, 150, 153, penche=1.2, derive=0.35)
+    ab.colonne(g, rng, 20, 1.7, 1.3, 150, 153, penche=1.2, derive=0.35)
 
 
 def palme_desert(g, rng):
-    ab.palme_paire(g, rng, 8.0, 133, 139)
+    ab.palme_paire(g, rng, 11.2, 133, 139)
 
 
 def palme_diagonale_desert(g, rng):
-    ab.palme_paire(g, rng, 8.0, 133, 139, diagonale=True)
+    ab.palme_paire(g, rng, 11.2, 133, 139, diagonale=True)
 
 
 # =============================================================================
@@ -305,7 +309,7 @@ def tropical_tronc(g, rng):
     Treize blocs de haut sur quatre de section au pied, un et demi au sommet.
     C'est l'evasement qui le distingue du chene, pas la hauteur.
     """
-    ab.colonne(g, rng, 13, 2.2, 1.0, 148, 152, penche=0.5)
+    ab.colonne(g, rng, 18, 3.1, 1.4, 148, 152, penche=0.5)
     for i in range(6):
         a = math.tau * i / 6 + rng.uniform(-0.35, 0.35)
         for k in range(2):
@@ -315,23 +319,23 @@ def tropical_tronc(g, rng):
 
 def tropical_houppier_01(g, rng):
     """La canopee : dix-sept blocs de large pour huit de haut."""
-    ab.houppier(g, rng, 17.0, 8.0, 129, 137, creux=2.0, bosses=0.2)
+    ab.houppier(g, rng, 23.8, 11.2, 129, 137, creux=2.0, bosses=0.2)
 
 
 def tropical_houppier_02(g, rng):
-    ab.houppier(g, rng, 14.0, 7.0, 131, 138, creux=1.5, bosses=0.28)
+    ab.houppier(g, rng, 19.6, 9.8, 131, 138, creux=1.5, bosses=0.28)
 
 
 def palmier_tronc(g, rng):
-    ab.colonne(g, rng, 15, 1.2, 0.9, 149, 153, penche=1.4, derive=0.4)
+    ab.colonne(g, rng, 21, 1.7, 1.3, 149, 153, penche=1.4, derive=0.4)
 
 
 def palme(g, rng):
-    ab.palme_paire(g, rng, 9.0, 129, 136)
+    ab.palme_paire(g, rng, 12.6, 129, 136)
 
 
 def palme_diagonale(g, rng):
-    ab.palme_paire(g, rng, 9.0, 129, 136, diagonale=True)
+    ab.palme_paire(g, rng, 12.6, 129, 136, diagonale=True)
 
 
 # =============================================================================
@@ -350,8 +354,8 @@ def arbre_epineux(g, rng):
     # Le fut garde une section de cinq voxels jusqu'en haut, et les branches
     # sont doublees a leur naissance : a 1,2 - 0,7 et a une branche d'un voxel,
     # la planche du 2026-09-06 ne montrait qu'une poignee de cubes en l'air.
-    ab.colonne(g, rng, 12, 1.4, 1.05, 153, 155, penche=0.6)
-    for z in (4, 7, 10):
+    ab.colonne(g, rng, 17, 2.0, 1.5, 153, 155, penche=0.6)
+    for z in (6, 10, 14):
         bouts = ab.branches(g, rng, (0, 0, z), 3, 3.0, 154, 155,
                             montee=0.35, ouverture=1.25, epaisse=2)
         # Les epines : un bloc plus clair au bout de chaque branche. Un arbre
@@ -366,17 +370,17 @@ def arbre_epineux(g, rng):
 
 def erable_charpente(g, rng):
     """L'erable de Greenlands : un fut clair et quatre branches portantes."""
-    ab.charpente(g, rng, 17, 1.8, 1.2, 149, 152, BRANCHES_GRANDES, penche=0.5)
+    ab.charpente(g, rng, 24, 2.5, 1.7, 149, 152, BRANCHES_GRANDES, penche=0.5)
 
 
 def erable_dome(g, rng):
     """Le houppier d'automne : or au-dessus, rouille en dessous."""
-    ab.houppier(g, rng, 10.0, 6.5, 140, 146, creux=1.0, bosses=0.28)
+    ab.houppier(g, rng, 14.0, 9.1, 140, 146, creux=1.0, bosses=0.28)
 
 
 def cerisier_charpente(g, rng):
     """Le cerisier : plus bas, plus etale, une ecorce sombre."""
-    ab.charpente(g, rng, 14, 1.6, 1.1, 151, 154, BRANCHES_LARGES, penche=0.6)
+    ab.charpente(g, rng, 20, 2.2, 1.5, 151, 154, BRANCHES_LARGES, penche=0.6)
 
 
 def cerisier_dome(g, rng):
@@ -386,73 +390,73 @@ def cerisier_dome(g, rng):
     degrade de `houppier` n'a donc que deux marches, ce qui suffit — une masse
     rose a la taille du bloc se lit a sa couleur, pas a son modele.
     """
-    ab.houppier(g, rng, 10.0, 6.5, 157, 156, creux=1.0, bosses=0.32)
+    ab.houppier(g, rng, 14.0, 9.1, 157, 156, creux=1.0, bosses=0.32)
 
 
 def saule_givre_charpente(g, rng):
     """Snowlands : un fut pale, des branches basses et larges."""
-    ab.charpente(g, rng, 15, 1.7, 1.1, 14, 17, BRANCHES_LARGES, penche=0.4)
+    ab.charpente(g, rng, 21, 2.4, 1.5, 14, 17, BRANCHES_LARGES, penche=0.4)
 
 
 def saule_givre_dome(g, rng):
     """Un dome de givre : blanc bleute, froid. Jamais l'automne (invariant 29)."""
-    ab.houppier(g, rng, 10.0, 6.5, 14, 18, creux=1.0, bosses=0.3)
+    ab.houppier(g, rng, 14.0, 9.1, 14, 18, creux=1.0, bosses=0.3)
     af.neige_dessus(g, rng, part=0.5, seuil_z=1)
 
 
 def arbre_pourpre_charpente(g, rng):
     """Snowlands : l'arbre a baies du froid, ecorce sombre."""
-    ab.charpente(g, rng, 16, 1.6, 1.1, 152, 155, BRANCHES_GRANDES, penche=0.5)
+    ab.charpente(g, rng, 22, 2.2, 1.5, 152, 155, BRANCHES_GRANDES, penche=0.5)
 
 
 def arbre_pourpre_dome(g, rng):
     """Violet : froid comme le biome, et la seule autre couleur qu'il accepte."""
-    ab.houppier(g, rng, 10.0, 6.5, 163, 162, creux=1.0, bosses=0.3)
+    ab.houppier(g, rng, 14.0, 9.1, 163, 162, creux=1.0, bosses=0.3)
 
 
 def acacia_charpente(g, rng):
     """Deserts : un fut nu et haut, des branches qui montent tard."""
-    ab.charpente(g, rng, 18, 1.5, 1.0, 148, 152, BRANCHES_HAUTES, penche=0.7)
+    ab.charpente(g, rng, 25, 2.1, 1.4, 148, 152, BRANCHES_HAUTES, penche=0.7)
 
 
 def acacia_dome(g, rng):
     """Le parasol d'acacia : **tres** plat, doré-olive, et c'est sa signature."""
-    ab.houppier(g, rng, 10.0, 6.5, 141, 145, creux=1.0, bosses=0.24)
+    ab.houppier(g, rng, 14.0, 9.1, 141, 145, creux=1.0, bosses=0.24)
 
 
 def baobab_charpente(g, rng):
     """Deserts : un tronc massif, court, et quatre branches trapues."""
-    ab.charpente(g, rng, 13, 2.6, 1.6, 149, 153, BRANCHES_LARGES, penche=0.3)
+    ab.charpente(g, rng, 18, 3.6, 2.2, 149, 153, BRANCHES_LARGES, penche=0.3)
 
 
 def baobab_dome(g, rng):
     """Une masse claire et seche : la rampe des mousses, terre cuite a olive."""
-    ab.houppier(g, rng, 10.0, 6.5, 164, 168, creux=1.0, bosses=0.35)
+    ab.houppier(g, rng, 14.0, 9.1, 164, 168, creux=1.0, bosses=0.35)
 
 
 def flamboyant_charpente(g, rng):
     """Jungles : haut, droit, l'ecorce claire des arbres tropicaux."""
-    ab.charpente(g, rng, 19, 1.8, 1.2, 148, 151, BRANCHES_HAUTES, penche=0.5)
+    ab.charpente(g, rng, 27, 2.5, 1.7, 148, 151, BRANCHES_HAUTES, penche=0.5)
 
 
 def flamboyant_dome(g, rng):
     """Rouge franc : c'est l'arbre qu'on voit d'un bout a l'autre d'une clairiere."""
-    ab.houppier(g, rng, 10.0, 6.5, 157, 156, creux=1.0, bosses=0.3)
+    ab.houppier(g, rng, 14.0, 9.1, 157, 156, creux=1.0, bosses=0.3)
 
 
 def jacaranda_charpente(g, rng):
     """Jungles : un peu plus bas que le flamboyant, plus etale."""
-    ab.charpente(g, rng, 17, 1.7, 1.1, 149, 152, BRANCHES_GRANDES, penche=0.6)
+    ab.charpente(g, rng, 24, 2.4, 1.5, 149, 152, BRANCHES_GRANDES, penche=0.6)
 
 
 def jacaranda_dome(g, rng):
     """Violet clair sur violet soutenu."""
-    ab.houppier(g, rng, 10.0, 6.5, 163, 162, creux=1.0, bosses=0.3)
+    ab.houppier(g, rng, 14.0, 9.1, 163, 162, creux=1.0, bosses=0.3)
 
 
 def arbre_de_cendre_charpente(g, rng):
     """Lava Lands : un fut de basalte, mort et dur."""
-    ab.charpente(g, rng, 15, 1.7, 1.1, 153, 155, BRANCHES_GRANDES, penche=0.8)
+    ab.charpente(g, rng, 21, 2.4, 1.5, 153, 155, BRANCHES_GRANDES, penche=0.8)
 
 
 def arbre_de_cendre_dome(g, rng):
@@ -462,18 +466,18 @@ def arbre_de_cendre_dome(g, rng):
     lecon du 2026-09-06 sur le buisson de feu, ou cinq braises tirees dans la
     masse etaient cinq voxels perdus.
     """
-    ab.houppier(g, rng, 10.0, 6.5, 25, 27, creux=1.0, bosses=0.35)
+    ab.houppier(g, rng, 14.0, 9.1, 25, 27, creux=1.0, bosses=0.35)
     _braises(g, rng, 14, 30)
 
 
 def arbre_de_braise_charpente(g, rng):
     """Lava Lands : plus haut, plus mince, presque un cierge."""
-    ab.charpente(g, rng, 18, 1.5, 1.0, 152, 155, BRANCHES_HAUTES, penche=0.6)
+    ab.charpente(g, rng, 25, 2.1, 1.4, 152, 155, BRANCHES_HAUTES, penche=0.6)
 
 
 def arbre_de_braise_dome(g, rng):
     """Un dome de feuillage incandescent : la rampe d'automne, ici a sa place."""
-    ab.houppier(g, rng, 10.0, 6.5, 140, 145, creux=1.0, bosses=0.3)
+    ab.houppier(g, rng, 14.0, 9.1, 140, 145, creux=1.0, bosses=0.3)
     _braises(g, rng, 8, 30)
 
 

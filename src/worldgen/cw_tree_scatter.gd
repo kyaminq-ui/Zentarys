@@ -122,17 +122,22 @@ const TREE_CELL_SHIFT: int = 6
 ## comparaison sur le carre de la distance, rejet du candidat le plus recent —,
 ## la valeur est celle du projet.
 ##
-## **Passe de 7 a 14 blocs au jalon 1.12**, et ce n'est pas un reglage de gout :
-## le lot d'arbres est redessine a un voxel par bloc, ses houppiers font 12 a 16
-## blocs de large la ou ils en faisaient 4,8. A 7 blocs d'ecart, deux houppiers
-## voisins se traversaient de part en part. A 14, deux couronnes de rayon 7 se
-## touchent sans se penetrer — c'est exactement la moitie de la largeur visee,
-## et c'est de la que sort le nombre.
+## **Passe de 7 a 14 au jalon 1.12, puis de 14 a 20 le 2026-09-06**, et ce n'est
+## pas un reglage de gout : la valeur est **la moitie de la largeur d'un
+## houppier**, parce que c'est l'ecart auquel deux couronnes se touchent sans se
+## penetrer. Le lot est passe de 4,8 blocs de large a 12-16, puis a 15-21 en
+## grandissant de 40 % — et l'espacement suit a chaque fois, sans quoi les
+## couronnes voisines se traversent de part en part.
+##
+## **Et la densite suit l'espacement**, c'est l'invariant n° 33 : un arbre qui
+## couvre deux fois plus de surface a densite constante ferme la foret. Le
+## rapport est celui des carres, `(20/14)^2 = 2,04`, d'ou des densites divisees
+## par deux en meme temps que ce nombre montait.
 ##
 ## La cellule doit rester grande devant lui (voir l'en-tete) : 64 / 14 fait
 ## encore 4,5 cellules de large, l'espacement mord toujours au travers des
 ## frontieres.
-const ESPACEMENT: int = 14
+const ESPACEMENT: int = 20
 
 ## Nombre moyen d'arbres par cellule de 64 blocs, soit 4 096 colonnes.
 ##
@@ -141,8 +146,8 @@ const ESPACEMENT: int = 14
 ## repere qu'on ait — la jungle est le biome le plus dense de l'original, le
 ## desert le plus vide.
 ##
-## Plafond theorique au nouvel espacement : un empilement hexagonal de disques
-## de 7 blocs de rayon dans 4 096 colonnes en tient environ **24**. Toutes les
+## Plafond theorique a l'espacement de 20 : un empilement hexagonal de disques
+## de 10 blocs de rayon dans 4 096 colonnes en tient environ **12**. Toutes les
 ## valeurs ci-dessous ont donc ete divisees a peu pres par deux en meme temps
 ## que l'espacement doublait — sans quoi la moitie des candidats de jungle
 ## seraient rejetes par l'espacement et la densite ne voudrait plus rien dire.
@@ -151,11 +156,11 @@ const ESPACEMENT: int = 14
 ## emergee porte le biome de son climat, et une colonne sous l'eau ne porte
 ## aucun arbre.
 const DENSITE: Dictionary = {
-	CWBiome.GREENLANDS: 7.0,
-	CWBiome.SNOWLANDS: 5.5,
-	CWBiome.DESERTS: 0.8,
-	CWBiome.JUNGLES: 14.0,
-	CWBiome.LAVALANDS: 0.5,
+	CWBiome.GREENLANDS: 3.5,
+	CWBiome.SNOWLANDS: 2.7,
+	CWBiome.DESERTS: 0.4,
+	CWBiome.JUNGLES: 7.0,
+	CWBiome.LAVALANDS: 0.25,
 }
 
 ## Crete de placement des arbres. Meme forme que celle de la flore, meme seuil,
@@ -190,24 +195,24 @@ const EMPILEMENT: float = 0.42
 
 ## Marge horizontale, en blocs, d'un tronc estampe autour de sa colonne.
 ##
-## **Onze depuis les grands arbres**, quatre avant eux. Un fut seul tient dans
+## **Quinze depuis les grands arbres**, quatre avant eux. Un fut seul tient dans
 ## quatre — le plus large est `tropical_tronc`, 7 blocs, soit un rayon de 3 —
 ## mais une **charpente** porte ses branches, et ses branches vont chercher le
-## houppier a dix blocs de l'axe. Ce sont des blocs de terrain comme les
+## houppier a quatorze blocs de l'axe. Ce sont des blocs de terrain comme les
 ## autres : ils s'estampent, donc ils entrent dans la marge.
 ##
 ## `trunks_in` s'en sert pour savoir quelles cellules consulter, et un test
 ## refuse qu'un modele de tronc la depasse — sans quoi une branche serait
 ## tronquee au bord d'un bloc, ce qui se verrait a peine et ne leverait rien.
-const MARGE_TRONC: int = 11
+const MARGE_TRONC: int = 15
 
 ## Hauteur maximale, en blocs, d'un tronc estampe.
 ##
 ## Sert au chemin rapide du generateur : un bloc entierement au-dessus du terrain
 ## ne peut pas etre saute tant qu'un tronc peut y monter. Verrouillee par un
-## test contre le lot reel — le plus haut est `palmier_tronc` de jungle a 15
-## blocs, soit 19 a l'echelle maximale.
-const HAUTEUR_TRONC_MAX: int = 32
+## test contre le lot reel — le plus haut est `acacia_charpente` a 30 blocs,
+## soit 38 a l'echelle maximale.
+const HAUTEUR_TRONC_MAX: int = 48
 
 ## Melangeurs propres a cette couche. Ils doivent differer de ceux de
 ## `CWScatter`, sinon un arbre et une touffe partagent leur flux de tirages et

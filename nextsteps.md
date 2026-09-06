@@ -114,9 +114,10 @@ biome, **Échap** rend la souris puis quitte.
 
 ## 3. État
 
-> **Le jalon 1 est clos.** Le dernier point ouvert — le tronc écrit dans le
-> terrain — est fait (§7), et la planche de validation des assets aussi
-> (§6quater). La porte suivante est **2.6, l'apparition**.
+> **Le jalon 1 est clos** — le tronc écrit dans le terrain (§7) et la planche de
+> validation des assets (§6quater) étaient ses deux derniers points. **La
+> prochaine session est décrite en §7bis : la falaise d'abord, puis les lacs et
+> les chemins ensemble.** 2.6, l'apparition, reste l'autre porte ouverte.
 
 Jalon 1 (le monde) : **1.1 à 1.12 sont portés, testés et vus en jeu**. Suite de
 validation : **327 vérifications, 0 échec**, ~20 s.
@@ -1343,7 +1344,37 @@ Une seule interdiction, et c'est l'invariant n° 29 : **aucune plante de
 Snowlands ne prend la rampe d'automne**. Ses deux grands arbres prennent donc le
 blanc-bleu et le violet, qui sont froids.
 
-**Deux réglages qu'il a fallu voir pour trancher**, et aucun ne se déduisait :
+**Puis deux défauts vus en regardant le paysage, et le premier touchait tout le
+lot, pas seulement les grands arbres :**
+
+1. **il manquait la moitié basse de tous les dômes.** Le profil de `houppier`
+   partait de sa largeur maximale **à la base** et ne faisait que rétrécir en
+   montant : un parasol, pas une sphère aplatie. De loin, un arbre n'avait donc
+   pas de feuillage sous ses branches — un chapeau de champignon posé sur un
+   fût, et cinq chapeaux pour un grand arbre.
+
+   > **Le défaut a survécu au jalon 1.12 parce que la note d'origine disait
+   > « dôme en parasol »**, ce qui décrivait fidèlement une capture *vue d'en
+   > haut* : d'en haut, une sphère aplatie et un parasol sont la même
+   > silhouette. Ils ne le sont plus dès qu'on est dessous, c'est-à-dire tout le
+   > temps. Le profil est maintenant un **ellipsoïde tronqué** — maximum à 42 %
+   > de la hauteur, la moitié de la largeur aux deux pôles.
+
+2. **tout le lot était trop petit** contre le jeu d'origine, relevé à l'œil sur
+   des captures. Les vingt-quatre modèles et les dix nouveaux sont **agrandis de
+   40 %** : le chêne monte à 32 blocs, l'arbre géant à 54, l'érable à 33. Les
+   plafonds suivent (`(34, 12)` → `(48, 18)` pour un arbre, `(12, 11)` →
+   `(20, 17)` pour un houppier), des deux côtés — le générateur refuse à
+   l'écriture, le test refuse au chargement.
+
+   **Et la densité suit, c'est l'invariant n° 33.** L'espacement passe de 14 à
+   **20 blocs** — la moitié de la largeur d'un houppier, l'écart auquel deux
+   couronnes se touchent sans se pénétrer — et les densités sont **divisées par
+   deux**, soit le rapport des carrés `(20/14)² = 2,04`. Sans ça, des arbres
+   deux fois plus larges à densité constante ferment la forêt : c'est
+   exactement ce qui était arrivé aux cailloux le 2026-09-06.
+
+**Deux réglages qu'il avait fallu voir pour trancher**, et aucun ne se déduisait :
 
 1. **la portée doit dépasser le rayon du dôme, pas l'égaler.** Premier essai,
    branches à 5-7 blocs et dômes de 11-13 : les cinq masses se recouvraient
@@ -1436,6 +1467,101 @@ encore dans les données du monde, et c'est elle qui bougerait la première.
 listés dans `docs/ROADMAP.md`, §1.7, « correction de sources ». Les deux qui
 comptent pour la suite : `WorldInfo_scatterObjectsInArea` **ne disperse pas
 d'objets** et `World_generateTreeRecursive` **ne génère pas d'arbres**.
+
+## 7bis. La prochaine session — **la falaise, puis les lacs et les chemins**
+
+Décidé le 2026-09-06, après la question « a-t-on prévu un jalon pour les lacs,
+les rivières, les chemins entre POI et les falaises ? ». Réponse : non, aucun des
+quatre n'a de jalon, et ils ne sont pas au même stade. L'ordre qui suit n'est pas
+un ordre de préférence, c'est celui de leurs dépendances.
+
+### 1 — La falaise, d'abord
+
+**C'est une règle de la source, quelques lignes dans `surface_of`, et elle rend
+au relief ce qu'on lui a enlevé.**
+
+`terrain_surfaceColor_blend` (@005c56e0) force le bloc **6 — la roche** quand
+« le facteur de falaise dépasse 0,5 » (`docs/systems/02`, §9.1). C'est la
+cinquième et dernière règle de la table de surface d'origine, et la seule que ce
+projet n'a pas portée. Ce qu'il manque est le **facteur** lui-même : une pente,
+mesurée sur le champ d'altitude, dont le seuil est déjà connu.
+
+Elle referme un trou ouvert volontairement le 2026-09-06 : les trois bandes
+d'altitude ont été retirées parce qu'**une matière qui ne porte rien est un trou
+dans le monde** — la roche nue et la calotte de neige rendaient des plateaux nus
+où l'on marchait sans rien rencontrer. Le raisonnement était juste et le remède
+trop large : une montagne *a* de la roche, simplement elle en a sur ses **pentes
+raides**, pas sur ses sommets plats. C'est exactement ce que dit la source, et
+`nextsteps.md` l'avait noté le jour même — « ce sera une pente à mesurer, et
+c'est probablement là que la roche nue doit revenir ».
+
+Points d'attention :
+
+- `surface_of` prend déjà `(x, z)` depuis les coulées de lave : la pente s'y
+  échantillonne sans changer de signature ;
+- `tools/biome_stats.gd` donne la répartition avant/après en douze secondes,
+  et c'est lui qui dira si le seuil de 0,5 rend 2 % ou 30 % du monde en roche ;
+- `CWDecorRules.decor_allowed` refuse déjà le décor sur la roche : une falaise
+  sera nue, et c'est **voulu** cette fois — une paroi verticale ne porte rien.
+  Le test de `decor_test.gd` qui refuse les matières nues hors Oceans et Lava
+  Lands devra apprendre cette exception, et c'est là qu'il faudra être précis :
+  l'exception est *la pente*, pas *l'altitude*.
+
+### 2 — Les lacs et les chemins, ensemble
+
+**Parce qu'ils sont littéralement la même fonction à analyser**, et parce que
+les deux butent sur la même décision.
+
+`World_generateWaterOrPathFeature` : le nom porte les deux mots. C'est elle que
+l'élément de tuile **type 12 — plan d'eau** appelle, une fois au centre de sa
+tuile, en rayon 80 × 80 et mode 6 (`docs/systems/02`, §4). Elle n'est pas
+analysée (§9.5). Le mode est un paramètre : il y a tout lieu de croire qu'un
+autre mode donne le chemin, et c'est la première chose à vérifier en la lisant.
+
+Côté chemins, il faut savoir ce qu'on cherche : **la source n'a pas de réseau de
+routes entre POI**, et c'est une correction déjà écrite (jalon 1.6). Le type 1
+n'est pas « les routes », `World_roadField` est l'aplanissement du bourg, et les
+arêtes du graphe de sites ne sont pas des voies — `site_edge_radius` reste à 0.
+Si des chemins existent dans l'original, ils passent par cette fonction-ci, à
+l'échelle d'une tuile. Un réseau reliant les bourgs d'une région serait une
+**création de ce projet**, et il faudra le dire comme tel.
+
+> **La seule vraie question d'architecture des trois : comment le monde
+> porte-t-il de l'eau au-dessus du niveau de la mer ?**
+>
+> Aujourd'hui il ne le peut pas. « L'eau n'est pas de la matière, c'est le vide
+> sous le niveau de la mer » (jalon 1.8, `docs/systems/03`) : `World_getBlockAt`
+> ne lit jamais un bloc d'eau, il rend un témoin d'eau si `z <= 0` et un témoin
+> d'air sinon, et `CWWorldEdits.erase_value` rejoue la même règle. Un lac à
+> l'altitude 40 est donc impossible **par construction**, et une rivière aussi —
+> le réseau de chenaux du jalon 1.4 creuse bien les vallées, mais rien ne les
+> remplit.
+>
+> Trois issues, et aucune n'est gratuite :
+>
+> 1. **un niveau d'eau par élément de tuile.** L'eau reste implicite, mais son
+>    niveau devient une propriété locale au lieu d'une constante globale. C'est
+>    le moins invasif et ça suffit aux lacs ; ça ne suffit pas aux rivières, qui
+>    descendent ;
+> 2. **l'eau redevient de la matière écrite**, comme au tout début. On y gagne
+>    les rivières et les cascades, on y perd la règle d'effacement de 1.8 et il
+>    faut un type de bloc qui coule ;
+> 3. **une couche d'eau séparée**, ni terrain ni décor, avec sa propre surface.
+>    C'est ce que font la plupart des moteurs voxel ; c'est aussi le plus gros
+>    morceau, et il ne ressemble à rien de ce que la source fait.
+>
+> Trancher **avant** d'écrire une ligne : les trois donnent des lacs, une seule
+> donne des rivières, et le choix se paie sur tout le reste du jalon 1.
+
+### Et 2.6 reste ouverte
+
+L'apparition n'attend rien de ce qui précède : la fonction est lue, les
+constantes de pose extraites, la couche d'éléments existe depuis 1.6 et la carte
+sait les afficher (voir la section suivante). C'est l'autre porte, et elle mène
+au jalon 2 plutôt qu'à la fin du jalon 1.
+
+---
+
 
 ## 8. Assets voxels
 

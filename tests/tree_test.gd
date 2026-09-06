@@ -22,9 +22,12 @@ extends RefCounted
 ##
 ## Le plafond de l'arbre geant (34) est plus haut que celui des autres arbres :
 ## il porte une mission, il doit se voir de loin.
-const ENV_ARBRE := Vector2i(34, 12)
-const ENV_HOUPPIER := Vector2i(12, 11)
-const ENV_PALME := Vector2i(8, 10)
+## **Portees de 40 % le 2026-09-06**, avec le lot. Elles doublent celles de
+## `tools/blender/generer_arbres.py` : le generateur refuse a l'ecriture, le test
+## refuse au chargement, et les deux disent le meme nombre.
+const ENV_ARBRE := Vector2i(48, 18)
+const ENV_HOUPPIER := Vector2i(20, 17)
+const ENV_PALME := Vector2i(12, 16)
 
 ## Les modeles qui ne sont pas des arbres entiers, et leur classe. Tout ce qui
 ## n'est pas cite est un arbre entier — troncs compris : un fut nu tient
@@ -157,11 +160,13 @@ func _test_models() -> void:
 	_ok("la bibliotheque de la flore ignore les arbres",
 			flore.max_radius_blocks <= 3,
 			"rayon max de la flore : %d blocs" % flore.max_radius_blocks)
-	# La borne haute suit le lot redessine : des houppiers de 12 a 16 blocs de
-	# large font un rayon de 6 a 8, et l'arbre geant un peu plus.
+	# La borne haute suit le lot : des houppiers de 15 a 21 blocs de large font
+	# un rayon de 8 a 11, et une **charpente** un peu plus — ses branches vont
+	# chercher le houppier a quatorze blocs de l'axe, et elles sont dans le
+	# modele du tronc. C'est elle qui fixe le maximum depuis le 2026-09-06.
 	_ok("la bibliotheque des arbres a son propre maximum",
 			lib.max_radius_blocks > flore.max_radius_blocks
-			and lib.max_radius_blocks <= 12,
+			and lib.max_radius_blocks <= 16,
 			"rayon max des arbres : %d blocs" % lib.max_radius_blocks)
 
 

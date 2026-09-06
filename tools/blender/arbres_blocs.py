@@ -141,26 +141,39 @@ def charpente(g, rng, hauteur, r_bas, r_haut, clair, sombre, branches,
 
 
 def houppier(g, rng, largeur, hauteur, clair, sombre, creux=0.0, bosses=0.22):
-    """Un dome en parasol : **plus large que haut**, et c'est la forme.
+    """Une **sphere aplatie** : plus large que haute, et ronde des deux cotes.
 
-    Sur les captures du jeu d'origine, un houppier est un chapeau de champignon
-    ou un parasol, de 10 a 18 blocs de large pour la moitie de haut. Le lot du
-    2026-09-05 les faisait aussi hauts que larges, ce qui rendait des boules :
-    des boules empilees font un arbre en brochette, pas une canopee.
+    -- Ce que c'etait, et pourquoi ca ne marchait pas -------------------------
 
-    Le dessous est **legerement creuse** (`creux`) : c'est ce qu'on voit d'en
-    bas quand on marche sous l'arbre, et un dome plein y montre une soucoupe.
+    C'etait un **parasol** : le profil partait de sa largeur maximale a la base
+    et ne faisait que retrecir en montant. Vu de loin, un arbre n'avait donc pas
+    de feuillage sous ses branches — juste un chapeau de champignon pose sur un
+    fut, et cinq chapeaux pour un grand arbre. Le defaut a survecu au jalon 1.12
+    parce que la note d'origine disait « dome en parasol », ce qui decrivait
+    fidelement une capture *vue d'en haut* : d'en haut, une sphere aplatie et un
+    parasol sont la meme silhouette. Ils ne le sont plus des qu'on est dessous,
+    c'est-a-dire tout le temps.
+
+    Le profil est donc un **ellipsoide tronque** : maximum a 42 % de la hauteur
+    — un peu sous le milieu, le feuillage est plus lourd du bas —, et la moitie
+    de la largeur aux deux poles. Le facteur 0,86 est ce qui tronque : a 1,0 le
+    dome se fermerait en pointe en haut comme en bas, ce qui ferait une toupie.
+
+    Le dessous garde son `creux`, qui est autre chose : quelques blocs evides au
+    centre de la face inferieure, la ou passe le tronc.
     """
     rx = largeur / 2.0
     rz = hauteur
     ph = rng.uniform(0.0, math.tau)
     ph2 = rng.uniform(0.0, math.tau)
     for z in range(int(math.ceil(rz))):
-        # Le profil : large au premier tiers, arrondi au sommet. Une demi-sphere
-        # donnerait un dome trop haut et trop regulier.
+        # Le profil : une ellipse en coupe, maximum a 42 % de la hauteur et
+        # tronquee aux deux poles. Voir la note ci-dessus — c'est ici que le
+        # parasol est devenu une sphere aplatie.
         t = z / max(1.0, rz - 1.0)
-        r = rx * math.sqrt(max(0.0, 1.0 - (0.35 + 0.65 * t) ** 2.4))
-        r = max(r, rx * 0.25 * (1.0 - t))
+        c = 0.42
+        u = (t - c) / (c if t < c else (1.0 - c))
+        r = rx * math.sqrt(max(0.0, 1.0 - (0.86 * u) ** 2))
         if r < 0.6:
             continue
         n = int(math.ceil(r)) + 1

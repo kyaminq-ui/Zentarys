@@ -797,6 +797,22 @@ givré, arbre pourpre, acacia, baobab, flamboyant, jacaranda, arbre de cendre,
 arbre de braise. L'invariant n° 29 tient : les deux espèces de Snowlands
 prennent le blanc-bleu et le violet, jamais l'orange d'automne.
 
+**Le lot entier est corrigé et agrandi le même jour**, sur deux défauts vus en
+regardant le paysage :
+
+- **il manquait la moitié basse de tous les dômes.** Le profil de `houppier`
+  partait de sa largeur maximale *à la base* et ne faisait que rétrécir : un
+  parasol, pas une sphère aplatie. Le défaut a traversé le jalon 1.12 parce que
+  la note d'origine disait « dôme en parasol », ce qui décrivait fidèlement une
+  capture **vue d'en haut** — d'en haut, une sphère aplatie et un parasol ont la
+  même silhouette. Ils ne l'ont plus dès qu'on est dessous. Le profil est
+  désormais un ellipsoïde tronqué, maximum à 42 % de la hauteur ;
+- **les arbres étaient trop petits** contre ceux de l'original. Tout le lot est
+  **agrandi de 40 %** — le chêne à 32 blocs, l'arbre géant à 54 —, les plafonds
+  suivent des deux côtés, l'espacement passe de 14 à 20 blocs et **les densités
+  sont divisées par deux** : invariant n° 33, un arbre qui couvre deux fois plus
+  de surface à densité constante ferme la forêt.
+
 **Ce qui reste :**
 
 - **la collision n'est pas branchée.** Le terrain de la démo a
