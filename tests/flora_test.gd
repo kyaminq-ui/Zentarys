@@ -89,6 +89,29 @@ func _test_models() -> void:
 	_ok("tous les modeles de la table sont sur le disque (%d entrees)" % entries,
 			missing.is_empty(), str(missing))
 
+	# -- Le morcellement, verrouille le 2026-09-06 ---------------------------
+	#
+	# Un modele fait de cubes qui ne se touchent pas flotte : la planche de
+	# validation (`scenes/model_portraits.tscn`) en a montre dix sur trente-huit,
+	# dont une fougere en douze morceaux. Aucune verification ne pouvait
+	# broncher — un modele morcele charge, se maille et se pose comme un autre —,
+	# et pourtant c'est le seul des defauts d'assets releves qui se **mesure**.
+	# Il est donc ici, et non dans une relecture de plus.
+	#
+	# Le voisinage est celui des 26 voisins : deux voxels qui ne se touchent que
+	# par un coin comptent pour attaches, ce qui laisse passer le grain voulu
+	# d'une plante aeree et ne signale que l'ilot detache.
+	var morceles: Array = []
+	for nom in lib.loaded_names():
+		var mm: CWVoxelModel = lib.model(nom)
+		if mm == null:
+			continue
+		var n: int = _morceaux(mm)
+		if n > 1:
+			morceles.append("%s: %d" % [nom, n])
+	_ok("aucun modele de flore n'est morcele", morceles.is_empty(),
+			str(morceles))
+
 	var grass: Array = lib.for_biome(CWBiome.GREENLANDS)
 	if grass.is_empty():
 		_skip("chargement d'un modele", "aucun modele pour Greenlands")
@@ -657,6 +680,37 @@ func _bench_cells(sc: CWScatter, origin: Vector2i) -> void:
 ## Les modeles distincts de la bibliotheque. Les noms portent le dossier de
 ## biome, donc trois `caillou_01` sont bien trois modeles ; deux biomes qui
 ## pointeraient le meme chemin n'en donneraient qu'un.
+## Nombre de morceaux d'un modele, en 26-voisinage. Un modele d'un seul tenant
+## en rend un.
+##
+## Le meme calcul que `tools/inspect_model.gd`, ecrit sur les offsets plutot que
+## sur un `VoxelBuffer` : ici on tient le modele charge, et le relire du disque
+## pour le compter serait verifier autre chose que ce que le jeu pose.
+func _morceaux(m: CWVoxelModel) -> int:
+	var dx: PackedInt32Array = m.offsets_x(0)
+	var dy: PackedInt32Array = m.offsets_y(0)
+	var dz: PackedInt32Array = m.offsets_z(0)
+	var reste: Dictionary = {}
+	for i in m.voxel_count:
+		reste[Vector3i(dx[i], dy[i], dz[i])] = true
+	var morceaux: int = 0
+	while not reste.is_empty():
+		var depart: Vector3i = reste.keys()[0]
+		reste.erase(depart)
+		var pile: Array[Vector3i] = [depart]
+		while not pile.is_empty():
+			var c: Vector3i = pile.pop_back()
+			for ax in [-1, 0, 1]:
+				for ay in [-1, 0, 1]:
+					for az in [-1, 0, 1]:
+						var q: Vector3i = c + Vector3i(ax, ay, az)
+						if reste.has(q):
+							reste.erase(q)
+							pile.append(q)
+		morceaux += 1
+	return morceaux
+
+
 func _distinct_models(lib: CWModelLibrary) -> Array:
 	var seen: Dictionary = {}
 	var out: Array = []

@@ -927,6 +927,34 @@ profils en Z des modèles, remèdes vérifiés en capture. Détail en
 couche des arbres). **Débloque :** six biomes qu'on peut nommer, et un contenu
 par biome qui n'est plus une liste de matières de sol.
 
+#### La planche de validation des assets — 2026-09-06, après les remaniements de rendu
+
+Trois sessions de suite, chaque défaut d'asset avait été trouvé par hasard, en
+jouant, une fois le lot déjà commité. `scenes/model_portraits.tscn` pose la
+question dans l'autre sens : **une capture par modèle, seul, sur un damier
+neutre d'un bloc de maille, sous deux angles** — plus un quatrième lot, les
+arbres **montés** par `CWTreeScatter`, c'est-à-dire ce que le jeu pose et non ce
+que le générateur écrit. 84 sujets en 5,6 secondes, sans terrain à streamer.
+
+**Vingt-sept modèles sur soixante et onze ont été regénérés.** Ce que la planche a
+appris tient en une phrase : *la moitié de ce qu'on croyait devoir regarder se
+comptait*. Treize modèles étaient faits de cubes qui ne se touchent pas — la
+fougère en douze morceaux — parce que onze fonctions de dessin échantillonnaient
+un arc sur son étendue **horizontale** alors qu'il montait trois fois plus haut.
+Rien dans les nombres ne bronchait : boîte englobante, compte de voxels et
+plages de palette étaient tous justes. C'est désormais un invariant vérifié
+(`tests/flora_test.gd`, 26-voisinage, invariant n° 34), rapporté par
+`tools/inspect_model.gd` et par les générateurs à chaque écriture.
+
+Les sept autres défauts demandaient bien un œil, et aucun n'était détectable
+autrement : les sept fleurs du lot étaient des **panneaux de signalisation**
+(une corolle était un disque plat sur une tige) ; ce qu'on posait *sur* une
+masse — baies, piments, braises — était en fait tiré *dedans*, donc invisible,
+et le buisson de feu se lisait comme un rocher noir ; et deux fûts de bouleau
+tenaient sur **un bloc de section** sur quatorze de haut, parce qu'un rayon de
+1,0 décroissant ne garde qu'un voxel par étage. Verdict modèle par modèle,
+mesures et remèdes dans `nextsteps.md`, §6quater.
+
 ---
 
 ## Jalon 2 — Créatures et combat
@@ -999,7 +1027,8 @@ sans valeur tant que les jalons 2 et 3 ne sont pas là.
 
 | Sujet | Statut | Détail |
 |---|---|---|
-| Suite de tests headless | ✅ | 297 vérifications, `tests/worldgen_test.gd` |
+| Suite de tests headless | ✅ | 316 vérifications, `tests/worldgen_test.gd` |
+| Planche de validation des assets | ✅ | `scenes/model_portraits.tscn` : un modèle par capture, seul, deux angles, plus les arbres **montés** ; 84 sujets en 5,6 s |
 | Gabarit d'échelle en jeu | ✅ | `src/demo/scale_board.gd`, capture automatique ; mires en blocs et modèles à la grille fine |
 | Capture différée de la démo | ✅ | `TerrainDemo.auto_shot_delay` + `--quit-after` : regarder une couche sans piloter la fenêtre |
 | Flore instanciée (MultiMesh par cellule) | ✅ | `src/worldgen/cw_flora_renderer.gd`, 1,1 ms/cellule hors fil principal |
@@ -1009,7 +1038,7 @@ sans valeur tant que les jalons 2 et 3 ne sont pas là.
 | Éclairage et LOD des modèles instanciés | ⬜ | ni la flore ni les arbres ne profitent de l'éclairage voxel (1.9) ni d'une réduction en distance ; `CWVoxelModel.reduced(n)` est prêt et n'a toujours aucun usage. Les arbres, posés depuis le 2026-09-05, sont le premier modèle assez gros pour la justifier |
 | Aperçu de la carte hors du jeu | ✅ | `tools/preview_map.gd`, vierge et parcourue |
 | Cache disque des dalles de carte | ⬜ | 43 ms la dalle, recalculée à chaque session ; l'original la compresse en base |
-| Inventaire des modèles `.vox` | ✅ | `tools/inspect_model.gd`, contrôle des plages de palette |
+| Inventaire des modèles `.vox` | ✅ | `tools/inspect_model.gd` : plages de palette, échelle par lot, et **compte de morceaux** |
 | Aperçu rapproché des éléments | ✅ | `tools/preview_features.gd`, avec et sans la couche |
 | Aperçus PNG (altitude, climat, chenaux) | ✅ | `user://worldgen_preview/` |
 | Arrêt immédiat du streaming | ✅ | `CWVoxelGenerator.request_shutdown()`, 23 ms → 1 µs par bloc en file |

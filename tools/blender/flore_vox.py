@@ -142,6 +142,70 @@ class Grille:
                     if dx * dx + dy * dy + dz * dz <= r * r:
                         self.pose(cx + dx, cy + dy, cz + dz, c)
 
+    def morceaux(self):
+        """Les morceaux du modele, en **26-voisinage**, le plus gros d'abord.
+
+        Deux voxels qui ne se touchent que par un coin comptent pour attaches :
+        c'est ce qui laisse passer le grain voulu — une ombelle de baies, une
+        touffe aeree — et ne signale que l'ilot vraiment detache.
+        """
+        reste = set(self.v)
+        out = []
+        while reste:
+            depart = reste.pop()
+            pile, amas = [depart], {depart}
+            while pile:
+                x, y, z = pile.pop()
+                for dz in (-1, 0, 1):
+                    for dy in (-1, 0, 1):
+                        for dx in (-1, 0, 1):
+                            q = (x + dx, y + dy, z + dz)
+                            if q in reste:
+                                reste.discard(q)
+                                amas.add(q)
+                                pile.append(q)
+            out.append(amas)
+        out.sort(key=len, reverse=True)
+        return out
+
+    def soude(self):
+        """Rattache au corps principal tout morceau qui flotte. Rend le nombre
+        de voxels ajoutes.
+
+        -- Pourquoi une passe, et pas une correction par forme ----------------
+
+        La planche de validation du 2026-09-06 a montre une dizaine de plantes
+        faites de cubes qui ne se touchent pas : la fougere sortait en douze
+        morceaux dont le plus gros portait 38 % de la matiere, le cotonnier en
+        cinq de quatre voxels. De pres, ces modeles ne lisent pas comme une
+        plante grenee mais comme des confettis qui flottent — et le defaut est
+        le meme dans onze fonctions de dessin ecrites separement.
+
+        Le rattachement est un **petiole** : la ligne la plus courte entre le
+        morceau et le corps, peinte de la couleur du morceau. C'est ce qu'une
+        plante fait elle-meme — une feuille tient par sa queue —, et cela ne
+        change ni la silhouette ni les couleurs, seulement ce qui les relie.
+
+        Ce que la passe ne fait pas : elle ne rapproche rien. Un morceau pose
+        loin reste loin et sort avec une longue tige, ce qui se voit — c'est le
+        signe qu'il faut corriger la forme et non la soudure.
+        """
+        amas = self.morceaux()
+        if len(amas) < 2:
+            return 0
+        corps = set(amas[0])
+        poses = 0
+        for m in amas[1:]:
+            a, b = min(((p, q) for p in m for q in corps),
+                       key=lambda pq: _carre(pq[0], pq[1]))
+            for x, y, z in _segment(a, b):
+                if (x, y, z) not in self.v:
+                    self.v[(x, y, z)] = self.v[a]
+                    poses += 1
+                corps.add((x, y, z))
+            corps |= m
+        return poses
+
     def fusionne(self, autre):
         self.v.update(autre.v)
 
@@ -165,6 +229,24 @@ class Grille:
                   for (x, y, z), c in sorted(self.v.items())]
         size = (hi[0] - lo[0] + 1, hi[1] - lo[1] + 1, hi[2] - lo[2] + 1)
         return voxels, size
+
+
+def _carre(a, b):
+    return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2)
+
+
+def _segment(a, b):
+    """Les voxels strictement entre a et b, en pas de Tchebychev.
+
+    Un pas par coordonnee dominante : deux voisins du chemin ne different que
+    de un sur chaque axe, donc le chemin est attache au sens du 26-voisinage.
+    """
+    n = max(abs(b[0] - a[0]), abs(b[1] - a[1]), abs(b[2] - a[2]))
+    for i in range(1, n):
+        t = i / float(n)
+        yield (int(round(a[0] + (b[0] - a[0]) * t)),
+               int(round(a[1] + (b[1] - a[1]) * t)),
+               int(round(a[2] + (b[2] - a[2]) * t)))
 
 
 def verifie(nom, voxels, size, plafond=None, indices=None):
@@ -197,14 +279,20 @@ def verifie(nom, voxels, size, plafond=None, indices=None):
 
 
 def ecris(dossier, nom, grille, bloc_rgba, verbeux=True, racine=None,
-          plafond=None, indices=None):
-    """Normalise, verifie et ecrit `<racine>/<dossier>/<nom>.vox`.
+          plafond=None, indices=None, souder=True):
+    """Normalise, soude, verifie et ecrit `<racine>/<dossier>/<nom>.vox`.
 
     `racine` vaut le dossier de la flore par defaut ; le lot d'arbres passe
     `RACINE/arbres`.
+
+    `souder` rattache les morceaux detaches (`Grille.soude`). Il n'est mis a
+    faux que pour une piece dont le corps qui la porte est **ailleurs** : une
+    paire de palmes tient par le stipe du palmier, qui n'est pas dans son
+    fichier, et la souder reviendrait a lui inventer une barre en travers.
     """
     if len(grille) == 0:
         raise ValueError("%s/%s : grille vide" % (dossier, nom))
+    ajoutes = grille.soude() if souder else 0
     racine = SORTIE if racine is None else racine
     voxels, size = grille.normalise()
     rayon = verifie("%s/%s" % (dossier, nom), voxels, size, plafond, indices)
@@ -213,8 +301,13 @@ def ecris(dossier, nom, grille, bloc_rgba, verbeux=True, racine=None,
     write_vox(os.path.join(cible, nom + ".vox"), voxels, size, bloc_rgba)
     if verbeux:
         index = sorted({c for _, _, _, c in voxels})
-        print("  %-16s %3d x %3d x %3d  r=%-2d  %6d voxels  index %s"
-              % (nom, size[0], size[1], size[2], rayon, len(voxels),
+        # Le nombre de morceaux sort a chaque ecriture : c'est le seul des
+        # defauts releves par la planche de validation qui se mesure, et le
+        # laisser sous les yeux coute une colonne.
+        morceaux = len(grille.morceaux())
+        print("  %-16s %3d x %3d x %3d  r=%-2d  %6d voxels  %d morceau(x)%s  index %s"
+              % (nom, size[0], size[1], size[2], rayon, len(voxels), morceaux,
+                 " +%d soude" % ajoutes if ajoutes else "",
                  ",".join(str(i) for i in index)))
     return size
 

@@ -100,8 +100,16 @@ def bouleau_tronc(g, rng):
     L'ecorce du bouleau est blanche, et la plage vegetation n'a rien de blanc :
     on prend le clair de la rampe de roche nue (14-15), comme la neige, et on y
     pose les marques sombres qui font reconnaitre l'arbre.
+
+    **Son rayon passe de 1,0 a 1,4 le 2026-09-06.** `disque` garde ce dont la
+    distance au centre ne depasse pas le rayon : a 1,0 le fut faisait cinq
+    voxels au pied et **un seul** des le premier etage, parce que le rayon
+    decroit vers 0,8. Un bouleau de quatorze blocs tenait donc sur un piquet
+    d'un bloc, ce que la planche de validation a lu comme un houppier qui
+    flotte. A 1,4 - 1,05, la section est une croix de cinq voxels sur toute la
+    hauteur : trois blocs de large, un de moins que le chene.
     """
-    centres = ab.colonne(g, rng, 14, 1.0, 0.8, 14, 16, penche=0.5)
+    centres = ab.colonne(g, rng, 14, 1.4, 1.05, 14, 16, penche=0.5)
     for (x, y, z) in centres:
         if z % 3 == 1:
             g.pose(x + rng.choice((-1, 0, 1)), y, z, 152)
@@ -163,7 +171,8 @@ def sapin_enneige(g, rng):
 
 
 def bouleau_givre_tronc(g, rng):
-    centres = ab.colonne(g, rng, 12, 1.0, 0.8, 14, 16, penche=0.4)
+    # Meme correction de section que `bouleau_tronc`.
+    centres = ab.colonne(g, rng, 12, 1.4, 1.05, 14, 16, penche=0.4)
     for (x, y, z) in centres:
         if z % 3 == 2:
             g.pose(x + rng.choice((-1, 0, 1)), y, z, 153)
@@ -277,10 +286,13 @@ def arbre_epineux(g, rng):
     donne les dimensions, et c'est aussi celui qui a fait douter le plus
     longtemps de la grille.
     """
-    ab.colonne(g, rng, 12, 1.2, 0.7, 153, 155, penche=0.6)
+    # Le fut garde une section de cinq voxels jusqu'en haut, et les branches
+    # sont doublees a leur naissance : a 1,2 - 0,7 et a une branche d'un voxel,
+    # la planche du 2026-09-06 ne montrait qu'une poignee de cubes en l'air.
+    ab.colonne(g, rng, 12, 1.4, 1.05, 153, 155, penche=0.6)
     for z in (4, 7, 10):
         bouts = ab.branches(g, rng, (0, 0, z), 3, 3.0, 154, 155,
-                            montee=0.35, ouverture=1.25)
+                            montee=0.35, ouverture=1.25, epaisse=2)
         # Les epines : un bloc plus clair au bout de chaque branche. Un arbre
         # a epines sans pointes est un arbre mort.
         for (x, y, zz) in bouts:
@@ -291,7 +303,14 @@ def arbre_epineux(g, rng):
 # Le lot
 # =============================================================================
 
-# (dossier, nom, graine, fonction, plafond).
+# (dossier, nom, graine, fonction, plafond[, souder]).
+#
+# `souder` rattache les morceaux detaches (`flore_vox.Grille.soude`) et vaut
+# vrai par defaut. Les quatre palmes sont les seules a passer faux : une palme
+# est une **paire de frondes opposees** passant par son ancre (jalon 1.12), donc
+# deux morceaux par construction, et ce qui les tient est le stipe du palmier —
+# qui n'est pas dans leur fichier. Les souder poserait une barre en travers du
+# tronc.
 LOT = [
     ("greenlands", "chene_tronc", 1101, chene_tronc, PLAFOND_ARBRE),
     ("greenlands", "chene_houppier_01", 1102, chene_houppier_01, PLAFOND_HOUPPIER),
@@ -312,15 +331,15 @@ LOT = [
 
     ("deserts", "cactus_geant", 5101, cactus_geant, PLAFOND_ARBRE),
     ("deserts", "palmier_tronc", 5102, palmier_tronc_desert, PLAFOND_ARBRE),
-    ("deserts", "palme", 5103, palme_desert, PLAFOND_PALME),
-    ("deserts", "palme_diagonale", 5104, palme_diagonale_desert, PLAFOND_PALME),
+    ("deserts", "palme", 5103, palme_desert, PLAFOND_PALME, False),
+    ("deserts", "palme_diagonale", 5104, palme_diagonale_desert, PLAFOND_PALME, False),
 
     ("jungles", "tropical_tronc", 3101, tropical_tronc, PLAFOND_ARBRE),
     ("jungles", "tropical_houppier_01", 3102, tropical_houppier_01, PLAFOND_HOUPPIER),
     ("jungles", "tropical_houppier_02", 3103, tropical_houppier_02, PLAFOND_HOUPPIER),
     ("jungles", "palmier_tronc", 3104, palmier_tronc, PLAFOND_ARBRE),
-    ("jungles", "palme", 3105, palme, PLAFOND_PALME),
-    ("jungles", "palme_diagonale", 3106, palme_diagonale, PLAFOND_PALME),
+    ("jungles", "palme", 3105, palme, PLAFOND_PALME, False),
+    ("jungles", "palme_diagonale", 3106, palme_diagonale, PLAFOND_PALME, False),
 
     ("lavalands", "arbre_epineux", 6101, arbre_epineux, PLAFOND_ARBRE),
 ]
@@ -333,7 +352,9 @@ def main(argv):
     bloc = fv.lit_bloc_rgba()
     dossier_courant = None
     fait = 0
-    for dossier, nom, graine, f, plafond in LOT:
+    for entree in LOT:
+        dossier, nom, graine, f, plafond = entree[:5]
+        souder = entree[5] if len(entree) > 5 else True
         if seul is not None and seul not in (nom, "%s/%s" % (dossier, nom)):
             continue
         if dossier != dossier_courant:
@@ -342,7 +363,7 @@ def main(argv):
         g = Grille()
         f(g, random.Random(graine))
         fv.ecris(dossier, nom, g, bloc, racine=RACINE_ARBRES, plafond=plafond,
-                 indices=INDEX_ARBRES)
+                 indices=INDEX_ARBRES, souder=souder)
         fait += 1
     print("%d modele(s) ecrit(s) dans %s" % (fait, RACINE_ARBRES))
 

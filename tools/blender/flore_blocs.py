@@ -78,7 +78,7 @@ def touffe(g, rng, brins, hauteur, etale, clair, sombre, epais_bas=False):
     """Une touffe : quelques brins qui partent du meme pied et s'ecartent.
 
     `brins` tourne autour de **cinq**. C'est le nombre qui est sorti de la
-    lecon du 2026-09-06 au matin — « ce qu'on prend pour trop de detail est
+    lecon du 2026-09-06 — « ce qu'on prend pour trop de detail est
     presque toujours trop petit » — et il ne bouge plus : a quatre voxels par
     bloc, onze brins dans une touffe de huit voxels de large se recouvrent
     exactement, et la touffe redevient un bloc plein.
@@ -111,21 +111,37 @@ def tige(g, rng, hauteur, clair, sombre, penche=0.8):
 
 
 def corolle(g, sommet, rayon, couleur, coeur=None):
-    """Une fleur : une croix de petales, et un coeur.
+    """Une fleur : des petales releves autour d'un coeur en creux.
 
-    A quatre voxels par bloc une corolle **est** cette croix : cinq voxels pour
-    `rayon = 1`, treize pour `rayon = 1.5`. Chercher des petales separes ici
-    revient a dessiner sous le pixel.
+    -- Ce que c'etait, et pourquoi ca ne marchait pas ---------------------------
+
+    C'etait un **disque plein a plat** au sommet de la tige : neuf voxels pour
+    `rayon = 1,5`, vingt et un pour 2,4. La planche de validation du 2026-09-06
+    a montre ce que ca donne de pres — un panneau de signalisation. Sept modeles
+    sur trente-huit avaient la meme silhouette de T, et aucun ne se lisait comme
+    une fleur.
+
+    Une corolle a du volume, et il en tient dans deux etages : les **petales
+    montent d'un voxel** autour d'un **coeur reste en bas**. De cote, on voit une
+    coupe et non une planche ; de dessus, une rosace. C'est le minimum qui fasse
+    une fleur, et a quatre ou six voxels par bloc c'est aussi le maximum
+    disponible.
+
+    Les pointes des grandes corolles **redescendent** au niveau du coeur : un
+    petale retombe, et c'est ce qui distingue un tournesol d'un plateau.
     """
     x0, y0, z0 = sommet
-    n = int(math.ceil(rayon))
-    for dy in range(-n, n + 1):
-        for dx in range(-n, n + 1):
-            if math.hypot(dx, dy) > rayon:
-                continue
-            g.pose(x0 + dx, y0 + dy, z0, couleur)
-    if coeur is not None:
-        g.pose(x0, y0, z0, coeur)
+    n = max(1, int(round(rayon)))
+    # Quatre petales sous un demi-bloc, huit au-dela : a deux voxels de rayon,
+    # quatre branches laissent des trous qu'on lit comme une croix de bois.
+    directions = 4 if rayon < 1.8 else 8
+    for i in range(directions):
+        a = math.tau * i / directions
+        for d in range(1, n + 1):
+            # Le petale monte pres du coeur et retombe a la pointe.
+            dz = 1 if d < n or n == 1 else 0
+            g.pose(x0 + math.cos(a) * d, y0 + math.sin(a) * d, z0 + dz, couleur)
+    g.pose(x0, y0, z0, couleur if coeur is None else coeur)
 
 
 def ombelle(g, rng, sommet, n, rayon, couleur):
@@ -185,7 +201,11 @@ def fronde(g, rng, hauteur, longueur, clair, sombre, azim=None, large=True):
     fait lire une fougere est la courbe, pas les folioles.
     """
     azim = rng.uniform(0.0, math.tau) if azim is None else azim
-    n = max(2, int(round(longueur)))
+    # **Le pas se prend sur la plus grande des deux etendues**, et c'est le
+    # defaut qui faisait de la fougere douze morceaux : une fronde de 4,5 de
+    # long monte de 16, donc cinq pas horizontaux laissaient cinq voxels
+    # espaces de cinq en hauteur. Un arc se parcourt a la longueur de l'arc.
+    n = max(2, int(round(max(longueur, hauteur))) + 1)
     for i in range(n):
         t = i / max(1.0, n - 1.0)
         d = longueur * t
@@ -206,7 +226,7 @@ def feuille(g, rng, longueur, hauteur, clair, sombre, azim=None, epaisseur=2):
     sur toute sa longueur, ce qui lui donne une surface au lieu d'une ligne.
     """
     azim = rng.uniform(0.0, math.tau) if azim is None else azim
-    n = max(2, int(round(longueur)))
+    n = max(2, int(round(max(longueur, hauteur))) + 1)
     for i in range(n):
         t = i / max(1.0, n - 1.0)
         d = longueur * t
@@ -264,7 +284,7 @@ def rameaux(g, rng, n, longueur, clair, sombre, depuis=0.0, ouverture=0.7):
         a = a0 + math.tau * i / n + rng.uniform(-0.4, 0.4)
         pente = ouverture * rng.uniform(0.7, 1.3)
         lg = longueur * rng.uniform(0.75, 1.15)
-        m = max(2, int(round(lg)))
+        m = max(2, int(round(lg * max(1.0, pente))) + 1)
         x = y = 0.0
         z = depuis
         for k in range(m):
@@ -275,6 +295,56 @@ def rameaux(g, rng, n, longueur, clair, sombre, depuis=0.0, ouverture=0.7):
             g.pose(x, y, z, teinte(clair, sombre, 0.25 + 0.6 * t))
         bouts.append((x, y, z))
     return bouts
+
+
+def peau(g):
+    """Les voxels de la grille qui ont au moins une face a l'air libre.
+
+    C'est ce dont on a besoin pour poser des baies, des piments ou des braises :
+    un voxel place au hasard **dans** une masse de six voxels de large n'est vu
+    de nulle part. Cinq baies dans un buisson, c'etait cinq voxels perdus — et
+    le buisson ressortait uni, ce que la planche du 2026-09-06 a lu comme un
+    caillou.
+    """
+    out = []
+    for (x, y, z) in g.v:
+        for dx, dy, dz in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0),
+                           (0, 0, 1), (0, 0, -1)):
+            if (x + dx, y + dy, z + dz) not in g.v:
+                out.append((x, y, z))
+                break
+    return out
+
+
+def semis(g, rng, n, couleur, hauteur_min=0.0, dehors=True, lateral=True):
+    """Pose `n` grains — baies, piments, braises — sur la peau d'une masse.
+
+    `dehors` les fait deborder d'un voxel vers l'exterieur, ce qui leur donne
+    une silhouette au lieu d'une tache ; sinon ils repeignent la peau sur place.
+
+    `lateral` les pousse **de cote** plutot que vers le haut. Sans lui, la
+    moitie des grains sort par le sommet de la masse et s'y rejoint : neuf baies
+    posees sur un buisson bas rendaient une calotte blanche, ce qui est un
+    buisson sous la neige et non un buisson a baies. Le dessus n'est pris que
+    s'il ne reste rien sur les cotes.
+
+    Les grains sont tires sur une liste **triee**, donc le lot reste
+    deterministe malgre le parcours d'un dictionnaire.
+    """
+    candidats = sorted(p for p in peau(g) if p[2] >= hauteur_min)
+    if not candidats:
+        return
+    for p in rng.sample(candidats, min(n, len(candidats))):
+        x, y, z = p
+        if not dehors:
+            g.v[p] = couleur
+            continue
+        cotes = [(x + dx, y + dy, z) for dx, dy in ((1, 0), (-1, 0), (0, 1),
+                                                    (0, -1))
+                 if (x + dx, y + dy, z) not in g.v]
+        libres = cotes if (lateral and cotes) else cotes + (
+            [(x, y, z + 1)] if (x, y, z + 1) not in g.v else [])
+        g.v[libres[rng.randrange(len(libres))] if libres else p] = couleur
 
 
 def neige_dessus(g, rng, part=0.7, index=(14, 15)):

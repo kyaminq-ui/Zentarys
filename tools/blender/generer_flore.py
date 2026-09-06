@@ -202,12 +202,15 @@ def buisson_neige(g, rng):
 
 
 def snowberry(g, rng):
-    """Un buisson bas et ses baies blanches."""
+    """Un buisson bas et ses baies blanches.
+
+    **Les baies etaient dedans.** Tirees a un rayon de 1 a 2,4 dans une masse
+    large de six, elles tombaient sous la peau : le buisson sortait uni, et la
+    planche du 2026-09-06 l'a lu comme un caillou moussu. `fb.semis` les pose
+    maintenant a l'exterieur.
+    """
     fb.masse(g, rng, 6.0, 4.0, 137, 139, grene=0.35)
-    for _ in range(5):
-        a = rng.uniform(0.0, math.tau)
-        r = rng.uniform(1.0, 2.4)
-        g.pose(math.cos(a) * r, math.sin(a) * r, rng.uniform(1.0, 3.5), 14)
+    fb.semis(g, rng, 6, 14, hauteur_min=1.0)
 
 
 def cotonnier_neige(g, rng):
@@ -223,19 +226,30 @@ def cotonnier_neige(g, rng):
 # =============================================================================
 
 def cactus_01(g, rng):
-    """Le saguaro : trois blocs de fut et deux bras."""
+    """Le saguaro : trois blocs de fut et deux bras.
+
+    **Les bras sont doubles le 2026-09-06.** Ils faisaient un voxel de section
+    et remontaient de trois : sur un fut de trois de large, ils ne se
+    detachaient pas, et la planche a lu une colonne verte. Un bras de saguaro
+    est un fut plus mince, pas une brindille — d'ou `colonne_pleine` pour la
+    partie dressee, et deux voxels de section pour le coude.
+    """
     fb.colonne_pleine(g, rng, 13.0, 1.2, 172, 175)
-    # Les bras partent a mi-hauteur et remontent : c'est la silhouette.
     a0 = rng.uniform(0.0, math.tau)
-    for s in (0.0, math.pi):
-        a = a0 + s + rng.uniform(-0.4, 0.4)
-        base = rng.randint(4, 6)
+    for cote in (0.0, math.pi):
+        a = a0 + cote + rng.uniform(-0.4, 0.4)
+        base = rng.randint(3, 5)
+        # Le coude : deux voxels d'epaisseur, sinon il disparait contre le fut.
         for k in range(3):
-            g.pose(math.cos(a) * (1 + k), math.sin(a) * (1 + k), base,
-                   teinte(172, 174, 0.5))
-        for k in range(3):
+            for dz in (0, 1):
+                g.pose(math.cos(a) * (1 + k), math.sin(a) * (1 + k), base + dz,
+                       teinte(172, 174, 0.45 + 0.1 * dz))
+        # Le bras dresse, aux deux tiers de la hauteur du fut.
+        fb.colonne_pleine(g, rng, 6.0, 0.8, 172, 175,
+                          x0=math.cos(a) * 3, y0=math.sin(a) * 3)
+        for k in range(6):
             g.pose(math.cos(a) * 3, math.sin(a) * 3, base + 1 + k,
-                   teinte(172, 175, 0.4 + 0.2 * k))
+                   teinte(172, 175, 0.4 + 0.1 * k))
 
 
 def cactus_02(g, rng):
@@ -261,10 +275,8 @@ def cotonnier_desert(g, rng):
 def habanero(g, rng):
     """Un buisson bas et ses piments rouges : le rare du desert."""
     fb.masse(g, rng, 5.0, 4.0, 129, 134, grene=0.3)
-    for _ in range(4):
-        a = rng.uniform(0.0, math.tau)
-        r = rng.uniform(0.8, 2.0)
-        g.pose(math.cos(a) * r, math.sin(a) * r, rng.uniform(0.0, 2.5), 156)
+    # Sur la peau, et non dans la masse : voir `snowberry`.
+    fb.semis(g, rng, 6, 156)
 
 
 # =============================================================================
@@ -317,10 +329,14 @@ def lierre_jungle(g, rng):
     for i in range(5):
         a = a0 + math.tau * i / 5 + rng.uniform(-0.4, 0.4)
         lg = rng.uniform(4.0, 6.0)
-        for k in range(int(lg)):
-            t = k / max(1.0, lg - 1.0)
-            g.pose(math.cos(a) * k, math.sin(a) * k, 1.0 + 4.5 * t * t,
-                   teinte(129, 134, 0.3 + 0.5 * t))
+        # Deux echantillons par voxel : la tige monte de 4,5 sur cinq pas
+        # horizontaux, donc un pas par voxel de longueur laissait des trous.
+        # C'est la meme cause que les frondes de fougere (`fb.fronde`).
+        n = int(lg * 2)
+        for k in range(n + 1):
+            t = k / float(n)
+            g.pose(math.cos(a) * lg * t, math.sin(a) * lg * t,
+                   1.0 + 4.5 * t * t, teinte(129, 134, 0.3 + 0.5 * t))
 
 
 def fleur_coeur_jungle(g, rng):
@@ -363,10 +379,10 @@ def champignon_jungle(g, rng):
 def fire_shrub(g, rng):
     """Un buisson de scorie parcouru d'une veine incandescente."""
     fb.masse(g, rng, 6.5, 6.5, 25, 27, creux=1.0, grene=0.35)
-    for _ in range(5):
-        a = rng.uniform(0.0, math.tau)
-        r = rng.uniform(0.0, 2.0)
-        g.pose(math.cos(a) * r, math.sin(a) * r, rng.uniform(1.0, 5.0), 30)
+    # Douze braises sur la peau. La version precedente en tirait cinq **dans**
+    # la masse, ou rien ne les voyait : le modele sortait noir uni, et la
+    # planche du 2026-09-06 l'a pris pour un rocher.
+    fb.semis(g, rng, 12, 30, hauteur_min=2.0, dehors=False)
 
 
 def herbe_de_lave(g, rng):

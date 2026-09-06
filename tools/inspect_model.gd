@@ -5,11 +5,21 @@ extends SceneTree
 ##   godot --headless --path . -s tools/inspect_model.gd
 ##   godot --headless --path . -s tools/inspect_model.gd -- res://assets/models/flore/herbe/herbe_01.vox
 ##
-## Sans argument, passe en revue tout `assets/models/`. Sert a deux choses :
+## Sans argument, passe en revue tout `assets/models/`. Sert a trois choses :
 ## verifier qu'un modele reste dans sa plage de palette (un index hors plage
-## sort avec la couleur d'un autre lot, sans le moindre message d'erreur), et
+## sort avec la couleur d'un autre lot, sans le moindre message d'erreur),
 ## connaitre sa taille reelle avant de le poser en jeu — en voxels, l'unite dans
-## laquelle on dessine, et en blocs de terrain, l'unite dans laquelle on juge.
+## laquelle on dessine, et en blocs de terrain, l'unite dans laquelle on juge —,
+## et dire **s'il tient d'un seul tenant**.
+##
+## -- Le morcellement, ajoute le 2026-09-06 -----------------------------------
+##
+## La planche de validation (`scenes/model_portraits.tscn`) a montre une dizaine
+## de modeles faits de cubes qui ne se touchent pas : vus de pres, ils flottent.
+## C'est le seul des defauts releves qui se mesure, donc le seul qu'un outil
+## puisse attraper — d'ou le compte de morceaux ci-dessous, en **26-voisinage**,
+## celui qui laisse passer le grain voulu (deux voxels en diagonale se touchent
+## par un coin, et se lisent comme attaches) et refuse l'ilot detache.
 
 const MODELS_DIR: String = "res://assets/models"
 
@@ -74,8 +84,8 @@ func _inspect(path: String) -> void:
 	# La taille en blocs est la seule qui dise quelque chose : un modele se juge
 	# contre le personnage de reference, qui fait 2,4 blocs. Voir MODELS.md, §1.
 	#
-	# **La grille depend du lot**, depuis le jalon 1.12 : la flore est a 40/3
-	# voxels par bloc, les arbres et les filons a 1. Se tromper de grille ici
+	# **La grille depend du lot** : la flore est a 4 voxels par bloc — 6 pour ses
+	# petits props —, les arbres et les filons a 1. Se tromper de grille ici
 	# n'est pas anodin — l'outil annoncait le pin a 1,65 bloc de haut la ou il
 	# en fait 22, et c'est justement l'outil qu'on consulte pour verifier une
 	# echelle. Le chemin suffit a trancher, et `CWModelLibrary` fait le meme
@@ -86,6 +96,8 @@ func _inspect(path: String) -> void:
 			float(extent.y) / (per * 2.4)])
 	print("  %d voxels pleins, %.1f %% du tampon"
 			% [filled, 100.0 * float(filled) / float(size.x * size.y * size.z)])
+
+	_morceaux(buffer, size, filled)
 
 	var indices: Array = used.keys()
 	indices.sort()
@@ -108,10 +120,72 @@ func _inspect(path: String) -> void:
 		print("  ATTENTION index hors plage flore/terrain : ", ", ".join(strays))
 
 
+## Compte les morceaux d'un modele, en 26-voisinage.
+##
+## Un modele d'un seul tenant en a **un**. Au-dela, les cubes du second morceau
+## ne touchent rien : en jeu ils flottent, et de loin ils lisent comme du bruit.
+## Le compte sort avec la taille du plus gros morceau, parce que c'est le rapport
+## qui dit si on regarde une plante grenee ou un tas de confettis.
+func _morceaux(buffer: VoxelBuffer, size: Vector3i, filled: int) -> void:
+	var vus: Dictionary = {}
+	var morceaux: Array[int] = []
+	var isoles: int = 0
+	for y in size.y:
+		for z in size.z:
+			for x in size.x:
+				var p := Vector3i(x, y, z)
+				if vus.has(p):
+					continue
+				if buffer.get_voxel(x, y, z, VoxelBuffer.CHANNEL_COLOR) == CWPalette.AIR:
+					continue
+				# Parcours en largeur, pile explicite : la recursion sur un
+				# modele de six cents voxels est inutilement fragile.
+				var pile: Array[Vector3i] = [p]
+				vus[p] = true
+				var n: int = 0
+				while not pile.is_empty():
+					var c: Vector3i = pile.pop_back()
+					n += 1
+					for dy in [-1, 0, 1]:
+						for dz in [-1, 0, 1]:
+							for dx in [-1, 0, 1]:
+								var q := c + Vector3i(dx, dy, dz)
+								if q.x < 0 or q.y < 0 or q.z < 0:
+									continue
+								if q.x >= size.x or q.y >= size.y or q.z >= size.z:
+									continue
+								if vus.has(q):
+									continue
+								if buffer.get_voxel(q.x, q.y, q.z,
+										VoxelBuffer.CHANNEL_COLOR) == CWPalette.AIR:
+									continue
+								vus[q] = true
+								pile.append(q)
+				morceaux.append(n)
+				if n == 1:
+					isoles += 1
+	morceaux.sort()
+	morceaux.reverse()
+	var plus_gros: int = morceaux[0] if not morceaux.is_empty() else 0
+	var verdict: String = "d'un seul tenant" if morceaux.size() == 1 else "MORCELE"
+	print("  %d morceau(x), le plus gros %d voxels (%.0f %%), %d isole(s) : %s"
+			% [morceaux.size(), plus_gros,
+			100.0 * float(plus_gros) / float(maxi(filled, 1)), isoles, verdict])
+
+
 ## Voxels par bloc du lot auquel appartient ce fichier.
+##
+## **Trois grilles depuis le 2026-09-06**, et l'outil en annoncait une seule :
+## il rendait la flore treize fois plus fine qu'elle n'est dessinee, c'est-a-dire
+## qu'il mentait exactement sur ce qu'on vient le lire.
 func _grille_de(path: String) -> float:
 	if path.contains("/arbres/") or path.contains("/filons/"):
 		return CWVoxelModel.VOXELS_PER_BLOCK_TERRAIN
+	if path.contains("/flore/"):
+		var cle: String = path.get_base_dir().get_file() + "/" + path.get_file().get_basename()
+		if CWModelLibrary.GRILLE_FINE.has(cle):
+			return CWVoxelModel.VOXELS_PER_BLOCK_FLORE_FINE
+		return CWVoxelModel.VOXELS_PER_BLOCK_FLORE
 	return CWVoxelModel.VOXELS_PER_BLOCK
 
 

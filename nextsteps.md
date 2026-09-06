@@ -83,6 +83,17 @@ python tools/blender/generer_arbres.py
     --resolution 1600x900 -- --biome 7 --shot 32 --vue 256
 #   options : --sans-arbres, --sans-flore, pour isoler une couche
 
+# Planche de validation des assets : **une capture par modèle, seul, de près**,
+# sur un damier neutre d'un bloc de maille, deux angles (face et trois-quarts).
+# Pas de terrain, donc rien à attendre : les 84 sujets sortent en 6 secondes,
+# dans user://portraits, plus une planche de contact par lot et par angle.
+# --lot : flore | arbres | especes | filons | tout.  `especes` est le lot le plus
+# utile — l'arbre **monté** par CWTreeScatter, tronc et houppiers assemblés,
+# c'est-à-dire ce que le jeu pose, là où `arbres` ne montre que les pièces.
+# --seul filtre sur un bout de chemin, --taille change le côté en pixels (640).
+C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --path . scenes/model_portraits.tscn -- --lot tout
+C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --path . scenes/model_portraits.tscn -- --lot especes --seul chene
+
 # Gabarit d'échelle en jeu : mettre scale_board = true sur le nœud racine de
 # scenes/terrain_demo.tscn, puis lancer. Deux captures dans user://shots.
 # Carte ouverte au démarrage, pour une capture sans piloter la fenêtre :
@@ -103,15 +114,19 @@ biome, **Échap** rend la souris puis quitte.
 
 ## 3. État
 
-> ⚠️ **Une chose passe avant la suite** : la planche de validation des assets,
-> une capture par modèle, seul et de près, pour trancher lesquels sont corrects
-> et lesquels sont à regénérer. Détail et point de départ en **§6quater**.
+> **La planche de validation des assets est faite** (§6quater, après §6ter) :
+> les 71 modèles ont été regardés un par un, de près, plus les 13 arbres montés.
+> **Vingt-sept ont été regénérés** ; le morcellement, qui était la moitié du
+> problème, est désormais un invariant vérifié (n° 34).
 
 Jalon 1 (le monde) : 1.1 à 1.10 sont **portés, testés et vus en jeu** ; **1.11
 est aux trois quarts** — assets, dispersion et rendu faits, il manque le tronc
 écrit dans le terrain et la pose des filons ; **1.12 est fait**, et les trois
 défauts de pose vus en jeu après son commit sont corrigés (§6bis). Suite de
-validation : **315 vérifications, 0 échec**, ~20 s.
+validation : **316 vérifications, 0 échec**, ~20 s.
+
+**La prochaine tâche est donc §7** : le tronc écrit dans le terrain, qui est le
+seul point du jalon 1 qui reste et qui débloque la collision.
 
 **Trois remaniements de rendu, le 2026-09-06 au soir, tous décidés en regardant
 le jeu** — le détail est en §6ter :
@@ -241,6 +256,7 @@ src/worldgen/
   cw_region_name.gd        noms de région : deux tables de vingt syllabes (1.10)
 src/demo/terrain_demo.gd   scène de démonstration, touches 1-6 par biome
 src/demo/scale_board.gd    gabarit d'échelle : mires, silhouette, modèles
+src/demo/model_portraits.gd  planche de validation : un modèle par capture (§6quater)
 src/demo/map_overlay.gd    affichage de la carte (touche M)
 tests/worldgen_test.gd     suite headless, 312 vérifications
 tests/tile_features_test.gd  la moitié qui concerne les éléments de tuile
@@ -253,7 +269,7 @@ tests/map_test.gd          échelle, découverte, puzzle, rendu, noms (1.10)
 tools/export_palette.gd    régénère assets/palette/* depuis CWPalette
 tools/biome_stats.gd       répartition des biomes et des matières, mesurée (1.12)
 tools/preview_features.gd  gros plan ombré, avec et sans la couche d'éléments
-tools/inspect_model.gd     inventaire d'un .vox : gabarit, index, plages
+tools/inspect_model.gd     inventaire d'un .vox : gabarit, index, plages, morceaux
 tools/repaint_models.gd    remet un .vox dans la palette de projet
 tools/preview_map.gd       aperçu de la carte, vierge et après une diagonale
 tools/blender/             générateurs des lots de modèles
@@ -502,6 +518,24 @@ docs/images/               gabarit, carte et composition de flore, en jeu
     *en même temps* que le lot grandissait, et c'est pour cela qu'on ne l'a pas
     vu venir de ce côté-là. Aucun test ne peut attraper ça : une densité trop
     forte est une densité valide.
+34. **Un modèle est d'un seul tenant.** Deux voxels qui ne se touchent même pas
+    par un coin sont deux objets : en jeu, le second flotte. Vérifié depuis le
+    2026-09-06 sur tout le lot de flore (`tests/flora_test.gd`, 26-voisinage) et
+    rapporté à chaque écriture par les générateurs et par
+    `tools/inspect_model.gd`. **La seule exception du dépôt est la palme**, qui
+    est une paire de frondes opposées tenue par un stipe absent de son fichier :
+    elle passe `souder=False` dans `generer_arbres.LOT`, et c'est le seul
+    endroit où ce drapeau apparaît.
+
+    La cause du défaut se répétait dans onze fonctions de dessin écrites
+    séparément, et elle était toujours la même : **le pas de parcours d'un arc
+    était pris sur son étendue horizontale**, alors que sa hauteur était trois
+    fois plus grande. Une fronde de fougère longue de 4,5 et haute de 16 sortait
+    en cinq voxels espacés de cinq. Corriger la primitive (`fb.fronde`,
+    `fb.feuille`, `fb.rameaux`) valait mieux que corriger onze plantes ; la passe
+    de soudure (`Grille.soude`) est le filet, pas le remède — un modèle qui
+    demande beaucoup de soudure a une forme fausse, et le compte s'affiche pour
+    ça.
 
 ## 5. Pièges connus
 
@@ -546,6 +580,12 @@ docs/images/               gabarit, carte et composition de flore, en jeu
   faut, plus un raccord sur `size_changed`. Aucun test ne peut le voir — un nœud
   invisible calcule juste ; c'est la capture en jeu qui l'a montré (2026-09-05,
   la carte du monde).
+- **Le pas d'un arc se prend sur l'arc, pas sur sa projection au sol.** Onze
+  fonctions de dessin échantillonnaient `round(longueur)` points sur une courbe
+  qui montait trois fois plus haut qu'elle n'avançait : le modèle sortait en
+  voxels détachés. Cause unique de treize des vingt-sept défauts du 2026-09-06
+  (§6quater), et invisible dans les nombres — la boîte englobante, le compte de
+  voxels et les plages de palette étaient tous justes.
 - **Ne pas mettre d'appel de liaison moteur sur le chemin chaud.**
   `OS.get_thread_caller_id()` dans `CWTileFeatureGrid.get_zone` coûtait ~15 µs
   par colonne avant d'être déplacé sur le chemin froid. Mesurer avant de
@@ -800,7 +840,7 @@ de `ROLES`. Motif, vu en jeu : **dispersés à la densité de la flore, ils
 rendaient des champs de rochers** de plusieurs dizaines de blocs, serrés au point
 qu'un joueur n'y passait plus.
 
-La leçon est celle du 2026-09-06 au matin, prise par l'autre bout : on avait
+La leçon est celle du 2026-09-06, prise par l'autre bout : on avait
 grossi les cailloux de 8 à 30 voxels *sans toucher à leur densité*, qui avait été
 réglée quand ils faisaient la taille d'un galet. Un objet qu'on multiplie par
 quatre en volume ne garde pas sa densité. **Changer une taille, c'est changer une
@@ -950,83 +990,135 @@ qu'Oceans ou Lava Lands produise une matière que `decor_allowed` rejette — c'
 la formulation générale du défaut, et elle attrape aussi le prochain.
 
 
-## 6quater. À FAIRE EN PREMIER — la planche de validation des assets
+## 6quater. La planche de validation des assets — **faite, dans la foulée**
 
-> **Avant de passer à la suite (§7).** Demandé le 2026-09-06 au soir, après trois
-> sessions où chaque défaut d'asset a été trouvé par hasard, en jouant, une fois
-> le lot déjà commité.
+> Demandée le 2026-09-06 au soir, après trois sessions où chaque défaut d'asset
+> avait été trouvé par hasard, en jouant, une fois le lot déjà commité.
 
-### Ce qu'il faut faire
+### L'outil
 
-**Une capture par modèle, seul, sans rien autour.** Puis regarder chacune, et
-trancher : le modèle est correct, ou il est à regénérer proprement. Le critère
-est celui qu'on n'a jamais formulé jusqu'ici et qui a coûté trois reprises :
-**est-ce qu'on reconnaît l'objet, ou est-ce que c'est une bouillie de voxels ?**
+`scenes/model_portraits.tscn` (`src/demo/model_portraits.gd`) : **une capture
+par modèle, seul, de près**, sur un damier neutre dont une case vaut un bloc de
+terrain, sous deux angles — de face et de trois-quarts au-dessus. Pas de terrain
+du tout, donc rien à streamer : **84 sujets en 5,6 secondes**. Sortie dans
+`user://portraits`, plus une planche de contact par lot et par angle, avec le
+nom sous chaque vignette. Commande en §2.
 
-Les deux endroits où le risque est le plus élevé, et ce n'est pas un hasard :
+Trois décisions valent d'être dites :
 
-* **`buisson`** et les autres masses (`buisson_neige`, `snowberry`, `habanero`,
-  `fire_shrub`) : ce sont les seuls modèles **pleins** du lot. Une masse de 96
-  voxels dans une boîte de 7 × 7 × 6 n'a aucune silhouette propre — c'est un tas.
-  `masse()` les grène sur les bords pour éviter la boule lisse, mais personne
-  n'a encore regardé un buisson seul, de près ;
-* **les petits props** à 6 voxels par bloc. Ils viennent d'être redessinés et
-  n'ont été vus qu'à trente blocs de distance, en prairie. Une corolle de trois
-  voxels et une touffe de onze se jugent de près ou pas du tout.
+- **une scène à part, et pas une option de la démo.** « Sans rien autour » est
+  la moitié du travail : le gabarit d'échelle se pose sur le terrain généré,
+  donc sur de l'herbe, avec des plantes autour et un relief derrière ;
+- **un `SubViewport` de taille fixe**, et non la fenêtre : le cadrage ne dépend
+  ni de la résolution ni de la machine, donc deux planches se comparent ;
+- **un quatrième lot qui n'était pas demandé, `especes`** — l'arbre **monté**,
+  tronc et houppiers assemblés en appelant `CWTreeScatter._monte`, c'est-à-dire
+  exactement ce que le jeu pose. C'est le lot le plus utile des quatre, et pour
+  une raison qu'on aurait pu prévoir : les trois derniers défauts corrigés
+  (§6bis) étaient tous dans l'assemblage et dans aucun modèle.
 
-### Pourquoi de près et un par un, et pas en capture de biome
+### Ce que la planche a montré, et la seule chose qui se mesurait
 
-Les captures de biome répondent à « est-ce que le paysage tient ? » — c'est une
-autre question, et elle a ses propres réponses. Un modèle raté s'y noie : à
-trente blocs, une plante de deux blocs fait dix pixels, et **dix pixels sont
-toujours plausibles**. Les huit défauts d'assets trouvés depuis le 2026-09-05
-l'ont tous été parce qu'ils se répétaient à des centaines d'exemplaires — le fût
-qui dépasse, la tache orange, le champ de rochers. Un modèle qui est simplement
-laid, et qui n'est ni répété ni aberrant, passe indéfiniment.
+**Treize modèles sur trente-huit étaient faits de cubes qui ne se touchent pas.**
+La fougère sortait en **douze morceaux** dont le plus gros portait 38 % de la
+matière, la fougère géante en onze, le cotonnier de neige en cinq de quatre
+voxels. De loin, dispersés par centaines, ils passaient pour du grain ; de près,
+ce sont des confettis qui flottent.
 
-### Ce qui existe déjà, et ce qui manque
+C'est le seul des défauts relevés qui se **mesure**, donc le seul qu'un outil
+puisse attraper — d'où, le même jour, trois ajouts qui le verrouillent :
+`tools/inspect_model.gd` compte les morceaux (26-voisinage) et le dit à chaque
+inspection, les générateurs le disent à chaque écriture, et
+`tests/flora_test.gd` en fait un invariant (n° 34). La suite passe de 315 à
+**316 vérifications**.
 
-`src/demo/scale_board.gd` (`CWScaleBoard`) fait **les trois quarts du travail** :
-il maille les modèles, les pose côte à côte à leur taille réelle, avec des mires
-de hauteur connue en blocs et la silhouette du personnage. Il lit déjà
-`m.voxels_per_block`, donc il est juste depuis le passage aux deux grilles de
-flore — vérifié le 2026-09-06. Il s'allume avec `scale_board = true` sur le nœud
-racine de `scenes/terrain_demo.tscn`.
+> **La cause était une seule ligne, recopiée dans onze fonctions de dessin.**
+> Le pas de parcours d'un arc était pris sur son **étendue horizontale** :
+> `n = round(longueur)`. Une fronde de fougère longue de 4,5 monte de 16, donc
+> cinq pas horizontaux posaient cinq voxels espacés de cinq en hauteur.
+> Corriger `fb.fronde`, `fb.feuille` et `fb.rameaux` a réparé neuf plantes d'un
+> coup. La passe de soudure (`Grille.soude`, un pétiole du morceau au corps) est
+> le **filet**, pas le remède : le nombre de voxels soudés s'affiche à
+> l'écriture, et un modèle qui en demande beaucoup a une forme fausse.
 
-Ce qui manque, et c'est peu :
+**Et trois défauts de fond, que rien ne mesure :**
 
-1. **une pose par modèle** au lieu d'une rangée de dix. `MODELS_PER_ROW` existe
-   et `models_center` / `models_span` cadrent déjà la caméra sur la zone des
-   modèles : il faut une boucle qui pose **un** modèle, cadre dessus, capture,
-   passe au suivant ;
-2. **un fond neutre**. Le gabarit se pose aujourd'hui sur le terrain généré, donc
-   sur de l'herbe, avec des plantes autour. « Sans rien autour » veut dire un
-   sol uni et pas de dispersion — `--sans-arbres --sans-flore` existe déjà pour
-   la moitié ;
-3. **deux angles**, au minimum : de face et de trois quarts au-dessus. Une
-   bouillie de voxels peut très bien se lire de face — c'est même comme ça
-   qu'une masse pleine trompe.
+1. **Les sept fleurs du lot étaient des panneaux de signalisation.** La corolle
+   était un disque plein posé à plat au sommet de la tige — neuf voxels pour
+   `rayon = 1,5`, vingt et un pour 2,4. Sept modèles, la même silhouette en T,
+   et aucun ne se lisait comme une fleur. `fb.corolle` dessine maintenant une
+   **coupe** : les pétales montent d'un voxel autour d'un cœur resté en bas, et
+   la pointe des grandes corolles redescend. C'est le minimum qui fasse une
+   fleur, et à quatre ou six voxels par bloc c'est aussi le maximum disponible.
+2. **Ce qu'on posait sur une masse était posé dedans.** Les baies du snowberry
+   étaient tirées à un rayon de 1 à 2,4 dans un buisson large de six, les
+   piments de l'habanero et les braises du fire shrub de même : la moitié
+   tombait sous la peau, invisible. Les trois modèles sortaient unis — le fire
+   shrub se lisait comme un rocher noir. `fb.peau` et `fb.semis` posent
+   désormais les grains **sur** la surface, et de côté plutôt que par le haut :
+   des baies poussées vers le haut se rejoignent en calotte, ce qui est un
+   buisson sous la neige et non un buisson à baies.
+3. **Deux troncs tenaient sur un piquet d'un bloc.** `disque` garde ce dont la
+   distance au centre ne dépasse pas le rayon : à `r_bas = 1,0` décroissant vers
+   0,8, le fût du bouleau faisait cinq voxels au pied et **un seul** dès le
+   premier étage. Un bouleau de quatorze blocs de haut sur un bloc de section,
+   c'est un houppier qui flotte. 1,4 → 1,05 donne une croix de cinq voxels sur
+   toute la hauteur, soit trois blocs de large, un de moins que le chêne.
 
-Une session headless n'a pas de rastériseur (§2, §6.4) : ça se fait donc en
-**fenêtré**, comme `-- --biome N --shot S`, et le PNG sort dans `user://shots`.
+### Le verdict, modèle par modèle
 
-### Ce qu'on en fait ensuite
+**71 modèles regardés un par un, plus 13 arbres montés.** Ce qui a été corrigé :
 
-Trancher modèle par modèle, et **regénérer proprement** ceux qui ne passent pas
-— corriger `tools/blender/flore_blocs.py` ou le catalogue, jamais le `.vox` :
-les modèles sont générés, pas dessinés, et une retouche à la main est écrasée à
-la génération suivante (§5).
+| modèle(s) | verdict | ce qui a changé |
+|---|---|---|
+| les 7 fleurs (`fleur_bleuet`, `fleur_tournesol`, `fleur_coeur` ×2, `fleur_de_glace`, `fleur_ame`, `fleur_de_lave`) | panneau de signalisation | `fb.corolle` : une coupe, pétales relevés, cœur en creux |
+| `fougere`, `fougere_geante` | 12 et 11 morceaux | `fb.fronde` : le pas se prend sur l'arc, pas sur sa projection |
+| `lierre`, `liane`, `feuille_large` | morcelés | même cause : `fb.feuille`, et un pas doublé dans `lierre_jungle` |
+| `broussaille_seche`, `scrub`, `broussaille`, les deux `cotonnier`, `corail`, `herbe_01`, `herbe_03` | 2 à 9 morceaux | `fb.rameaux` corrigée, plus la soudure en filet |
+| `snowberry`, `habanero`, `fire_shrub` | masse unie, garniture invisible | `fb.semis` : les grains sur la peau, et de côté |
+| `deserts/cactus_01` | une colonne verte | bras doublés en section, dressés sur six blocs |
+| `bouleau_tronc`, `bouleau_givre_tronc` | un piquet d'un bloc | section portée à cinq voxels sur toute la hauteur |
+| `lavalands/arbre_epineux` | une poignée de cubes en l'air | fût de même section, branches doublées à leur naissance |
 
-> **Et écrire le verdict quelque part.** Trente-huit modèles regardés un par un,
-> c'est une heure qu'on ne veut pas repayer à la prochaine reprise. Un tableau
-> « modèle → verdict → ce qui a été changé » dans cette section suffit.
+Ce qui **passe sans retouche** : les quatre herbes, `buisson`, `buisson_neige`,
+`herbe_gelee`, `ginseng`, `cactus_02`, `vrille`, `roseau`, les deux champignons,
+`herbe_de_lave`, `algue`, `etoile_de_mer` ; côté arbres, les trois chênes, le
+`pin`, le `rocher_geant`, l'`arbre_geant`, les deux conifères enneigés, les
+tropicaux, les stipes et les quatre palmes ; et **les neuf filons**, qui se
+jugeront de toute façon en paroi, le jour où leur pose existera (jalon 2.6).
+
+Ce qui **passe mais reste le point faible du lot**, noté pour ne pas le
+redécouvrir :
+
+- **`snowberry`** : à quatre voxels par bloc une baie est un quart de bloc, et
+  six baies blanches sur un buisson vert foncé lisent encore comme des plaques
+  de neige. La bonne réponse est probablement une autre couleur, ce qui suppose
+  de renoncer au nom ;
+- **`deserts/cactus_geant`** : de face c'est un saguaro, de trois-quarts une
+  colonne bosselée — ses bras sont dans un seul plan ;
+- **`roseau`** : deux tons franchement séparés, vert sur jaune. Ce n'est pas
+  faux pour un roseau, c'est seulement le modèle qu'on lit le moins vite.
+
+### La leçon, et elle vaut au-delà des assets
+
+Les huit défauts trouvés depuis le 2026-09-05 l'avaient tous été parce qu'ils se
+**répétaient** — le fût qui dépasse, la tache orange, le champ de rochers. Les
+vingt-sept d'aujourd'hui étaient dans le lot depuis le début, visibles au premier
+coup d'œil, et invisibles autrement : à trente blocs une plante de deux blocs
+fait dix pixels, et **dix pixels sont toujours plausibles**. Une capture de
+biome répond à « est-ce que le paysage tient ? », jamais à « est-ce qu'on
+reconnaît l'objet ? ».
+
+Et la moitié de ce qui a été corrigé n'aurait pas dû demander un œil : un modèle
+morcelé se compte. **Ce qui se mesure doit être mesuré avant d'être regardé** —
+la planche sert alors à ce qu'elle seule sait faire, juger une silhouette.
 
 ---
 
 
 ## 7. Ensuite — 1.11 (le tronc en matière) ou 2.6 (apparition)
 
-> **Après §6quater.** Les deux portes sont
+> **§6quater est faite** (2026-09-06). Les deux portes sont
 > ouvertes, et elles ne demandent pas le même travail. Ma préférence va au **tronc en
 > matière** : c'est le seul point du jalon 1 qui reste, il est court, et il
 > débloque la collision — un arbre de 20 blocs qu'on traverse se remarque
@@ -1068,7 +1160,9 @@ la génération suivante (§5).
 * **un test headless ne montre pas une couche de rendu.** Huit défauts n'ont été
   trouvés qu'en capture, sur deux sessions, et aucun n'aurait pu l'être
   autrement. D'où `-- --biome N --shot S` sur la démo (§2). La liste du
-  2026-09-06 est en §6.4 ;
+  2026-09-06 est en §6.4. **Mais tout ne demande pas un œil** : sur les
+  vingt-sept défauts de la planche du 2026-09-06, treize se comptaient — c'était du
+  morcellement, et il est devenu un invariant (§6quater) ;
 * **une mesure vaut mieux qu'un raisonnement sur un champ qu'on n'a pas
   regardé.** `tools/biome_stats.gd` a contredit trois seuils qui se lisaient
   justes. Le même outil sert à revoir n'importe quel équilibre de biome, et il
@@ -1187,7 +1281,7 @@ treizième.
 sens-là.** 3/40 n'est pas contesté : c'est bien l'échelle du décor de
 l'original, et elle implique qu'une touffe d'herbe y est dessinée treize fois
 plus fin qu'un bloc de terrain. Ce projet l'a portée fidèlement jusqu'au lot du
-2026-09-06 au matin. C'est **le rendu qui l'a refusée** : vu en jeu, un brin de
+2026-09-06. C'est **le rendu qui l'a refusée** : vu en jeu, un brin de
 0,08 bloc à côté d'un cube de terrain d'un bloc ne lit pas comme un cube, il lit
 comme un cheveu, et une prairie entière comme une fourrure. Le lot d'arbres
 avait montré l'autre moitié de l'argument trois jours plus tôt — ce qui lit

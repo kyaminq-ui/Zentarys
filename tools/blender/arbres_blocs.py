@@ -284,8 +284,16 @@ def palme_paire(g, rng, longueur, clair, sombre, diagonale=False, retombe=0.35):
 
 
 def branches(g, rng, depart, nombre, longueur, clair, sombre, montee=0.45,
-             ouverture=1.1):
-    """Des branches nues qui partent d'un point. Rend leurs bouts."""
+             ouverture=1.1, epaisse=0):
+    """Des branches nues qui partent d'un point. Rend leurs bouts.
+
+    `epaisse` double les `n` premiers blocs de chaque branche, par en dessous.
+    A un voxel par bloc, une branche d'un seul bloc de section **disparait**
+    contre le ciel : elle lit comme une file de cubes qui flottent, pas comme
+    du bois. C'est ce que la planche de validation du 2026-09-06 a montre sur
+    l'arbre a epines, seul modele du lot ou la charpente est toute la
+    silhouette.
+    """
     bouts = []
     a0 = rng.uniform(0.0, math.tau)
     for i in range(nombre):
@@ -299,7 +307,10 @@ def branches(g, rng, depart, nombre, longueur, clair, sombre, montee=0.45,
             x += dx
             y += dy
             z += dz
-            g.pose(x, y, z, teinte(clair, sombre, 0.3 + 0.5 * k / max(1.0, L)))
+            c = teinte(clair, sombre, 0.3 + 0.5 * k / max(1.0, L))
+            g.pose(x, y, z, c)
+            if k < epaisse:
+                g.pose(x, y, z - 1, c)
         bouts.append((x, y, z))
     return bouts
 
