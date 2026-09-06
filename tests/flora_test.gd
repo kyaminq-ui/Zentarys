@@ -291,6 +291,7 @@ func _test_scatter() -> void:
 	var total: int = 0
 	var out_of_cell: int = 0
 	var off_ground: int = 0
+	var assises: int = 0
 	var noyees: int = 0
 	var wrong_surface: int = 0
 	for dz in 24:
@@ -321,8 +322,22 @@ func _test_scatter() -> void:
 				# `CWVoxelGenerator.standing_top` (invariant n. 42).
 				var rel: Vector4i = CWMesaGrid.relief(
 						f.mesas().mesas_at(pl.x, pl.z, f), pl.x, pl.z, prof.x)
-				if pl.y != CWVoxelGenerator.standing_top(rel, prof.x) + 1:
+				# **Et l'assiette, depuis le 2026-09-09** : une plante dont
+				# l'empreinte fait plusieurs blocs se pose sur le **minimum**
+				# des quatre coins de celle-ci, donc au niveau de sa colonne ou
+				# **en dessous**. Elle s'enterre un peu plutot que de laisser un
+				# bord en l'air, et c'est le sens du compromis : de la matiere
+				# enfouie ne se voit pas, un vide sous un caillou se voit de
+				# loin.
+				#
+				# Ce qui reste interdit est donc **au-dessus**, et un
+				# enfouissement de plus de `CWScatter.ASSIETTE_MAX` — au-dela,
+				# le candidat aurait du etre ecarte, pas enterre.
+				var sol: int = CWVoxelGenerator.standing_top(rel, prof.x) + 1
+				if pl.y > sol or sol - pl.y > CWScatter.ASSIETTE_MAX:
 					off_ground += 1
+				if pl.y < sol:
+					assises += 1
 				# Et l'autre moitie de la meme regle : aucune plante dans l'eau.
 				# Sous un massif la question ne se pose pas : la plante est sur
 				# la roche, pas dans la mare qu'elle recouvre.
@@ -335,7 +350,9 @@ func _test_scatter() -> void:
 			% [total, float(total) / 576.0])
 	_ok("des plantes sont posees", total > 0)
 	_ok("chaque plante est dans sa cellule", out_of_cell == 0, "%d hors" % out_of_cell)
-	_ok("chaque plante pose sur le sol de sa colonne", off_ground == 0,
+	print("     dont %d assises sur le minimum de leur empreinte" % assises)
+	_ok("chaque plante pose sur le sol de sa colonne, ou juste dessous",
+			off_ground == 0,
 			"%d flottantes" % off_ground)
 	_ok("aucune plante ne pousse dans une mare", noyees == 0,
 			"%d noyees" % noyees)

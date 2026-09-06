@@ -159,6 +159,37 @@ const HASH_SEED: int = 83492791
 const HASH_MIX: int = 2654435761
 
 
+## -- L'assiette d'un objet : les quatre coins de son emprise (2026-09-09) -----
+##
+## Un modele est pose sur la hauteur de **sa colonne d'ancrage**, mais son
+## empreinte fait plusieurs blocs de large. Des que le terrain descend sous un de
+## ses bords, ce bord **flotte** — un rocher a demi en l'air sur une rupture de
+## pente, un arbre dont le pied ne touche que d'un cote.
+##
+## Le remede demande de connaitre le sol **sous toute l'empreinte**. Le payer
+## entier est hors de question : une empreinte de 5 x 5 blocs, c'est vingt-cinq
+## colonnes la ou on en paie une, et la dispersion est deja le second poste du
+## chargement. On sonde donc les **quatre coins**, et rien d'autre — c'est ce qui
+## attrape une rupture de pente, qui est le cas qu'on cherche, et qui manque un
+## creux central, qui n'existe pratiquement pas a cette echelle.
+##
+## Puis deux issues, dans cet ordre :
+##
+##   * l'ecart des quatre coins depasse `ASSIETTE_MAX` : le candidat est
+##     **ecarte**. Poser quoi que ce soit sur une marche de trois blocs donne
+##     soit un objet en l'air, soit un objet a moitie enterre, et aucun des deux
+##     ne vaut mieux que rien ;
+##   * sinon, l'objet se pose sur le **minimum** des quatre. Il s'enterre un peu
+##     plutot que de flotter, et c'est le bon sens du compromis : de la matiere
+##     enfouie ne se voit pas, un vide sous un caillou se voit de loin.
+##
+## Les modeles d'un seul bloc d'emprise — l'essentiel de la flore — ne paient
+## rien : le sondage est saute quand le rayon est nul.
+
+## Ecart tolere entre le plus haut et le plus bas des quatre coins, en blocs.
+const ASSIETTE_MAX: int = 2
+
+
 ## Une plante posee : sa colonne, sa base, son modele et son orientation.
 class Placement extends RefCounted:
 	var x: int = 0
@@ -250,6 +281,48 @@ func set_edits(edits: CWWorldEdits) -> void:
 ## totalite du monde, et le test se resume a un dictionnaire vide. Une colonne
 ## creusee, elle, a un sommet connu : si la plante ne repose plus dessus, elle
 ## flotte ou elle est enterree, et dans les deux cas elle n'a plus lieu d'etre.
+
+## Le sol sur lequel un objet se pose en (x, z) : le premier bloc d'air au-dessus
+## de la matiere, **chapeau de massif, creusement d'etang et remodelage de chemin
+## compris**.
+##
+## C'est la meme regle que celle du point d'ancrage un peu plus haut, et il faut
+## qu'elle le reste : un coin sonde par une autre regle que son centre rendrait
+## une assiette fausse dans un sens ou dans l'autre. La boucle principale ne
+## passe pas par ici parce qu'elle a besoin des valeurs intermediaires
+## (`prof`, `rel`, la matiere) que celle-ci jette.
+func _sol_pose(x: int, z: int, sea: int, mesas: Array[CWMesa],
+		road_zone: CWPathNetwork.Zone,
+		road_cells: PackedInt32Array) -> int:
+	var c: Vector4 = _field.sample_column_full(x, z)
+	var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
+	var prof: Vector3i = CWTerrainField.column_profile(c.x, c.w, sea, biome)
+	var rel: Vector4i = Vector4i(1, 0, 1, 0)
+	if not mesas.is_empty():
+		rel = CWMesaGrid.relief(mesas, x, z, prof.x)
+	if rel.y < rel.x and not road_cells.is_empty():
+		prof.x = CWPathNetwork.shaped_top(prof.x, CWPathNetwork.nearest(
+				road_zone, road_cells, float(x), float(z)))
+	return CWVoxelGenerator.standing_top(rel, prof.x) + 1
+
+
+## L'assiette des quatre coins d'une empreinte de rayon `r` : le plus bas et le
+## plus haut. Voir la note de `ASSIETTE_MAX`.
+func _assiette(x: int, z: int, r: int, sea: int, mesas: Array[CWMesa],
+		road_zone: CWPathNetwork.Zone,
+		road_cells: PackedInt32Array) -> Vector2i:
+	var bas: int = 0x7FFFFFFF
+	var haut: int = -0x7FFFFFFF
+	for i in 4:
+		var dx: int = r if (i & 1) == 0 else -r
+		var dz: int = r if (i & 2) == 0 else -r
+		var y: int = _sol_pose(x + dx, z + dz, sea, mesas, road_zone,
+				road_cells)
+		bas = mini(bas, y)
+		haut = maxi(haut, y)
+	return Vector2i(bas, haut)
+
+
 func _supported(x: int, z: int, y: int) -> bool:
 	if _edits == null:
 		return true
@@ -516,6 +589,17 @@ func _build_cell(cx: int, cz: int) -> Array:
 		p.rotation = turn
 		p.role = role
 		p.scale = CWDecorRules.scale_ratio_of(role) 				* (SCALE_MIN + jitter * (SCALE_MAX - SCALE_MIN))
+
+		# L'assiette (2026-09-09). **Apres** le choix du modele et de son
+		# echelle : c'est d'eux que sort le rayon de l'empreinte, et une plante
+		# d'un seul bloc n'a rien a sonder. Voir `ASSIETTE_MAX`.
+		var r: int = p.radius_blocks()
+		if r > 0:
+			var a: Vector2i = _assiette(x, z, r, sea, mesas, road_zone,
+					road_cells)
+			if a.y - a.x > ASSIETTE_MAX:
+				continue
+			p.y = mini(p.y, a.x)
 		out.append(p)
 	return out
 

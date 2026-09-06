@@ -416,6 +416,23 @@ func _build_cell(cx: int, cz: int) -> Array:
 		var ground: int = CWVoxelGenerator.standing_top(rel, prof.x) + 1
 		if not _supported(x, z, ground):
 			continue
+
+		# L'assiette (2026-09-09). Un arbre y est plus sensible que la flore :
+		# son empreinte fait plusieurs blocs, et son tronc est **ecrit dans le
+		# terrain** depuis le jalon 1.11 — un fut pose un bloc trop haut laisse
+		# voir le vide sous lui, et rien ne le retirera ensuite. La regle et les
+		# deux sondeurs sont ceux de `CWScatter`, dont cette classe herite : il
+		# n'y a qu'une definition de l'assiette dans le projet.
+		var fut: CWVoxelModel = _lib.model(sp["tronc"])
+		if fut != null:
+			var ech: float = ECHELLE_MIN 					+ float(c["jitter"]) * (ECHELLE_MAX - ECHELLE_MIN)
+			var r: int = ceili(float(fut.radius_blocks) * ech)
+			if r > 0:
+				var a: Vector2i = _assiette(x, z, r, sea, mesas, road_zone,
+						road_cells)
+				if a.y - a.x > ASSIETTE_MAX:
+					continue
+				ground = mini(ground, a.x)
 		_monte(out, sp, x, z, ground, c)
 	return out
 

@@ -88,7 +88,8 @@ rives.** Deux choses distinctes :
   résultat est bruyant à six voxels par bloc. Un seul index, et la forme fait le
   reste.
 
-**6. Tous les voxels d'un asset doivent porter sur le sol.** Un modèle est posé
+**6. Tous les voxels d'un asset doivent porter sur le sol.** *(fait le
+2026-09-09, §7octies.6.)* Un modèle est posé
 sur la hauteur de **sa colonne d'ancrage**, mais son empreinte fait plusieurs
 blocs de large : dès que le terrain descend sous un de ses bords, ce bord
 flotte. Le remède demande de connaître le sol **sous toute l'empreinte** —
@@ -3350,6 +3351,51 @@ c'est vrai, et c'est le but. De pres on voit des planches, de loin un tablier ;
 neuf teintes, elles, se voyaient de loin — comme du bruit.
 
 `pont_travee` : 56 x 12 x 10, 1 260 voxels, **un seul morceau, un seul index**.
+
+---
+
+### 7octies.6 « Tous les voxels d'un asset doivent porter sur le sol » — l'assiette
+
+Un modele est pose sur la hauteur de **sa colonne d'ancrage**, et son empreinte
+fait plusieurs blocs de large. Des que le terrain descend sous un de ses bords,
+ce bord **flotte** : un rocher a demi en l'air sur une rupture de pente, un arbre
+dont le pied ne touche que d'un cote.
+
+Le remede demande de connaitre le sol **sous toute l'empreinte**, et le payer
+entier etait hors de question — une empreinte de 5 x 5 blocs, c'est vingt-cinq
+colonnes la ou on en paie une, et la dispersion est deja le second poste du
+chargement. On sonde donc les **quatre coins**, et rien d'autre : c'est ce qui
+attrape une rupture de pente, qui est le cas qu'on cherche, et qui manque un
+creux central, qui n'existe pratiquement pas a cette echelle.
+
+Puis deux issues, dans cet ordre :
+
+* l'ecart des quatre coins depasse `CWScatter.ASSIETTE_MAX` (deux blocs) : le
+  candidat est **ecarte**. Poser quoi que ce soit sur une marche de trois blocs
+  donne soit un objet en l'air, soit un objet a moitie enterre, et aucun des
+  deux ne vaut mieux que rien ;
+* sinon, l'objet se pose sur le **minimum** des quatre. Il s'enterre un peu
+  plutot que de flotter, et c'est le bon sens du compromis : *de la matiere
+  enfouie ne se voit pas, un vide sous un caillou se voit de loin*.
+
+**Le sondeur est le meme que l'ancrage, et il faut qu'il le reste.** Un coin lu
+par une autre regle que son centre rendrait une assiette fausse dans un sens ou
+dans l'autre, donc `_sol_pose` refait exactement ce que fait la boucle
+principale — chapeau de massif, creusement d'etang, remodelage de chemin — sans
+garder les valeurs intermediaires dont elle a besoin et pas lui.
+
+**Ce que ca coute est borne par ou ca s'applique.** Le sondage est saute quand
+le rayon d'empreinte est nul, ce qui est le cas de l'essentiel de la flore : sur
+la zone de depart, **392 plantes sur 2 403** se posent sous leur colonne
+d'ancrage, les autres n'ont rien eu a sonder. Les arbres, eux, le paient tous —
+et ce sont eux qui en avaient le plus besoin, leur tronc etant **ecrit dans le
+terrain** depuis le jalon 1.11 : un fut pose un bloc trop haut laisse voir le
+vide sous lui, et rien ne le retirera ensuite.
+
+La verification de `tests/flora_test.gd` a change de forme avec la regle. Elle
+exigeait l'egalite au sol de la colonne ; elle exige maintenant **au plus le sol,
+et jamais plus bas que `ASSIETTE_MAX`** — au-dela, le candidat aurait du etre
+ecarte, pas enterre.
 
 ---
 
