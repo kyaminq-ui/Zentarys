@@ -192,10 +192,20 @@ class Zone extends RefCounted:
 	## multiplie par six).
 	var index: Dictionary = {}
 	## Les **ponts** : une entree par franchissement, trois flottants par point
-	## — x, z, et l'altitude du tablier. Ils sont releves au trace, la ou l'eau
-	## et le profil sont connus ensemble, et servent au seul rendu : la matiere
-	## du tablier, elle, sort de `CWVoxelGenerator.road_shape` comme le reste.
+	## — x, z, et l'altitude du tablier.
+	##
+	## Ils sont releves au trace, la ou l'eau et le profil sont connus ensemble,
+	## et depuis le 2026-09-09 ils servent **aux deux** : la travee instanciee
+	## par `CWBridgeRenderer` et la matiere du tablier que pose
+	## `CWVoxelGenerator.road_shape`. C'etait la seule facon de les faire
+	## coincider — et surtout de donner au tablier une **etendue**. Voir
+	## `deck_at`.
 	var bridges: Array[PackedFloat32Array] = []
+	## Boite englobante de chaque ouvrage, quatre flottants : x0, z0, x1, z1,
+	## deja elargie de la demi-largeur de chaussee. Un pont couvre une poignee de
+	## colonnes du monde ; sans ce test prealable, chaque colonne de chaussee
+	## parcourrait tous les points de tous les ouvrages de sa zone.
+	var bridge_bounds: PackedFloat32Array = PackedFloat32Array()
 
 	func is_empty() -> bool:
 		return segments.is_empty()
@@ -349,9 +359,22 @@ static func shaped_top(ground_top: int, road: Vector2) -> int:
 	# chemin. Le chemin prefere onduler.
 	var y: int = roundi(clampf(lerpf(float(ground_top), road.y, t),
 			float(ground_top - MAX_CUT), float(ground_top + MAX_FILL)))
-	# Et la chaussee est **toujours en contrebas** : voir `MIN_CUT`. Sur
-	# l'accotement, la borne se releve avec le raccord, sinon le bord du chemin
-	# serait une marche au lieu d'une pente.
+	# -- Sauf quand le chemin passe **au-dessus** du sol (2026-09-09) ---------
+	#
+	# La chaussee etait *toujours* en contrebas (`MIN_CUT`). C'est juste pour un
+	# chemin qui suit le terrain, et faux pour une rampe d'acces de pont : le
+	# profil y monte au-dessus du sol pour rejoindre le tablier, et forcer le
+	# ruban un bloc sous le terrain rouvrait la marche que la rampe existait
+	# pour supprimer.
+	#
+	# Quand le profil est au-dessus du sol, la chaussee est donc un **remblai**,
+	# borne par `MAX_FILL` comme le reste. C'est ce qui fait qu'une culee est en
+	# gravier et non en bois : le tablier ne sert que la ou il y a de l'eau
+	# dessous, et la rampe qui l'y amene est de la terre.
+	if y > ground_top:
+		return y
+	# Sur l'accotement, la borne se releve avec le raccord, sinon le bord du
+	# chemin serait une marche au lieu d'une pente.
 	var creux: int = ground_top - int(ceilf(float(MIN_CUT) * t))
 	return mini(y, creux)
 
@@ -599,13 +622,25 @@ func _profil(px: PackedFloat32Array, pz: PackedFloat32Array,
 		var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
 		var prof: Vector3i = CWTerrainField.column_profile(c.x, c.w, sea, biome)
 		chan[k] = c.w
+		# **Au-dessus de l'eau, le profil porte deja le degagement du pont**
+		# (2026-09-09), et non un bloc au-dessus de la surface. Sans cela, le
+		# tablier de matiere se posait a `surface + BRIDGE_CLEAR` alors que la
+		# chaussee de la rive etait a `sol - MIN_CUT` : l'ouvrage flottait, et
+		# ni le lissage ni le bornage ne pouvaient l'apprendre, la difference
+		# n'existant que dans `road_shape`.
+		#
+		# En la mettant **ici**, elle traverse le lissage et le bornage comme le
+		# reste du profil : les trois passes de lissage etalent la marche sur
+		# une centaine de blocs de part et d'autre, ce qui est exactement la
+		# rampe d'acces qu'on veut, et `road_shape` n'a plus qu'a suivre le
+		# profil.
 		var ref: float = float(prof.x)
 		if prof.y <= prof.z:
-			ref = float(prof.z) + 1.0
+			ref = float(prof.z + BRIDGE_CLEAR)
 			mouille[k] = 1
 			libre[k] = float(prof.z)
 		elif ref < float(sea):
-			ref = float(sea) + 1.0
+			ref = float(sea + BRIDGE_CLEAR)
 			mouille[k] = 1
 			libre[k] = float(sea)
 		sol[k] = ref
@@ -698,15 +733,77 @@ func _releve_ponts(zone: Zone, field: CWTerrainField, fx: PackedFloat32Array,
 			sec = 0
 			pont.append(px)
 			pont.append(pz)
-			pont.append(maxf(roundf(y), float(libre + BRIDGE_CLEAR)))
+			# Le profil porte deja le degagement : le relever ici une seconde
+			# fois ferait diverger la travee instanciee du tablier de matiere,
+			# qui suit `road.y`. **Un seul nombre pour les deux.**
+			pont.append(roundf(y))
 	_ferme(zone, pont)
 
 
 ## Un ouvrage n'est garde qu'a partir de deux points : un pont d'un seul point
 ## n'a pas d'axe, donc pas de lacet, donc pas de travee posable.
 static func _ferme(zone: Zone, pont: PackedFloat32Array) -> void:
-	if pont.size() >= 6:
-		zone.bridges.append(pont)
+	if pont.size() < 6:
+		return
+	zone.bridges.append(pont)
+	var x0: float = INF
+	var z0: float = INF
+	var x1: float = -INF
+	var z1: float = -INF
+	for i in pont.size() / 3:
+		x0 = minf(x0, pont[i * 3])
+		x1 = maxf(x1, pont[i * 3])
+		z0 = minf(z0, pont[i * 3 + 1])
+		z1 = maxf(z1, pont[i * 3 + 1])
+	zone.bridge_bounds.append(x0 - HALF_WIDTH)
+	zone.bridge_bounds.append(z0 - HALF_WIDTH)
+	zone.bridge_bounds.append(x1 + HALF_WIDTH)
+	zone.bridge_bounds.append(z1 + HALF_WIDTH)
+
+
+## Altitude du tablier au-dessus de (x, z), ou `NAN` si aucun ouvrage n'y passe.
+##
+## -- Pourquoi le tablier vient d'ici et non d'un test par colonne -------------
+##
+## Il se decidait sur « y a-t-il de l'eau **sous cette colonne** ». C'est une
+## condition qui **clignote** : sur un franchissement de la zone de depart, elle
+## changeait 140 fois d'avis la ou un pont a deux culees, et le tablier avait
+## des trous. Un pont n'est pas une propriete de colonne, c'est un **objet qui a
+## une etendue** — et cette etendue, le releve des franchissements la connait
+## depuis le jalon 1.16. Elle n'etait simplement pas lue par le generateur.
+##
+## L'altitude rendue est celle de la ligne brisee, interpolee : c'est exactement
+## le nombre dont la travee instanciee se sert, donc les deux moities de
+## l'ouvrage ne peuvent plus diverger.
+static func deck_at(zone: Zone, x: float, z: float) -> float:
+	for b in zone.bridges.size():
+		var k: int = b * 4
+		if x < zone.bridge_bounds[k] or x > zone.bridge_bounds[k + 2] \
+				or z < zone.bridge_bounds[k + 1] \
+				or z > zone.bridge_bounds[k + 3]:
+			continue
+		var pont: PackedFloat32Array = zone.bridges[b]
+		var best: float = NAN
+		var best_d2: float = HALF_WIDTH * HALF_WIDTH
+		for i in pont.size() / 3 - 1:
+			var ax: float = pont[i * 3]
+			var az: float = pont[i * 3 + 1]
+			var vx: float = pont[(i + 1) * 3] - ax
+			var vz: float = pont[(i + 1) * 3 + 1] - az
+			var len2: float = vx * vx + vz * vz
+			var t: float = 0.0
+			if len2 > 0.0:
+				t = clampf(((x - ax) * vx + (z - az) * vz) / len2, 0.0, 1.0)
+			var dx: float = x - (ax + vx * t)
+			var dz: float = z - (az + vz * t)
+			var d2: float = dx * dx + dz * dz
+			if d2 < best_d2:
+				best_d2 = d2
+				best = pont[i * 3 + 2] \
+						+ (pont[(i + 1) * 3 + 2] - pont[i * 3 + 2]) * t
+		if not is_nan(best):
+			return best
+	return NAN
 
 
 ## Cout d'un point : ce qu'il fait monter, plus ce qu'il fait rallonger.

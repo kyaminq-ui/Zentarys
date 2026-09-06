@@ -310,7 +310,8 @@ func generated_voxel(x: int, y: int, z: int) -> int:
 	var shape := Vector4i(prof.x, 1, 0, DECK_NONE)
 	if not cells.is_empty():
 		road = CWPathNetwork.nearest(zone, cells, float(wx), float(wz))
-		shape = road_shape(road, prof.x, prof, sea, rel.y)
+		shape = road_shape(road, prof.x, prof, sea, rel.y,
+				CWPathNetwork.deck_at(zone, float(wx), float(wz)))
 		prof.x = shape.x
 		surface = CWPalette.blended(CWPalette.GRAVEL, surface,
 				clampf((road.x - CWPathNetwork.HALF_WIDTH)
@@ -412,7 +413,8 @@ static func cave_breaks(rel: Vector4i, ground_top: int) -> bool:
 ## ce qui les separe, c'est-a-dire un puits de plusieurs dizaines de blocs le
 ## jour ou un chemin passe au-dessus d'une grotte.
 static func road_shape(road: Vector2, ground_top: int, prof: Vector3i,
-		sea: int, slab_hi: int = -0x7FFFFFFF) -> Vector4i:
+		sea: int, slab_hi: int = -0x7FFFFFFF,
+		span: float = NAN) -> Vector4i:
 	if road.x >= CWPathNetwork.reach():
 		return Vector4i(ground_top, 1, 0, DECK_NONE)
 	var on: bool = CWPathNetwork.on_roadway(road)
@@ -421,25 +423,84 @@ static func road_shape(road: Vector2, ground_top: int, prof: Vector3i,
 		water_top = prof.z
 	elif ground_top < sea:
 		water_top = sea
-	if on and water_top != DECK_NONE:
-		return Vector4i(ground_top, 1, 0,
-				maxi(roundi(road.y), water_top + CWPathNetwork.BRIDGE_CLEAR))
 	var top: int = CWPathNetwork.shaped_top(ground_top, road)
 	# Le dessus de la **chaussee**, meme hors d'elle : c'est le centre du cercle
 	# de l'alesage, et il ne depend pas de la colonne qu'on regarde.
 	var road_top: int = CWPathNetwork.shaped_top(ground_top,
 			Vector2(0.0, road.y))
+	var arche: int = tunnel_arch(top, road_top, slab_hi, road.x)
+
 	if not on:
-		# Hors chaussee, un chemin ne creuse rien — **sauf sous une masse**,
-		# ou la voute du tunnel deborde le ruban. Sans ce debordement, un
-		# tunnel reste la fente rectangulaire que le reproche visait.
-		var arche: int = tunnel_arch(top, road_top, slab_hi, road.x)
+		# Hors chaussee, un chemin ne creuse rien — **sauf sous une masse**, ou
+		# la voute du tunnel deborde le ruban. Sans ce debordement, un tunnel
+		# reste la fente rectangulaire que le reproche du 2026-09-08 visait.
 		if arche <= 0:
 			return Vector4i(top, 1, 0, DECK_NONE)
 		return Vector4i(top, top + 1, top + arche, DECK_NONE)
+
+	# -- Le tablier suit le profil, et il rejoint la rive (2026-09-09) --------
+	#
+	# Il se posait a `surface + BRIDGE_CLEAR` **la ou il y avait de l'eau sous la
+	# colonne, et nulle part ailleurs**. Deux defauts en un, et le second ne
+	# s'est vu qu'en mesurant :
+	#
+	#   * aux culees, la chaussee de la rive etait a `sol - MIN_CUT` : entre
+	#     elle et le tablier il y avait une marche, et l'ouvrage flottait ;
+	#   * « y a-t-il de l'eau **sous cette colonne** » est une condition qui
+	#     **clignote**. Sur un franchissement de la zone de depart, elle change
+	#     140 fois d'avis la ou un pont a deux culees : le tablier avait des
+	#     trous.
+	#
+	# Trois choses ensemble y repondent, et il fallait les trois :
+	#
+	#   * le degagement est porte par le **profil** (`CWPathNetwork._profil`),
+	#     donc `road.y` *est* l'altitude du tablier — la meme que celle dont la
+	#     travee instanciee se sert. Deux nombres calcules a deux endroits n'ont
+	#     aucune raison de coincider ;
+	#   * la chaussee a le droit de passer **au-dessus** du sol
+	#     (`CWPathNetwork.shaped_top`), donc la rampe d'acces est un remblai de
+	#     gravier et non cent blocs de bois a un bloc du sol ;
+	#   * et la condition du tablier devient **geometrique** : il y a du bois la
+	#     ou le terrain descend **plus bas que le remblai ne peut monter**,
+	#     c'est-a-dire sous `sol + MAX_FILL`. Ailleurs, de la terre. Cette
+	#     condition-la ne clignote pas : elle suit le terrain, qui est continu,
+	#     au lieu de suivre la presence d'eau, qui ne l'est pas.
+	#
+	# Et les deux surfaces se rejoignent par construction : a la colonne ou le
+	# remblai rattrape le profil, les deux valent `road.y`.
+	# `span` est l'altitude du tablier releve (`CWPathNetwork.deck_at`), et
+	# `NAN` hors d'un ouvrage. C'est **l'ouvrage qui dit ou il y a du bois**, et
+	# non la colonne : voir la note de `deck_at` pour ce que coutait l'inverse.
+	if is_nan(span):
+		return Vector4i(top, top + 1,
+				top + maxi(CWPathNetwork.CLEARANCE, arche), DECK_NONE)
+	var deck: int = roundi(span)
+	if water_top != DECK_NONE:
+		# Le degagement est ici un **plancher** et non une consigne : une
+		# riviere plus profonde que ne le disait le jalon voisin du profil ne
+		# doit pas noyer le tablier.
+		deck = maxi(deck, water_top + CWPathNetwork.BRIDGE_CLEAR)
+	# **On ne redecide pas colonne par colonne s'il y a un tablier.** L'essai
+	# precedent l'annulait des que le remblai rattrapait le bois (`deck <= top`)
+	# : c'est juste a la culee et faux au milieu, ou un banc de sable emerge
+	# entre deux bras d'une riviere. Il rendait 178 passages bois/terre sur les
+	# ouvrages d'une zone. **L'etendue de l'ouvrage est celle du releve**, qui
+	# s'arrete deja au premier point sec de chaque rive ; le tablier la couvre
+	# entierement, et la culee est la ou le releve finit.
+	#
+	# Reste a ne pas enterrer de bois : si la colonne est plus haute que le
+	# tablier, c'est elle qu'on garde.
+	if deck < top:
+		return Vector4i(top, top + 1,
+				top + maxi(CWPathNetwork.CLEARANCE, arche), DECK_NONE)
+	if water_top != DECK_NONE:
+		# Le sol garde exactement ce qu'il etait : le lit, la berge et l'eau ne
+		# sont ni tranches ni effaces, le chemin passe par-dessus. Le combler
+		# ferait un barrage, et un barrage retient une eau que ce monde ne
+		# simule pas.
+		return Vector4i(ground_top, 1, 0, deck)
 	return Vector4i(top, top + 1,
-			top + maxi(CWPathNetwork.CLEARANCE,
-					tunnel_arch(top, road_top, slab_hi, road.x)), DECK_NONE)
+			top + maxi(CWPathNetwork.CLEARANCE, arche), deck)
 
 
 ## -- L'alesage d'un tunnel : un rayon, pas une hauteur -----------------------
@@ -859,7 +920,8 @@ func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,
 		if not road_cells.is_empty():
 			road = CWPathNetwork.nearest(road_zone, road_cells,
 					float(cx), float(cz))
-			shape = road_shape(road, prof.x, prof, sea, rel.y)
+			shape = road_shape(road, prof.x, prof, sea, rel.y,
+					CWPathNetwork.deck_at(road_zone, float(cx), float(cz)))
 			prof.x = shape.x
 		var ph: float = float(shape.x)
 		patch.heights[i] = ph

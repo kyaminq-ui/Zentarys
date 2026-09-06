@@ -3264,6 +3264,93 @@ fait la difference entre une arche et une fente. Le toit reste garde comme
 avant : `TUNNEL_ROOF_MIN` blocs de matiere au-dessus de la voute, faute de quoi
 le chemin ne percerait plus le massif mais le couperait en deux.
 
+### 7octies.5 « Le pont flotte, et il a neuf teintes de bois »
+
+#### Il flottait, et il avait des trous
+
+Le tablier se posait a `surface + BRIDGE_CLEAR` **la ou il y avait de l'eau sous
+la colonne, et nulle part ailleurs**. Deux defauts en un, et le second ne s'est
+vu qu'en mesurant :
+
+* aux culees, la chaussee de la rive etait a `sol - MIN_CUT` : entre elle et le
+  tablier il y avait une marche, et l'ouvrage flottait — c'est ce qui a ete
+  rapporte ;
+* **« y a-t-il de l'eau sous cette colonne » est une condition qui clignote.**
+  Sur les 63 ouvrages de la zone de depart, le tablier changeait d'avis 178 fois
+  au lieu de 126 : il avait des trous, la ou un banc de sable emerge entre deux
+  bras. Personne ne l'avait signale ; c'est la mesure qui l'a trouve.
+
+**Quatre choses ensemble y repondent, et il a fallu les quatre.** Chacune a ete
+essayee seule, et chacune seule laissait la marche ou la rouvrait ailleurs :
+
+1. **le degagement est porte par le profil** (`CWPathNetwork._profil`), et non
+   ajoute apres coup dans `road_shape`. Il traverse donc le lissage et le
+   bornage comme le reste du chemin, ce qui *fabrique la rampe d'acces toute
+   seule* ; et `road.y` devient l'altitude du tablier, la meme dont la travee
+   instanciee se sert. Deux nombres calcules a deux endroits n'ont aucune raison
+   de coincider ;
+2. **la chaussee a le droit de passer au-dessus du sol.** `shaped_top` la
+   posait *toujours* un bloc en contrebas (`MIN_CUT`) : juste pour un chemin qui
+   suit le terrain, faux pour une rampe de pont, et cela rouvrait la marche que
+   la rampe existait pour supprimer. Au-dessus du sol, la chaussee est un
+   **remblai**, borne par `MAX_FILL` comme le reste ;
+3. **le tablier passe par `shaped_top` comme la chaussee.** `road.y` est
+   l'altitude *voulue*, et le terrain a le droit de la borner : deux surfaces
+   qui se touchent et dont une seule est bornee ne peuvent pas se rejoindre ;
+4. **l'etendue du tablier est celle du releve, pas de la colonne**
+   (`CWPathNetwork.deck_at`). Un pont n'est pas une propriete de colonne, c'est
+   un objet qui a une etendue — et le releve des franchissements la connaissait
+   depuis le jalon 1.16 ; elle n'etait simplement pas lue par le generateur.
+
+> **Les deux essais rates valent d'etre gardes, parce qu'ils disent chacun une
+> chose.** Poser du bois partout ou la chaussee passe au-dessus du sol a couvert
+> **244 colonnes de chaussee sur 343** : `shaped_top` posant le ruban en
+> contrebas, « au-dessus de la chaussee » etait vrai sur presque tout le reseau —
+> la rampe se mesure au **terrain**. Puis le mesurer au terrain en a laisse 131 :
+> la rampe d'un pont fait une centaine de blocs, c'est le lissage du profil qui
+> l'etale, et *cent blocs de bois a un bloc du sol font un viaduc, pas une
+> culee*. D'ou le remblai.
+
+**Et la verification manquait pour une raison qui se generalise.** Celles d'alors
+regardaient chaque colonne **isolement** — le tablier est-il au-dessus de l'eau,
+la chaussee est-elle degagee — et **une marche ne se voit pas sur une colonne
+seule.** Elle se voit en marchant, donc en comparant deux colonnes voisines. La
+nouvelle parcourt l'axe de chaque ouvrage, releve la surface sur laquelle on
+pose le pied — le tablier s'il y en a un, la chaussee sinon — et mesure le
+ressaut au passage du bois a la terre. C'est la meme famille que la mesure
+d'escalade d'un massif, et la meme que le parcours d'axe d'une galerie : *ce qui
+se juge en marchant se mesure en marchant.*
+
+| | avant | apres |
+|---|---|---|
+| ressauts a la culee | **103**, la pire de **4 blocs** | **3**, la pire de **2** |
+| passages bois/terre sur 63 ouvrages | 178 (le tablier a des trous) | **141**, soit 2,2 par ouvrage |
+| colonnes de chaussee en bois | 21 | 27 |
+
+Le contrat retenu est **deux blocs au pire, et a niveau dans plus de 95 % des
+cas** — pas « aucune marche », et il ne peut pas l'etre : le tablier reste
+plancher par `surface + BRIDGE_CLEAR`, donc une riviere plus profonde que ne le
+disait le jalon voisin du profil releve le bois d'un bloc ou deux. Le chemin
+lui-meme fait des marches de trois blocs ailleurs, ce que la ligne imprimee
+rappelle a cote.
+
+#### Une seule teinte de bois
+
+La travee employait **neuf index** de la rampe des planches plus un de pierre
+pour les chapeaux de poteau. A six voxels par bloc, une planche fait trois
+voxels de large : neuf teintes reparties la-dessus ne se lisent pas comme du
+bois, elles se lisent comme du **grain**.
+
+Un seul index (180), **et la forme fait le reste** : le joint entre deux
+planches etait une teinte plus sombre, c'est maintenant une **rainure** — le
+voxel du dessus manque —, et le chapeau d'un poteau se designe par son
+**debord** d'un voxel, qu'il avait deja, plutot que par sa matiere. La note
+precedente objectait qu'une rainure disparaitrait au premier pas de recul :
+c'est vrai, et c'est le but. De pres on voit des planches, de loin un tablier ;
+neuf teintes, elles, se voyaient de loin — comme du bruit.
+
+`pont_travee` : 56 x 12 x 10, 1 260 voxels, **un seul morceau, un seul index**.
+
 ---
 
 ## 8. Assets voxels

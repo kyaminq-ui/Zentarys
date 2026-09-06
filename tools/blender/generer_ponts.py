@@ -63,6 +63,30 @@ PLAFOND = (64, 40)
 PLANCHE_CLAIR, PLANCHE_SOMBRE = 176, 187
 PIERRE_CLAIR, PIERRE_SOMBRE = 188, 199
 
+# -- Une seule teinte de bois (2026-09-09) -----------------------------------
+#
+# La premiere travee employait **neuf index** de la rampe des planches plus un
+# de pierre pour les chapeaux de poteau. A six voxels par bloc, une planche fait
+# trois voxels de large : neuf teintes reparties la-dessus ne se lisent pas
+# comme du bois, elles se lisent comme du bruit — et le reproche du 2026-09-08
+# le dit sans detour.
+#
+# Un seul index, donc, **et la forme fait le reste** :
+#
+#   * le joint entre deux planches etait une teinte plus sombre ; c'est
+#     maintenant une **rainure** — le voxel du dessus manque. A un sixieme de
+#     bloc elle est fine, mais elle porte une ombre, ce qu'une teinte ne fait
+#     pas ;
+#   * le chapeau d'un poteau etait de la pierre ; il **deborde** deja d'un voxel
+#     de chaque cote, et c'est ce debord qui le designe. La pierre ne lui
+#     apprenait rien.
+#
+# La note precedente objectait que creuser le joint le ferait disparaitre au
+# premier pas de recul. C'est vrai, et c'est le but : de pres on voit des
+# planches, de loin on voit un tablier. Neuf teintes, elles, se voyaient de
+# loin — comme du grain.
+BOIS = fv.teinte(PLANCHE_CLAIR, PLANCHE_SOMBRE, 0.62)
+
 
 def travee(graine=0):
     """Une travee : platelage, longerons, deux garde-corps, deux poteaux.
@@ -76,26 +100,23 @@ def travee(graine=0):
 
     # -- Le platelage : deux voxels d'epaisseur, planches dans l'axe ----------
     #
-    # Une planche fait trois voxels de large, un demi-bloc : c'est ce qui la
-    # rend visible sans faire du tablier un damier. Le joint est simplement une
-    # teinte plus sombre — a cette maille, creuser le joint le ferait
-    # disparaitre au premier pas de recul.
+    # Une planche fait trois voxels de large, un demi-bloc. Le joint est une
+    # **rainure** et non une teinte : le voxel du dessus manque. Voir `BOIS`.
+    #
+    # Les deux bords du tablier n'en portent pas — une rainure au ras du vide
+    # ferait un tablier qui s'effrite, pas une planche.
     for x in range(larg):
-        planche = x // 3
-        f = 0.55 + 0.35 * ((planche * 7919) % 5) / 4.0
-        joint = (x % 3) == 0
+        joint = (x % 3) == 0 and 0 < x < larg - 1
         for y in range(lon):
-            for z in range(2):
-                c = fv.teinte(PLANCHE_CLAIR, PLANCHE_SOMBRE,
-                              f * (0.55 if joint else 1.0))
-                g.pose(x, y, z, c)
+            for z in range(2 if not joint else 1):
+                g.pose(x, y, z, BOIS)
 
     # -- Les deux longerons, sous le platelage -------------------------------
     for cote in (0, 1):
         x0 = 2 if cote == 0 else larg - 6
         for x in range(x0, x0 + 4):
             for y in range(lon):
-                g.pose(x, y, -1, fv.teinte(PLANCHE_CLAIR, PLANCHE_SOMBRE, 0.3))
+                g.pose(x, y, -1, BOIS)
 
     # -- Les garde-corps -----------------------------------------------------
     #
@@ -111,18 +132,16 @@ def travee(graine=0):
         for x in range(x0, x0 + 2):
             for y in range(py, py + 2):
                 for z in range(2, haut + 2):
-                    f = 0.25 + 0.5 * (z - 2) / max(1, haut)
-                    g.pose(x, y, z, fv.teinte(PLANCHE_CLAIR, PLANCHE_SOMBRE, f))
+                    g.pose(x, y, z, BOIS)
         # Le chapeau du poteau deborde d'un voxel de chaque cote.
         for x in range(x0 - 1, x0 + 3):
             for y in range(py - 1, py + 3):
-                g.pose(x, y, haut + 2, fv.teinte(PIERRE_CLAIR, PIERRE_SOMBRE, 0.8))
+                g.pose(x, y, haut + 2, BOIS)
         # Les deux lisses.
         for z in (haut, haut - 3):
             for x in range(x0, x0 + 2):
                 for y in range(lon):
-                    g.pose(x, y, z,
-                           fv.teinte(PLANCHE_CLAIR, PLANCHE_SOMBRE, 0.75))
+                    g.pose(x, y, z, BOIS)
     return g
 
 
