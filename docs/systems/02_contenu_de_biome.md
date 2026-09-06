@@ -125,7 +125,7 @@ l'altitude.
 |---|---|---|
 | 6 | **champ de rochers.** Grille 12 × 12 au pas de 64 u dans la cellule, position `cell·256 + i/3 + 42`. Chaque site : 3 chances sur 4 d'être tenté, retenu si le poids d'influence de l'élément ≥ 0.5 et si aucune entrée existante n'est à moins de 80 u. Rayons `rand()%10 + 20` sur les deux axes, hauteur `rand()%16 + 20`, creusé par `World_carveTerrainFeatureB`. Sauté à moins de 60 u du point d'apparition du monde. | haute |
 | 11 | **massif isolé.** Un seul appel, au centre de la tuile (`cell·256 + 128`), `carveTerrainFeatureB` de rayon 100 × 100 et de hauteur `rand()%100 + 100`. | haute |
-| 12 | **plan d'eau.** Un seul appel au centre de la tuile, `World_generateWaterOrPathFeature` de rayon 80 × 80, mode 6. | haute |
+| 12 | **grand objet de végétation.** Un seul appel au centre de la tuile, `World_generateWaterOrPathFeature` de rayon 80 × 80 et de variété 6. **Ce n'est pas un plan d'eau** — le nom de la fonction est trompeur, voir §10. | haute |
 | 3 | **parcelle bâtie.** Balayage 14 × 14 au pas de 18 u (252 u, soit la cellule), poids d'influence par site, puis `World_buildPropInstance` sur l'élément. Les 3 variantes du jalon 1.6 sont vraisemblablement les 3 dispositions. | moyenne |
 | 9 | construit un `cube::Spawn` (alloc de 0x10f0) au centre, si la cellule courante est celle de l'élément. | moyenne |
 | 1, 5 | gardent une dispersion par distance à leur centre, dans la boucle de pose de §6. | moyenne |
@@ -673,9 +673,123 @@ surface `WATER` n'est jamais rendue par `surface_index`. Les décors de mur
    §8.6, avec une réserve documentée sur les types inférieurs à 22. Portée
    dans `src/worldgen/cw_decor_rules.gd`.
 4. Les types d'éléments 2, 10, 14, 15 n'ont pas été isolés.
-5. `World_carveTerrainFeatureA` / `B` et `World_generateWaterOrPathFeature`
-   donnent la forme des rochers, massifs et plans d'eau de §4 : non analysées.
+5. ~~`World_generateWaterOrPathFeature`~~ — **analysée** le 2026-09-06, §10.
+   Elle ne fait ni eau ni chemin. `World_carveTerrainFeatureA` / `B`, qui
+   donnent la forme des rochers et massifs de §4, restent non analysées.
 6. `World_populateRegionDecorations` (@005cc510, 4 000 lignes) n'est appelée que
    pour les **sites de région de type 3 et 5**, avec un drapeau 3 pour le type 5.
    Elle empile `World_fillVoxelColumnTyped` (40 appels) et `Terrain_fillCuboid`
    (11) : bâtisseur de villages, jalon 4.3.
+
+## 10. Les lacs, et le nom qui les cachait (2026-09-06)
+
+Cette section est née d'une question de feuille de route — « où sont les lacs et
+les rivières ? » — dont la réponse attendue était : dans
+`World_generateWaterOrPathFeature`, qui n'est pas analysée. Elle l'est
+maintenant, et **elle n'a rien à voir avec l'eau**. Les lacs étaient ailleurs,
+dans une fonction déjà portée aux trois quarts.
+
+### 10.1 `World_generateWaterOrPathFeature` (@005df960) — le douzième nom trompeur
+
+2 025 lignes, sept variétés, et pas une qui écrive de l'eau. Ce qu'elle bâtit :
+
+| ce qu'elle appelle | combien | ce que ça fait |
+|---|---|---|
+| `Terrain_paintSphere` | 7 | des sphères de **bois** (type 7), dont un motif en croix — centre, puis (x ± r, z) et (x, z ± r) |
+| `World_generateFoliageBlob` | 5 | des masses de **feuillage** (type 8) |
+| `WorldInfo_placeStructure` | 8 | deux groupes de quatre, avec un indice de rotation qui parcourt 0, 1, 2, 3 |
+| `Terrain_paintDisk` | 2 | les disques de la variété 1 |
+
+La signature réelle est
+`(x, z, altitude_de_base, rayon, hauteur, variété, contexte)` — **`param_4` est
+un rayon, pas un mode** : la fonction le manipule en flottant, `(int)(r × 0,2)`
+plafonné à 3, `r << 3`. La variété est `param_6`, et elle vaut 0 à 6.
+
+Ce que chaque variété change, relevé dans le prologue :
+
+- **2** : les six composantes de couleur à 255 — un objet **blanc** ;
+- **3** : (240, 180, 120) et (220, 100, 50) — un objet **orangé**, de désert ;
+- **1** : moitié moins épais, deux fois plus haut, et le corps devient une
+  **spirale** — l'angle avance de 0,3 π par tour de boucle sur trente
+  itérations, soit quatre tours et demi, le rayon se resserre et la hauteur
+  monte, avec deux teintes RVB tirées au hasard interpolées le long de l'arc ;
+- **5** : hauteur × 0,7, rayon plafonné à 3 ;
+- **6** : garde les couleurs tirées du climat. C'est la variété que l'élément
+  de tuile 12 emploie, au centre de sa tuile, en rayon 80 et hauteur 80.
+
+Les couleurs par défaut viennent de `GameController_sampleHumidityGrid` et
+`GameController_sampleTemperatureGrid`, échantillonnées en tête de fonction.
+
+**La preuve tient dans un octet.** `Terrain_paintSphere` et `Terrain_paintDisk`
+prennent un `byte*` de quatre octets — `{R, V, B, type}` — et le passent à
+`tilemap_writeGlyphColumn`. Les seuls types que cette fonction écrit sont
+`0x27` et `0x28` ; le type réel est `octet & 0x1f`, le bit `0x20` étant un
+drapeau, donc **7 et 8**. Et `World_generateFoliageBlob` — le *feuillage*, le
+nom est sûr — écrit `0x28`. Donc 8 = feuillage, 7 = bois, et cette fonction est
+un **générateur de grande végétation**, pas un générateur d'eau.
+
+> Au passage, `Terrain_paintSphere` dit aussi comment l'original ombre sa
+> végétation : quand son drapeau de mélange est levé, il tire du bruit 3D en
+> (x, y, z) et interpole la couleur passée vers **(50, 120, 60)**, un vert de
+> feuillage. La teinte n'est donc pas uniforme dans une masse, elle est bruitée
+> par voxel — ce que ce projet obtient autrement, par des rampes de palette.
+
+**Conséquence pour §4 : l'élément de tuile 12 n'est pas un plan d'eau.** C'est un
+grand objet de végétation posé au centre de sa tuile, rayon 80, hauteur 80. La
+ligne du tableau était marquée « confiance haute », et elle l'était à tort : la
+confiance portait sur *quel appel* le type 12 fait — ce qui est juste et vérifié
+— et non sur *ce que cet appel fait*, qui n'était qu'un nom.
+
+### 10.2 Où l'eau est réellement écrite
+
+Dans `WorldInfo_generateBiomeContent` (@005e4850), la fonction que ce projet a
+déjà portée pour la flore (§8.6) — dans une **autre passe** de la même cellule,
+une boucle de 64 × 64 colonnes distincte de celle du décor.
+
+Le corps, à `WorldInfo.cpp:2694-2760` :
+
+```
+pour chaque colonne (x, z) de la cellule :
+    v = WorldInfo_sampleTerrainHeight(x, z)
+    si 1 - v x 50 >= 0                    -- soit v <= 0,02 : une porte très étroite
+        h = Terrain_sampleHeightAtWorldXY(x, z)
+        si h <= 0,95
+            niveau = terrain_generateColumnColor()      -- une hauteur, pas une couleur
+            q      = (niveau / 5) * 5                   -- quantifié au pas de 5
+            f      = (niveau - q) / 5
+            t      = triangle(f)        -- f < 0,5 : 2f ; sinon 1 - (f - 0,5) x 4
+            remplir de (q - t x 5 + 2) jusqu'à q  avec  {0, 0, 255 x (1 - t), type 2}
+```
+
+Trois choses en sortent, et chacune répond à une question ouverte :
+
+1. **l'eau est de la matière écrite.** Type 2, colonne par colonne, avec sa
+   couleur — un bleu dont la composante bleue s'éteint avec `t`. Ce n'est pas
+   un vide sous un niveau global ;
+2. **son niveau est local et quantifié au pas de 5.** C'est ce qui permet un
+   plan d'eau à une altitude quelconque, et c'est ce qui lui donne ses paliers :
+   deux colonnes voisines partagent un niveau tant qu'elles tombent dans le même
+   pas de 5 ;
+3. **la porte est très sélective** — `v <= 0,02` sur un champ normalisé. L'eau
+   d'altitude est rare par construction, ce qui est cohérent avec un paysage où
+   l'on croise un étang de loin en loin et non un marécage continu.
+
+Le drapeau `0x40`, testé avant chaque écriture (`(octet & 0x40) == 0`), protège
+ce qui est déjà posé : la passe d'eau n'écrase pas un bloc marqué. C'est le même
+drapeau que `Terrain_paintSphere` consulte.
+
+**Ce qui reste ouvert :** `WorldInfo_sampleTerrainHeight` et
+`Terrain_sampleHeightAtWorldXY` sont deux champs distincts dont aucun n'est
+identifié — le premier sert de porte, le second de garde-fou d'altitude. Tant
+qu'ils ne le sont pas, la *forme* de la règle est connue et sa *carte* ne l'est
+pas. Et deux autres sites de la même fonction (`WorldInfo.cpp:2559` et `:3167`)
+enchaînent les deux mêmes appels sans écrire d'eau : ce sont probablement des
+variantes de la même passe, non analysées.
+
+### 10.3 Et les chemins ?
+
+**Rien.** Aucune des sept variétés de @005df960 ne trace quoi que ce soit entre
+deux points, et la seule interpolation qu'elle contient est le bras d'une
+spirale. Cela **confirme** la correction déjà écrite au jalon 1.6 : la source
+n'a pas de réseau de routes entre points d'intérêt. Un chemin reliant les bourgs
+d'une région serait une création de ce projet, et il faudra le dire comme tel.

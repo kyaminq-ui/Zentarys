@@ -126,11 +126,15 @@ biome, **Échap** rend la souris puis quitte.
 
 ## 3. État
 
-> **Le jalon 1 est clos.** La falaise (§7ter) était le premier des trois points
-> de §7bis ; elle est faite. **Restent les lacs et les chemins — la même
-> fonction à analyser, et une décision d'architecture à prendre avant d'écrire
-> une ligne (§7bis.2) — puis la collision, objet par objet (§7bis.3).** 2.6,
-> l'apparition, reste l'autre porte ouverte.
+> **Le jalon 1 est clos.** La falaise (§7ter) est faite, et l'analyse des lacs
+> a été menée dans la foulée : **la fonction que la feuille de route désignait
+> n'était pas la bonne** — elle ne fait ni eau ni chemin, c'est le douzième nom
+> trompeur, et l'élément de tuile 12 n'est donc pas un plan d'eau (§7bis.2,
+> `docs/systems/02` §10). L'eau est écrite ailleurs, et **la source tranche la
+> décision d'architecture qu'on gardait ouverte : l'eau est de la matière**.
+> **Restent à porter les lacs — il manque d'identifier les deux champs qui
+> disent où — et la collision, objet par objet (§7bis.3).** 2.6, l'apparition,
+> reste l'autre porte ouverte.
 
 Jalon 1 (le monde) : **1.1 à 1.13 sont portés, testés et vus en jeu**. Suite de
 validation : **332 vérifications, 0 échec**, ~20 s.
@@ -1510,11 +1514,13 @@ encore dans les données du monde, et c'est elle qui bougerait la première.
 | `terrain_surfaceColor_blend` | `@005c56e0` | la règle de surface d'origine |
 
 **Onze noms trompeurs** ont été relevés dans le dépôt d'analyse ; ils sont
-listés dans `docs/ROADMAP.md`, §1.7, « correction de sources ». Les deux qui
-comptent pour la suite : `WorldInfo_scatterObjectsInArea` **ne disperse pas
-d'objets** et `World_generateTreeRecursive` **ne génère pas d'arbres**.
+listés dans `docs/ROADMAP.md`, §1.7, « correction de sources ». **Ils sont
+douze depuis le 2026-09-06** — voir §7bis.2. Les trois qui comptent pour la
+suite : `WorldInfo_scatterObjectsInArea` **ne disperse pas d'objets**,
+`World_generateTreeRecursive` **ne génère pas d'arbres**, et
+`World_generateWaterOrPathFeature` **ne fait ni eau ni chemin**.
 
-## 7bis. La prochaine session — **les lacs et les chemins, puis la collision**
+## 7bis. La prochaine session — **les lacs, puis la collision**
 
 Décidé le 2026-09-06, après la question « a-t-on prévu un jalon pour les lacs,
 les rivières, les chemins entre POI et les falaises ? ». Réponse : non, aucun des
@@ -1523,6 +1529,13 @@ un ordre de préférence, c'est celui de leurs dépendances. S'y ajoute un
 troisième point, demandé le même jour : **la collision du branchage, du
 feuillage, des filons et des cactus**.
 
+**Deux des quatre sont retombés le jour même.** La falaise est faite (§7ter.4).
+Et les **chemins** sortent de la liste : la fonction qui devait les porter n'en
+contient pas, ce qui confirme la correction du jalon 1.6 — la source n'a pas de
+réseau de routes, et en faire un serait une création de ce projet, à décider
+comme telle. Restent les **lacs**, dont la source est trouvée ailleurs, et la
+**collision**.
+
 ### 1 — La falaise — **faite le 2026-09-06, voir §7ter**
 
 Elle était le premier des trois points, et le seul qui n'attendait aucune
@@ -1530,51 +1543,80 @@ décision : une règle de la source, quelques lignes dans `surface_of`, un seuil
 déjà relevé. Ce qui restait à écrire était la *mesure* du facteur, et c'est elle
 qui a demandé deux essais et une capture. Le compte rendu est en §7ter.
 
-### 2 — Les lacs et les chemins, ensemble
+### 2 — Les lacs — **la fonction est lue, et elle n'était pas la bonne**
 
-**Parce qu'ils sont littéralement la même fonction à analyser**, et parce que
-les deux butent sur la même décision.
+> **Tout ce que cette section disait avant le 2026-09-06 reposait sur un nom, et
+> le nom était faux.** L'analyse est en `docs/systems/02`, §10. Ce qui suit
+> remplace le plan précédent ; la décision d'architecture qu'il gardait ouverte
+> est **tranchée par la source**, et pas dans le sens qu'on attendait.
 
-`World_generateWaterOrPathFeature` : le nom porte les deux mots. C'est elle que
-l'élément de tuile **type 12 — plan d'eau** appelle, une fois au centre de sa
-tuile, en rayon 80 × 80 et mode 6 (`docs/systems/02`, §4). Elle n'est pas
-analysée (§9.5). Le mode est un paramètre : il y a tout lieu de croire qu'un
-autre mode donne le chemin, et c'est la première chose à vérifier en la lisant.
+**`World_generateWaterOrPathFeature` (@005df960) ne fait ni eau ni chemin.**
+Elle bâtit un grand objet de végétation en sept variétés : sept `paintSphere` de
+**bois**, cinq `World_generateFoliageBlob` de **feuillage**, huit
+`WorldInfo_placeStructure` en quatre rotations, et une variété — la 1 — qui est
+une **spirale** de trente disques sur quatre tours et demi. La preuve tient dans
+un octet : les seuls types qu'elle écrit sont `0x27` et `0x28`, soit, une fois
+retiré le drapeau `0x20`, les types **7 (bois) et 8 (feuillage)** — et c'est
+`World_generateFoliageBlob`, dont le nom est sûr, qui écrit le second.
 
-Côté chemins, il faut savoir ce qu'on cherche : **la source n'a pas de réseau de
-routes entre POI**, et c'est une correction déjà écrite (jalon 1.6). Le type 1
-n'est pas « les routes », `World_roadField` est l'aplanissement du bourg, et les
-arêtes du graphe de sites ne sont pas des voies — `site_edge_radius` reste à 0.
-Si des chemins existent dans l'original, ils passent par cette fonction-ci, à
-l'échelle d'une tuile. Un réseau reliant les bourgs d'une région serait une
-**création de ce projet**, et il faudra le dire comme tel.
+Deux conséquences, et la première est une erreur à corriger dans nos propres
+notes :
 
-> **La seule vraie question d'architecture des trois : comment le monde
-> porte-t-il de l'eau au-dessus du niveau de la mer ?**
->
-> Aujourd'hui il ne le peut pas. « L'eau n'est pas de la matière, c'est le vide
-> sous le niveau de la mer » (jalon 1.8, `docs/systems/03`) : `World_getBlockAt`
-> ne lit jamais un bloc d'eau, il rend un témoin d'eau si `z <= 0` et un témoin
-> d'air sinon, et `CWWorldEdits.erase_value` rejoue la même règle. Un lac à
-> l'altitude 40 est donc impossible **par construction**, et une rivière aussi —
-> le réseau de chenaux du jalon 1.4 creuse bien les vallées, mais rien ne les
-> remplit.
->
-> Trois issues, et aucune n'est gratuite :
->
-> 1. **un niveau d'eau par élément de tuile.** L'eau reste implicite, mais son
->    niveau devient une propriété locale au lieu d'une constante globale. C'est
->    le moins invasif et ça suffit aux lacs ; ça ne suffit pas aux rivières, qui
->    descendent ;
-> 2. **l'eau redevient de la matière écrite**, comme au tout début. On y gagne
->    les rivières et les cascades, on y perd la règle d'effacement de 1.8 et il
->    faut un type de bloc qui coule ;
-> 3. **une couche d'eau séparée**, ni terrain ni décor, avec sa propre surface.
->    C'est ce que font la plupart des moteurs voxel ; c'est aussi le plus gros
->    morceau, et il ne ressemble à rien de ce que la source fait.
->
-> Trancher **avant** d'écrire une ligne : les trois donnent des lacs, une seule
-> donne des rivières, et le choix se paie sur tout le reste du jalon 1.
+- **l'élément de tuile 12 n'est pas un plan d'eau**, c'est un grand objet de
+  végétation posé au centre de sa tuile, rayon 80, hauteur 80, variété 6. La
+  ligne de `docs/systems/02`, §4 était marquée « confiance haute » : la
+  confiance portait sur *quel appel* le type 12 fait, ce qui est juste, et pas
+  sur *ce que cet appel fait*, qui n'était qu'un nom emprunté au dépôt
+  d'analyse. C'est le **douzième nom trompeur** ;
+- **la source n'a toujours pas de chemins.** Aucune des sept variétés ne trace
+  quoi que ce soit entre deux points. Cela confirme la correction du jalon 1.6 :
+  un réseau reliant les bourgs serait une création de ce projet, et il faudra le
+  dire comme tel. **Les chemins sortent donc de ce point** — ils n'ont plus de
+  fonction à analyser, seulement une décision de conception, et elle n'a rien à
+  voir avec les lacs.
+
+#### Où l'eau est réellement écrite, et ce que ça tranche
+
+Dans **`WorldInfo_generateBiomeContent`** (@005e4850) — la fonction que ce projet
+a déjà portée pour la flore (`docs/systems/02`, §8.6) —, dans une **autre passe**
+de la même cellule, une boucle de 64 × 64 colonnes distincte de celle du décor.
+`WorldInfo.cpp:2694-2760` :
+
+```
+pour chaque colonne (x, z) de la cellule :
+    v = WorldInfo_sampleTerrainHeight(x, z)
+    si v <= 0,02                              -- une porte très étroite
+        h = Terrain_sampleHeightAtWorldXY(x, z)
+        si h <= 0,95
+            niveau = terrain_generateColumnColor()   -- une hauteur, pas une couleur
+            q = (niveau / 5) * 5                     -- quantifié au pas de 5
+            t = triangle((niveau - q) / 5)
+            remplir de (q - t*5 + 2) à q  avec  {0, 0, 255*(1-t), type 2}
+```
+
+**La question d'architecture que cette section gardait ouverte — « comment le
+monde porte-t-il de l'eau au-dessus du niveau de la mer ? » — est répondue par
+la source : c'était l'issue n° 2.** L'eau est de la **matière écrite**, type 2,
+colonne par colonne, avec sa couleur ; son niveau est **local et quantifié au
+pas de 5**, ce qui lui donne ses paliers et permet un plan d'eau à une altitude
+quelconque. Les issues 1 (un niveau par élément de tuile) et 3 (une couche d'eau
+séparée) étaient nos inventions, et la seconde était bien « ce que font la
+plupart des moteurs voxel, et rien de ce que la source fait » — c'est encore
+vrai.
+
+**Ce que ça coûte est exactement ce que la section annonçait** : la règle
+d'effacement du jalon 1.8 tombe. « L'eau n'est pas de la matière, c'est le vide
+sous le niveau de la mer » (`docs/systems/03`) — `World_getBlockAt` rend un
+témoin d'eau si `z <= 0`, et `CWWorldEdits.erase_value` rejoue la même règle.
+Porter l'eau écrite demande de reprendre les deux, plus le type de bloc, plus la
+sauvegarde. C'est le morceau, et il n'a pas bougé de taille ; ce qui a changé est
+qu'on sait maintenant **quoi** écrire, au lieu de choisir entre trois paris.
+
+**Ce qui reste ouvert avant d'écrire** : `WorldInfo_sampleTerrainHeight` et
+`Terrain_sampleHeightAtWorldXY` sont deux champs distincts, aucun identifié —
+le premier est la porte, le second le garde-fou d'altitude. La **forme** de la
+règle est connue, sa **carte** ne l'est pas, et sans elle on saurait faire un
+lac sans savoir où le mettre. C'est la prochaine lecture, et elle est petite.
 
 ### 3 — La collision : ce qui en a, ce qui n'en a pas, et ce que ça coûte
 
