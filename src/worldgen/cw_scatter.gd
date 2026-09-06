@@ -436,7 +436,8 @@ func _build_cell(cx: int, cz: int) -> Array:
 		var c: Vector4 = _field.sample_column_full(x, z)
 		var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
 		var surface: int = CWPalette.surface_of(
-				CWBiome.at_dithered(c.x, c.y, c.z, sea, x, z),
+				CWBiome.at_dithered(c.x, c.y, c.z, sea, x, z,
+						CWBiome.fringe_amplitude(_field.climate_gradient(x, z))),
 				c.x - float(sea), c.y, c.z, x, z)
 		# L'etang du jalon 1.14. Deux choses en dependent, et la seconde ne se
 		# voit qu'en jeu : le **sol** sur lequel la plante se pose, qui est

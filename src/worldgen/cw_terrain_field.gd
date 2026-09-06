@@ -92,6 +92,11 @@ var _features: CWTileFeatureGrid
 var _mesas: CWMesaGrid
 var _paths: CWPathNetwork
 
+## Cache du gradient de climat, une entree par cellule de `CLIMATE_GRAD_CELL`.
+## Voir `climate_gradient` pour la raison d'etre de cette maille.
+var _cgrad: Dictionary = {}
+var _cgrad_mutex: Mutex = Mutex.new()
+
 
 func _init(world_params: CWWorldParams, site_grid: CWRegionSiteGrid = null) -> void:
 	_p = world_params
@@ -320,9 +325,6 @@ func _sample(x: int, z: int, zx0: int, zz0: int, win: Array,
 		return Vector4(float(_p.sea_level - 100), 0.5, 0.5, 1.0)
 
 	# Passe 2 : les deux ponderations, sur la meme fenetre.
-	var cw_sum: float = 0.0
-	var t_sum: float = 0.0
-	var h_sum: float = 0.0
 	var hw_sum: float = 0.0
 	var base_sum: float = 0.0
 	var land_sum: float = 0.0
@@ -333,11 +335,6 @@ func _sample(x: int, z: int, zx0: int, zz0: int, win: Array,
 		var dz: float = float(s.z) - wp.y
 		var d2: float = dx * dx + dz * dz
 
-		var wc: float = 1.0 - minf(1.0, (d2 - best_d2) * CLIMATE_WEIGHT_SCALE)
-		cw_sum += wc
-		t_sum += s.temperature * wc
-		h_sum += s.humidity * wc
-
 		var uh: float = 1.0 - minf(1.0, (d2 - best_d2) * HEIGHT_WEIGHT_SCALE)
 		var wh: float = uh * uh
 		hw_sum += wh
@@ -345,8 +342,9 @@ func _sample(x: int, z: int, zx0: int, zz0: int, win: Array,
 		if s.base_height > 0:
 			land_sum += wh
 
-	var temperature: float = (t_sum / cw_sum) if cw_sum > 0.0 else 0.5
-	var humidity: float = (h_sum / cw_sum) if cw_sum > 0.0 else 0.5
+	var climate: Vector2 = _climate_from(win, wp, best_d2)
+	var temperature: float = climate.x
+	var humidity: float = climate.y
 	var base_height: float = (base_sum / hw_sum) if hw_sum > 0.0 else 0.0
 	var land_ratio: float = (land_sum / hw_sum) if hw_sum > 0.0 else 1.0
 
@@ -404,6 +402,146 @@ func height_at(x: int, z: int) -> float:
 func climate_at(x: int, z: int) -> Vector2:
 	var c: Vector3 = sample_column(x, z)
 	return Vector2(c.y, c.z)
+
+
+## Le climat **sans le champ d'altitude** : la moitie du melange de sites qui
+## rend temperature et humidite, et rien d'autre.
+##
+## `climate_at` passe par `sample_column`, donc paie les quinze evaluations de
+## bruit de `_height_from`, le champ de chenaux et la couche d'elements — pour
+## deux nombres qui n'en dependent d'aucune facon. Le climat, lui, ne demande
+## que la deformation du domaine (deux echantillons) et deux passes sur neuf
+## sites. C'est un ordre de grandeur moins cher, et c'est ce qui rend le
+## gradient ci-dessous abordable.
+func climate_blend(x: int, z: int) -> Vector2:
+	var zx0: int = CWWorldParams.zone_of(x - ZONE_SIZE)
+	var zz0: int = CWWorldParams.zone_of(z - ZONE_SIZE)
+	var win: Array = _sites.get_window(zx0, zz0)
+	var wp: Vector2 = warped_point(x, z)
+	var best_d2: float = INF
+	for s in win:
+		if s == null:
+			continue
+		var dx: float = float(s.x) - wp.x
+		var dz: float = float(s.z) - wp.y
+		best_d2 = minf(best_d2, dx * dx + dz * dz)
+	if is_inf(best_d2):
+		return Vector2(0.5, 0.5)
+	return _climate_from(win, wp, best_d2)
+
+
+## Le melange climatique, une fois la fenetre et la distance au site le plus
+## proche connues. **Point unique de la formule** : `_sample` et
+## `climate_blend` passent tous deux par ici, comme les deux consommateurs de
+## `slope_from`.
+static func _climate_from(win: Array, wp: Vector2, best_d2: float) -> Vector2:
+	var cw_sum: float = 0.0
+	var t_sum: float = 0.0
+	var h_sum: float = 0.0
+	for s in win:
+		if s == null:
+			continue
+		var dx: float = float(s.x) - wp.x
+		var dz: float = float(s.z) - wp.y
+		var d2: float = dx * dx + dz * dz
+		var wc: float = 1.0 - minf(1.0, (d2 - best_d2) * CLIMATE_WEIGHT_SCALE)
+		cw_sum += wc
+		t_sum += s.temperature * wc
+		h_sum += s.humidity * wc
+	if cw_sum <= 0.0:
+		return Vector2(0.5, 0.5)
+	return Vector2(t_sum / cw_sum, h_sum / cw_sum)
+
+
+# -- Le gradient du climat ----------------------------------------------------
+#
+# **A quoi il sert.** L'ecotone de `CWBiome.at_dithered` brouille le climat d'une
+# amplitude fixe — 0,07 en temperature — avant de le comparer aux seuils. Une
+# amplitude en *unites de climat* ne dit rien de la largeur de la frange **en
+# blocs** : celle-ci vaut l'amplitude divisee par la pente du champ, et cette
+# pente n'est pas la meme partout.
+#
+# Elle est meme nulle sur de grandes surfaces, et c'est structurel. Le poids
+# d'un site est `1 - min(1, (d2 - d2min) * 5e-7)` : il tombe a zero des que le
+# site est plus loin que ~1 400 unites de plus que le plus proche. Au **centre
+# d'une region**, tous les autres sites sont hors de cette portee, le melange ne
+# retient qu'un seul site, et le climat y est litteralement **constant**. Un
+# brouillage de 0,07 sur un champ plat ne deplace pas une frontiere : il tire a
+# pile ou face sur chaque colonne d'un pays entier. C'est ce qui mettait du
+# sable au milieu des Lava Lands — dont le seuil, `LAVA_T = 0,985`, ne se
+# rencontre justement qu'au coeur d'une region.
+#
+# La regle qui en decoule tient en une phrase : **la ou le climat est plat, il
+# n'y a pas de frontiere, donc il ne doit pas y avoir de frange.**
+
+## Cote de la maille du cache, et portee de la difference centree, en unites
+## monde.
+##
+## -- Pourquoi la maille est fine, et la portee large -------------------------
+##
+## Le premier essai prenait une maille de 512 et lisait le gradient **au coin**
+## de la cellule. Il rendait zero sur une frontiere dont le gradient reel valait
+## 0,0026 par bloc, et l'ecotone disparaissait au lieu de se borner. La raison
+## est dans la forme du champ, et elle n'etait pas celle qu'on supposait : le
+## climat n'est pas une pente douce a l'echelle de la region, c'est un
+## **plateau parfaitement plat** — le melange ne retient qu'un site, son gradient
+## est exactement nul — coupe de transitions **etroites**, larges de deux cents
+## blocs a peine. Une maille plus large que la transition la manque entierement.
+##
+## D'ou une maille de 16 blocs. Et d'ou, aussi, une **portee de mesure quatre
+## fois plus grande que la maille** : deux cellules voisines mesurent alors sur
+## des fenetres qui se recouvrent aux trois quarts, donc leurs gradients ne
+## peuvent pas differer d'un saut. C'est ce recouvrement qui empeche l'amplitude
+## de l'ecotone de changer par marches — une marche d'amplitude dessinerait une
+## droite dans la frange, et c'est exactement l'artefact en courbe de niveau que
+## tout le reste du projet evite.
+##
+## La portee ne peut pas non plus etre d'un bloc : le champ varie de l'ordre de
+## 1e-3 par unite, et une difference sur un bloc se perdrait dans le bruit du
+## flottant. A 64, elle vaut ~0,17 unite de climat sur une transition.
+const CLIMATE_GRAD_CELL: int = 16
+const CLIMATE_GRAD_SHIFT: int = 4
+const CLIMATE_GRAD_STEP: int = 64
+
+
+## Le gradient du champ de climat au point (x, z), en **unites de climat par
+## bloc**, composante par composante : `Vector2(|dT/dl|, |dH/dl|)`.
+##
+## Difference **centree** sur `CLIMATE_GRAD_STEP`, prise sur les deux axes et
+## maximisee — c'est la meme convention que `slope_from` pour l'altitude, et
+## pour la meme raison : ce qui interesse l'appelant est la pente la plus raide,
+## celle qui donne la frange la plus etroite. Centree, et non avant comme celle
+## de l'altitude, parce qu'aucun invariant ne compare ici deux chemins de calcul
+## au pochoir pres — et parce qu'une difference avant decalerait la frange d'une
+## demi-portee vers l'amont.
+##
+## Memoise au centre d'une cellule de `CLIMATE_GRAD_CELL` : quatre melanges
+## climatiques pour 256 colonnes, et le melange climatique seul coute un ordre
+## de grandeur de moins qu'une colonne.
+func climate_gradient(x: int, z: int) -> Vector2:
+	var cx: int = x >> CLIMATE_GRAD_SHIFT
+	var cz: int = z >> CLIMATE_GRAD_SHIFT
+	var key: int = (cx << 24) ^ cz
+	_cgrad_mutex.lock()
+	var hit: Variant = _cgrad.get(key)
+	_cgrad_mutex.unlock()
+	if hit != null:
+		return hit
+
+	var half: int = CLIMATE_GRAD_CELL >> 1
+	var x0: int = (cx << CLIMATE_GRAD_SHIFT) + half
+	var z0: int = (cz << CLIMATE_GRAD_SHIFT) + half
+	var r: int = CLIMATE_GRAD_STEP >> 1
+	var dx: Vector2 = climate_blend(x0 + r, z0) - climate_blend(x0 - r, z0)
+	var dz: Vector2 = climate_blend(x0, z0 + r) - climate_blend(x0, z0 - r)
+	var step: float = float(CLIMATE_GRAD_STEP)
+	var g := Vector2(maxf(absf(dx.x), absf(dz.x)) / step,
+			maxf(absf(dx.y), absf(dz.y)) / step)
+
+	_cgrad_mutex.lock()
+	_cgrad[key] = g
+	_cgrad_mutex.unlock()
+	return g
 
 
 # -- Champ d'altitude ---------------------------------------------------------

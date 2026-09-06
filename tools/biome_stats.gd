@@ -232,4 +232,171 @@ func _initialize() -> void:
 		for hi in 5:
 			row += "%7.2f  " % (100.0 * float(joint[ti * 5 + hi]) / float(land))
 		print(row)
+
+	_ecotone(field, p)
 	quit()
+
+
+# -- La largeur de l'ecotone, en blocs ----------------------------------------
+#
+# Le balayage ci-dessus sonde tous les 256 blocs : une frange large d'une
+# trentaine de blocs lui est **invisible**, et c'est pourquoi il n'a rien vu du
+# defaut du 2026-09-08 — de l'herbe au milieu du desert, du sable au milieu des
+# Lava Lands. La frange se mesure a la maille du bloc, sur des transects qui
+# traversent une frontiere.
+#
+# Ce qu'on compte : pour chaque colonne ou le biome **trame** (la matiere du
+# sol) differe du biome **nomme** (`CWBiome.at`), la distance en blocs jusqu'a
+# la frontiere la plus proche — c'est-a-dire la **profondeur d'incursion** de la
+# matiere dans le biome voisin. C'est exactement le nombre que le reproche
+# designait : « de l'herbe se retrouve dans le desert ».
+#
+# Le contrat est `CWBiome.FRINGE_BLOCKS`. Une incursion qui le depasse largement
+# est le defaut ; une frange tombee a zero partout est la sur-correction — la
+# mesure doit distinguer les deux, donc elle rend aussi la part de colonnes en
+# frange et le compte de frontieres traversees.
+
+## Combien de frontieres on veut mesurer, et sur quelle demi-largeur.
+##
+## `MI_LARGEUR` doit valoir plusieurs fois `CWBiome.FRINGE_BLOCKS`, sans quoi la
+## mesure ne pourrait pas voir une frange qui deborde son contrat — elle
+## rapporterait le maximum de sa propre fenetre.
+const FRONTIERES: int = 24
+const MI_LARGEUR: int = 128
+
+## Pas et portee de la recherche de frontieres. Le pas est grossier : on cherche
+## un endroit ou le biome change, pas encore ou exactement.
+const CHERCHE_PAS: int = 64
+const CHERCHE_PORTEE: int = 24000
+
+
+func _ecotone(field: CWTerrainField, p: CWWorldParams) -> void:
+	var franges: int = 0
+	var colonnes: int = 0
+	var trouvees: int = 0
+	var prof_max: int = 0
+	var prof_sum: int = 0
+	# Histogramme de la profondeur d'incursion, par tranches de 16 blocs.
+	var hist: PackedInt32Array = PackedInt32Array()
+	hist.resize(8)
+	# Les couples qui debordent le plus, pour nommer le defaut plutot que le
+	# compter : cle = nomme * 6 + trame.
+	var couples: Dictionary = {}
+	var t0: int = Time.get_ticks_usec()
+
+	# Huit rayons partant de points eloignes : on avance a gros pas jusqu'a
+	# voir le biome changer, puis on mesure finement de part et d'autre.
+	for k in 8:
+		if trouvees >= FRONTIERES:
+			break
+		var bx: int = p.start_point.x + (k % 4) * 61007 - 90000
+		var bz: int = p.start_point.y + (k / 4) * 59999 - 30000
+		var prev: int = -1
+		var i: int = 0
+		while i < CHERCHE_PORTEE and trouvees < FRONTIERES:
+			var x: int = bx + i
+			var z: int = bz + i / 3
+			var c: Vector3 = field.sample_column(x, z)
+			var b: int = CWBiome.at(c.x, c.y, c.z, p.sea_level)
+			# Une frontiere d'ocean se decide sur l'altitude, pas sur le climat :
+			# le tramage ne peut rien y changer, et la compter diluerait la
+			# mesure jusqu'a la rendre muette. C'est ce qui a fait echouer la
+			# premiere version de cet outil.
+			if prev != -1 and b != prev and b != CWBiome.OCEANS 					and prev != CWBiome.OCEANS:
+				trouvees += 1
+				var r: Vector4i = _mesure_frange(field, p, x, z, couples)
+				franges += r.x
+				colonnes += r.y
+				prof_sum += r.z
+				prof_max = maxi(prof_max, r.w)
+				# Le detail de l'histogramme est repris dans `_mesure_frange`,
+				# qui seul connait la profondeur colonne par colonne.
+				i += MI_LARGEUR * 4
+			prev = b
+			i += CHERCHE_PAS
+	for c in _hist_frange:
+		hist[clampi(c / 16, 0, 7)] += 1
+	var ms: float = float(Time.get_ticks_usec() - t0) / 1000.0
+
+	print("")
+	print("L'ecotone, mesure a la maille du bloc sur %d frontieres de climat (%.0f ms)"
+			% [trouvees, ms])
+	print("  contrat CWBiome.FRINGE_BLOCKS : %.0f blocs, fenetre de mesure +-%d"
+			% [CWBiome.FRINGE_BLOCKS, MI_LARGEUR])
+	print("  colonnes en frange     : %8d   %6.2f %% des colonnes mesurees"
+			% [franges, 100.0 * float(franges) / maxf(1.0, float(colonnes))])
+	if franges == 0:
+		print("  aucune frange : la correction a mange l'ecotone au lieu de le borner")
+		return
+	print("  incursion moyenne      : %8.1f blocs"
+			% (float(prof_sum) / float(franges)))
+	print("  incursion maximale     : %8d blocs   (contrat : %.0f)"
+			% [prof_max, CWBiome.FRINGE_BLOCKS])
+	print("  profondeur d'incursion, par tranches de 16 blocs :")
+	for d in 8:
+		if hist[d] == 0:
+			continue
+		var borne: String = "%3d - %3d" % [d * 16, d * 16 + 15]
+		if d == 7:
+			borne = "    112 +"
+		print("    %s : %8d   %5.1f %% des franges" % [borne, hist[d],
+				100.0 * float(hist[d]) / float(franges)])
+	print("  les couples qui debordent (biome nomme -> matiere posee) :")
+	var cles: Array = couples.keys()
+	cles.sort_custom(func(a, b): return couples[a] > couples[b])
+	for c in cles.slice(0, 6):
+		@warning_ignore("integer_division")
+		var a: int = c / CWBiome.COUNT
+		print("    %-12s -> %-12s %8d   %5.1f %% des franges"
+				% [CWBiome.name_of(a), CWBiome.name_of(c % CWBiome.COUNT),
+				couples[c], 100.0 * float(couples[c]) / float(franges)])
+
+
+## Profondeurs d'incursion relevees, pour l'histogramme. Une seule mesure tourne
+## a la fois : la garder ici evite de promener un tableau dans deux signatures.
+var _hist_frange: PackedInt32Array = PackedInt32Array()
+
+
+## Mesure la frange autour d'un point de frontiere : on parcourt la fenetre a la
+## maille du bloc, on relocalise la frontiere exacte, puis on compte pour chaque
+## desaccord sa distance a celle-ci.
+##
+## Rend Vector4i(franges, colonnes, somme des profondeurs, profondeur maximale).
+func _mesure_frange(field: CWTerrainField, p: CWWorldParams, cx: int, cz: int,
+		couples: Dictionary) -> Vector4i:
+	var n: int = MI_LARGEUR * 2 + 1
+	var nomme: PackedInt32Array = PackedInt32Array()
+	var trame: PackedInt32Array = PackedInt32Array()
+	nomme.resize(n)
+	trame.resize(n)
+	for j in n:
+		var x: int = cx + j - MI_LARGEUR
+		var z: int = cz + (j - MI_LARGEUR) / 3
+		var c: Vector3 = field.sample_column(x, z)
+		nomme[j] = CWBiome.at(c.x, c.y, c.z, p.sea_level)
+		trame[j] = CWBiome.at_dithered(c.x, c.y, c.z, p.sea_level, x, z,
+				CWBiome.fringe_amplitude(field.climate_gradient(x, z)))
+
+	var bords: PackedInt32Array = PackedInt32Array()
+	for j in range(1, n):
+		if nomme[j] != nomme[j - 1]:
+			bords.append(j)
+	if bords.is_empty():
+		return Vector4i(0, n, 0, 0)
+
+	var franges: int = 0
+	var somme: int = 0
+	var pire: int = 0
+	for j in n:
+		if trame[j] == nomme[j]:
+			continue
+		var d: int = n
+		for b in bords:
+			d = mini(d, absi(j - b))
+		franges += 1
+		somme += d
+		pire = maxi(pire, d)
+		_hist_frange.append(d)
+		var cle: int = nomme[j] * CWBiome.COUNT + trame[j]
+		couples[cle] = int(couples.get(cle, 0)) + 1
+	return Vector4i(franges, n, somme, pire)

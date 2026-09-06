@@ -175,11 +175,47 @@ static func at(height: float, temperature: float, humidity: float,
 #     et la fonction sort avant d'echantillonner quoi que ce soit. Sans elle, ce
 #     seraient quatre bruits par colonne sur tout le monde.
 
-## Amplitude du brouillage, en unites de climat. Comparees aux seuils : a 0,05
-## sur la temperature, la frange fait environ un dixieme de la largeur d'une
-## bande climatique.
+## Amplitude **maximale** du brouillage, en unites de climat. Comparees aux
+## seuils : a 0,07 sur la temperature, la frange fait environ un dixieme de la
+## largeur d'une bande climatique.
+##
+## C'est un plafond, pas la valeur employee : voir `fringe_amplitude`.
 const DITHER_T: float = 0.07
 const DITHER_H: float = 0.09
+
+## -- La frange se borne en blocs, pas en unites de climat ---------------------
+##
+## Une amplitude en unites de climat ne dit rien de la largeur de la frange **en
+## blocs** : celle-ci vaut l'amplitude divisee par la pente locale du champ de
+## climat, et cette pente n'est pas la meme partout. La ou le climat varie
+## lentement, 0,07 unite represente des centaines de blocs, et l'herbe traverse
+## tout le desert. La ou il est **plat** — au centre d'une region, ou le melange
+## de sites ne retient plus qu'un seul site —, elle represente une distance
+## infinie : le brouillage ne deplace plus une frontiere, il tire a pile ou face
+## sur chaque colonne d'un pays entier. C'est ce qui mettait du sable au milieu
+## des Lava Lands, dont le seuil `LAVA_T` ne se rencontre justement qu'au coeur
+## d'une region.
+##
+## D'ou la regle : **l'amplitude est celle qui rend une frange de `FRINGE_BLOCKS`
+## blocs, plafonnee par `DITHER_*`.** La ou le climat est plat, elle tombe a
+## zero d'elle-meme — la ou il n'y a pas de frontiere, il n'y a pas de frange.
+##
+## Le gradient vient de `CWTerrainField.climate_gradient`, memoise par cellule
+## de 512 : c'est une grandeur d'echelle regionale, elle ne change pas d'une
+## colonne a la suivante.
+
+## Largeur visee de l'ecotone, en blocs. C'est le nombre que la note de
+## `at_dithered` annoncait — « une trentaine de blocs » — et qui n'etait vrai
+## que la ou la pente du climat valait par hasard ce qu'il fallait.
+const FRINGE_BLOCKS: float = 32.0
+
+
+## L'amplitude de brouillage a employer, connaissant le gradient local du champ
+## de climat (`CWTerrainField.climate_gradient`, en unites par bloc).
+static func fringe_amplitude(gradient: Vector2) -> Vector2:
+	return Vector2(
+			minf(DITHER_T, gradient.x * FRINGE_BLOCKS),
+			minf(DITHER_H, gradient.y * FRINGE_BLOCKS))
 
 ## Les deux frequences du tramage. Plus lentes que celles de `CWPalette` : une
 ## frange de biome se compte en dizaines de blocs, pas en unites — a la maille
@@ -192,27 +228,41 @@ const DITHER_OFFSET_Z: float = 61403.0
 
 
 ## Le biome qui decide de la **matiere du sol** : meme regle que `at`, seuils
-## trames. Voir la note ci-dessus.
+## trames. Voir les deux notes ci-dessus.
+##
+## `amplitude` est ce que rend `fringe_amplitude` : l'amplitude bornee en blocs,
+## et non les constantes `DITHER_*`. Un appelant qui passerait celles-ci
+## retrouverait le defaut du 2026-09-08.
 static func at_dithered(height: float, temperature: float, humidity: float,
-		sea_level: int, x: int, z: int) -> int:
-	if not _near_edge(temperature, humidity):
+		sea_level: int, x: int, z: int, amplitude: Vector2) -> int:
+	if not _near_edge(temperature, humidity, amplitude):
 		return at(height, temperature, humidity, sea_level)
 	# Deux champs decorreles pour le prix d'un jeu de constantes : le second lit
 	# le meme bruit avec les coordonnees echangees et decalees, ce qui suffit a
 	# rendre les deux independants sans introduire une seconde graine a tenir.
 	var nt: float = _blotch(x, z)
 	var nh: float = _blotch(z + 7919, x + 3271)
-	return at(height, temperature + nt * DITHER_T,
-			humidity + nh * DITHER_H, sea_level)
+	return at(height, temperature + nt * amplitude.x,
+			humidity + nh * amplitude.y, sea_level)
 
 
 ## Vrai si le climat de la colonne est assez pres d'un seuil pour que le
 ## brouillage puisse changer sa reponse.
-static func _near_edge(t: float, h: float) -> bool:
-	if absf(t - SNOW_T) < DITHER_T or absf(t - JUNGLE_T) < DITHER_T \
-			or absf(t - DESERT_T) < DITHER_T or absf(t - LAVA_T) < DITHER_T:
+##
+## La comparaison se fait contre l'amplitude **effective**, donc la bande se
+## resserre exactement comme la frange : sur un climat plat, `amplitude` est
+## nulle, aucun seuil n'est « proche », et la fonction sort sans echantillonner
+## un seul bruit. La sortie rapide devient ainsi le cas general et non plus
+## seulement le cas lointain.
+static func _near_edge(t: float, h: float, amplitude: Vector2) -> bool:
+	if amplitude.x > 0.0 and (absf(t - SNOW_T) < amplitude.x
+			or absf(t - JUNGLE_T) < amplitude.x
+			or absf(t - DESERT_T) < amplitude.x
+			or absf(t - LAVA_T) < amplitude.x):
 		return true
-	return absf(h - JUNGLE_H) < DITHER_H or absf(h - DESERT_H) < DITHER_H
+	if amplitude.y <= 0.0:
+		return false
+	return absf(h - JUNGLE_H) < amplitude.y or absf(h - DESERT_H) < amplitude.y
 
 
 ## Bruit a deux frequences, dans [-1, 1]. Meme construction que

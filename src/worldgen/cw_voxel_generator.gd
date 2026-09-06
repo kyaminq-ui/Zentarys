@@ -283,7 +283,8 @@ func generated_voxel(x: int, y: int, z: int) -> int:
 	var prof: Vector3i = CWTerrainField.column_profile(c.x, c.w, sea, biome)
 	var slope: float = f.slope_at(wx, wz) if p.cliff_slope else 0.0
 	var surface: int = CWPalette.surface_of(
-			CWBiome.at_dithered(c.x, c.y, c.z, sea, wx, wz),
+			CWBiome.at_dithered(c.x, c.y, c.z, sea, wx, wz,
+					CWBiome.fringe_amplitude(f.climate_gradient(wx, wz))),
 			c.x - float(sea), c.y, c.z, wx, wz, slope)
 	surface = pond_surface(surface, biome, prof,
 			CWTerrainField.pond_gate(c.x, c.w, sea, biome))
@@ -738,6 +739,13 @@ func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,
 	var win: Array[CWMesa] = []
 	var last_mcx: int = 0x7FFFFFFF
 	var last_mcz: int = 0x7FFFFFFF
+	# L'amplitude de l'ecotone, prise une fois par cellule de climat traversee
+	# et non une fois par colonne : le gradient du champ de climat est une
+	# grandeur regionale, et sa lecture prend un verrou. Meme economie que celle
+	# de la fenetre de massifs juste au-dessus.
+	var amp := Vector2.ZERO
+	var last_gcx: int = 0x7FFFFFFF
+	var last_gcz: int = 0x7FFFFFFF
 	for i in n:
 		# Meme parcours que `sample_patch` : iz a l'exterieur, ix a l'interieur.
 		# La regle de surface a besoin des coordonnees monde depuis le jalon
@@ -824,8 +832,14 @@ func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,
 		# La matiere du sol prend le biome **trame** ; tout le reste — l'eau, le
 		# decor, le nom affiche — garde celui de `CWBiome.at`. Voir l'en-tete de
 		# `at_dithered`.
+		var gcx: int = cx >> CWTerrainField.CLIMATE_GRAD_SHIFT
+		var gcz: int = cz >> CWTerrainField.CLIMATE_GRAD_SHIFT
+		if gcx != last_gcx or gcz != last_gcz:
+			amp = CWBiome.fringe_amplitude(f.climate_gradient(cx, cz))
+			last_gcx = gcx
+			last_gcz = gcz
 		var ss: Vector2i = CWPalette.surface_shaded(
-				CWBiome.at_dithered(h, raw[j + 1], raw[j + 2], sea, cx, cz),
+				CWBiome.at_dithered(h, raw[j + 1], raw[j + 2], sea, cx, cz, amp),
 				h - float(sea), raw[j + 1], raw[j + 2], cx, cz, slope)
 		var surf: int = pond_surface(ss.x, biome, prof,
 				CWTerrainField.pond_gate(h, chan, sea, biome))

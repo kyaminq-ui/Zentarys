@@ -370,7 +370,8 @@ func _build_cell(cx: int, cz: int) -> Array:
 			rel = CWMesaGrid.relief(mesas, x, z, prof.x)
 		var on_cap: bool = rel.y >= rel.x
 		var surface: int = CWPalette.surface_of(
-				CWBiome.at_dithered(col.x, col.y, col.z, sea, x, z),
+				CWBiome.at_dithered(col.x, col.y, col.z, sea, x, z,
+						CWBiome.fringe_amplitude(_field.climate_gradient(x, z))),
 				col.x - float(sea), col.y, col.z, x, z)
 		if on_cap:
 			surface = CWVoxelGenerator.standing_surface(rel, surface, biome_c,

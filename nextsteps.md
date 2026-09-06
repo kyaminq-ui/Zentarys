@@ -2988,6 +2988,103 @@ sur un pont de neuf blocs de large donne une plate-forme de cinquante.
   se voit pas ; sur un bras de mer, ca se verra.
 
 
+## 7octies. La troisieme passe — **2026-09-09**
+
+*Les six points releves en jeu le 2026-09-08 au soir, traites dans l'ordre ou
+ils se voient.*
+
+### 7octies.1 « De l'herbe dans le desert » — l'ecotone se borne en blocs
+
+Le tramage de biome du 2026-09-07 brouille le climat d'une amplitude fixe —
+0,07 en temperature, 0,09 en humidite — **avant** de le comparer aux seuils.
+Une amplitude en unites de climat ne dit rien de la largeur de la frange **en
+blocs** : celle-ci vaut l'amplitude divisee par la pente locale du champ de
+climat.
+
+**Et cette pente n'est pas ce qu'on croyait.** L'hypothese de depart etait « une
+pente douce a l'echelle de la region, plus faible par endroits ». La mesure dit
+autre chose, et c'est elle qui a rendu la correction evidente : le champ de
+climat est fait de **plateaux exactement plats** separes de transitions
+**etroites**. Le poids d'un site vaut `1 - min(1, (d2 - d2min) * 5e-7)`, donc il
+tombe a zero des qu'un site est plus loin que ~1 400 unites de plus que le plus
+proche ; au centre d'une region, le melange ne retient plus qu'**un seul site**
+et le gradient y est **exactement nul**. Un sondage l'a montre d'un coup : sur
+une frontiere Greenlands/Deserts, le gradient reel valait 0,0026 par bloc, et
+celui mesure 500 blocs plus loin, dans le plateau, valait 0,000000.
+
+Sur un plateau, un brouillage de 0,07 ne deplace pas une frontiere : **il tire a
+pile ou face sur chaque colonne d'un pays entier.** C'est litteralement ce qui
+mettait du sable au milieu des Lava Lands — dont le seuil, `LAVA_T = 0,985`, ne
+se rencontre justement qu'au coeur d'une region, la ou le champ est le plus
+plat.
+
+**La regle qui en decoule tient en une phrase : la ou le climat est plat, il n'y
+a pas de frontiere, donc il ne doit pas y avoir de frange.** L'amplitude devient
+`min(DITHER_*, gradient x FRINGE_BLOCKS)`, avec `FRINGE_BLOCKS = 32` — le nombre
+que la note du 2026-09-07 annoncait deja (« une trentaine de blocs ») et qui
+n'etait vrai que la ou la pente valait par hasard ce qu'il fallait.
+
+**Le gradient devait etre abordable, et il l'est parce que le climat se separe
+du relief.** `climate_at` passait par `sample_column` : quinze evaluations de
+bruit, le champ de chenaux et la couche d'elements, pour deux nombres qui n'en
+dependent d'aucune facon. `CWTerrainField.climate_blend` ne fait que la
+deformation du domaine et les deux passes sur neuf sites — **12,8 us contre
+77,5 pour une colonne**. La formule du melange n'est ecrite qu'une fois
+(`_climate_from`), comme `slope_from` pour l'altitude.
+
+> **Le piege, et il a coute une mesure fausse.** La premiere version memoisait le
+> gradient par cellule de 512 en le lisant **au coin** de la cellule. Elle
+> rendait zero sur la frontiere ci-dessus, et l'ecotone disparaissait au lieu de
+> se borner : *une maille plus large que la transition la manque entierement*.
+> La maille est donc de **16 blocs**, et la portee de la difference centree de
+> **64** — quatre fois la maille. Ce recouvrement n'est pas un detail de
+> precision : deux cellules voisines mesurent sur des fenetres communes aux
+> trois quarts, donc l'amplitude ne peut pas changer par marches. Une marche
+> d'amplitude dessinerait une droite dans la frange, c'est-a-dire exactement
+> l'artefact en courbe de niveau que tout le reste du projet evite.
+
+**Ce que ca coute.** Quatre melanges climatiques par cellule de 16, soit pour
+256 colonnes : **51,9 us a froid, 0,20 us par colonne amortis** — 0,26 % du cout
+d'une colonne. Sur le chemin chaud, l'amplitude est prise une fois par cellule
+traversee et non une fois par colonne, comme la fenetre de massifs juste
+au-dessus dans la meme boucle.
+
+**Ce que ca rend, mesure.** `tools/biome_stats.gd` ne pouvait pas voir ce defaut
+et c'est la seconde lecon : il sonde tous les 256 blocs, et **une frange de
+trente blocs lui est invisible**. Il a donc gagne une mesure a la maille du
+bloc, qui *cherche* les frontieres de climat au lieu d'esperer en croiser — la
+premiere version, sur des transects droits, n'en a rencontre que treize sur
+73 000 colonnes, et la plupart etaient des frontieres d'ocean, qui se decident
+sur l'altitude et que le tramage ne peut pas changer.
+
+Sur douze frontieres de climat, fenetre de +-128 blocs :
+
+| | avant | apres |
+|---|---|---|
+| colonnes en frange | 7,72 % | 3,37 % |
+| incursion moyenne | **38,2 blocs** | **7,1 blocs** |
+| incursion maximale | **140 blocs** (borne par la fenetre) | **25 blocs** |
+| franges au-dela du contrat de 32 blocs | 37,0 % | **0 %** |
+| premier couple | Deserts -> Lava Lands, 31,5 % | Greenlands -> Snowlands, 26,9 % |
+
+L'incursion maximale de 140 blocs est celle que la fenetre de mesure autorisait
+a voir ; la vraie etait plus grande. Et le premier couple d'avant nomme le
+reproche mot pour mot.
+
+**La frange n'a pas ete mangee** : 104 colonnes restent en frange, sur les cinq
+memes couples de biomes. C'etait l'autre issue possible, et l'outil rend le
+message explicite quand elle survient.
+
+**Ce qui n'a pas ete fait, et pourquoi.** La seconde piste du 2026-09-08 —
+*refuser purement le tramage entre certains couples, Lava Lands ne se melangeant
+a rien* — n'a pas ete prise. La borne en blocs la subsume dans le cas general,
+et une exclusion redonnerait a cette frontiere-la le trait net que l'ecotone
+existe pour supprimer. Il reste 23 % de franges Deserts -> Lava Lands, bornees a
+25 blocs : c'est un ecotone, plus une tache. Le nombre est maintenant sous la
+main de l'outil, donc revenir dessus est de la mesure et non de la conception.
+
+---
+
 ## 8. Assets voxels
 
 ### 8.1 L'échelle — fixée le 2026-09-04, alignée sur l'original le 2026-09-05

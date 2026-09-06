@@ -638,6 +638,42 @@ func _bench() -> void:
 	_ok("cout par colonne raisonnable", float(dt) / float(n) < 400.0,
 			"%.1f us/colonne" % (float(dt) / float(n)))
 
+	# Le melange climatique seul, et le gradient qui borne l'ecotone
+	# (2026-09-09). Deux nombres a tenir cote a cote :
+	#
+	#   * `climate_blend` doit rester **un ordre de grandeur** sous une colonne.
+	#     C'est toute la raison pour laquelle il existe : `climate_at` passait
+	#     par `sample_column` et payait les quinze evaluations de bruit du champ
+	#     d'altitude pour deux nombres qui n'en dependent pas ;
+	#   * `climate_gradient` est memoise par cellule de 16, donc quatre melanges
+	#     pour 256 colonnes. Ce qu'on mesure ici est le cas **froid**, celui qui
+	#     construit l'entree ; en generation, 255 colonnes sur 256 relisent.
+	var t1: int = Time.get_ticks_usec()
+	for i in n:
+		f.climate_blend(o.x + (i % 128), o.y + (i / 128))
+	var dtc: int = Time.get_ticks_usec() - t1
+	var us_blend: float = float(dtc) / float(n)
+
+	# Cellules distinctes, donc jamais le cache : une par pas de 16.
+	var m: int = 256
+	var t2: int = Time.get_ticks_usec()
+	for i in m:
+		f.climate_gradient(o.x + i * CWTerrainField.CLIMATE_GRAD_CELL, o.y)
+	var us_grad: float = float(Time.get_ticks_usec() - t2) / float(m)
+
+	print("     climat seul : %.1f us  gradient (froid) : %.1f us  soit %.2f us/colonne amortis"
+			% [us_blend, us_grad,
+			us_grad / float(CWTerrainField.CLIMATE_GRAD_CELL
+					* CWTerrainField.CLIMATE_GRAD_CELL)])
+	_ok("le climat seul coute un ordre de grandeur de moins qu'une colonne",
+			us_blend * 5.0 < float(dt) / float(n),
+			"%.1f us contre %.1f" % [us_blend, float(dt) / float(n)])
+	# Amorti sur les 256 colonnes de sa cellule, le gradient doit disparaitre
+	# devant la colonne : c'est ce qui autorise a le consulter en generation.
+	_ok("le gradient de climat est negligeable une fois amorti",
+			us_grad / 256.0 < 0.02 * float(dt) / float(n),
+			"%.3f us/colonne" % (us_grad / 256.0))
+
 
 # -- 8. Apercus PNG ----------------------------------------------------------
 

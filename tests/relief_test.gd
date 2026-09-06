@@ -448,10 +448,15 @@ func _test_tramage() -> void:
 	# L'ecotone : la frontiere entre deux biomes. Loin d'un seuil, le brouillage
 	# du climat ne change rien et la fonction sort sans echantillonner ; **sur**
 	# le seuil, les deux biomes s'interpenetrent.
+	# L'amplitude est desormais un argument, borne en blocs par
+	# `CWBiome.fringe_amplitude` : ces deux mesures-ci veulent la frange la
+	# plus large possible, donc le plafond.
+	var plein := Vector2(CWBiome.DITHER_T, CWBiome.DITHER_H)
 	var loin: int = 0
 	for x in range(0, 60):
 		for z in range(0, 60):
-			if CWBiome.at_dithered(50.0, 0.45, 0.50, 0, x + 700, z + 800) \
+			if CWBiome.at_dithered(50.0, 0.45, 0.50, 0, x + 700, z + 800,
+					plein) \
 					!= CWBiome.GREENLANDS:
 				loin += 1
 	_ok("loin d'un seuil, le tramage de biome ne change rien", loin == 0,
@@ -464,12 +469,50 @@ func _test_tramage() -> void:
 			total += 1
 			# Pile sur le seuil d'humidite du desert, a temperature chaude.
 			if CWBiome.at_dithered(50.0, 0.80, CWBiome.DESERT_H, 0,
-					x + 4000, z + 5000) == CWBiome.DESERTS:
+					x + 4000, z + 5000, plein) == CWBiome.DESERTS:
 				deserts += 1
 	var part_d: float = float(deserts) / float(total)
 	_ok("sur le seuil, les deux biomes s'interpenetrent",
 			part_d > 0.2 and part_d < 0.8, "%.3f de desert" % part_d)
 	print("     ecotone : %.1f %% de desert exactement sur son seuil d'humidite"
 			% (part_d * 100.0))
+
+	# -- La frange se borne en blocs (2026-09-09) -----------------------------
+	#
+	# Le defaut du 2026-09-08 : une amplitude en unites de climat represente une
+	# distance qui depend de la pente du champ, donc une frange de largeur
+	# inconnue — et infinie la ou le champ est plat. Ces quatre verifications
+	# tiennent la borne, et la premiere est la seule qui compte vraiment : **sur
+	# un climat plat, il n'y a pas de frontiere, donc pas de frange.**
+	var nul: Vector2 = CWBiome.fringe_amplitude(Vector2.ZERO)
+	_ok("climat plat : amplitude nulle", nul == Vector2.ZERO, "%v" % nul)
+
+	var fige: int = 0
+	for x in range(0, 60):
+		for z in range(0, 60):
+			# Pile sur le seuil d'humidite du desert, la ou le tramage a le plus
+			# de prise : a amplitude nulle il ne doit pourtant rien changer.
+			if CWBiome.at_dithered(50.0, 0.80, CWBiome.DESERT_H, 0,
+					x + 4000, z + 5000, Vector2.ZERO) \
+					!= CWBiome.at(50.0, 0.80, CWBiome.DESERT_H, 0):
+				fige += 1
+	_ok("climat plat : le tramage ne deplace plus rien", fige == 0,
+			"%d colonnes" % fige)
+
+	# Une pente moyenne : la frange doit mesurer FRINGE_BLOCKS blocs, donc
+	# l'amplitude vaut la pente multipliee par cette largeur — et non le
+	# plafond.
+	var douce: Vector2 = CWBiome.fringe_amplitude(Vector2(0.0005, 0.0005))
+	_ok("pente douce : l'amplitude est la largeur voulue, pas le plafond",
+			is_equal_approx(douce.x, 0.0005 * CWBiome.FRINGE_BLOCKS)
+					and douce.x < CWBiome.DITHER_T, "%v" % douce)
+
+	# Une pente forte : le plafond reprend la main, sans quoi une frontiere
+	# climatique abrupte se tramerait sur plus large que sa propre bande.
+	var raide_c: Vector2 = CWBiome.fringe_amplitude(Vector2(1.0, 1.0))
+	_ok("pente forte : le plafond tient",
+			raide_c == Vector2(CWBiome.DITHER_T, CWBiome.DITHER_H),
+			"%v" % raide_c)
+
 	_ok("une pente franche est entierement rocheuse",
 			raide == 120 * 120, "%d sur %d" % [raide, 120 * 120])
