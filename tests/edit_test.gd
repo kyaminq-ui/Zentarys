@@ -445,6 +445,14 @@ func _test_two_channels() -> void:
 				var c: int = buf.get_voxel(lx, ly, lz, CWPalette.CHANNEL_COLOR)
 				if t != CWPalette.AIR:
 					opaque_seen += 1
+				# **Le bois est l'exception, et c'est le contrat du jalon 1.9.**
+				# Un tronc estampe porte le type WOOD et la teinte de son propre
+				# modele : c'est ce qui donne quatre ecorces pour un seul type de
+				# bloc. Le reste du terrain, lui, doit garder les deux canaux
+				# d'accord — un sol dont la couleur ne suit plus le type ment a
+				# l'oeil sans qu'aucun test de logique ne s'en apercoive.
+				if t == CWPalette.WOOD:
+					continue
 				if c != CWPalette.raw_of(t):
 					mismatched += 1
 					if first == "":

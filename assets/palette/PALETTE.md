@@ -52,7 +52,7 @@ vide.
 
 | plage | indices | entrées | contenu |
 |---|---|---|---|
-| Terrain | 1 – 40 | 40 | 13 écrites par la génération ; 14 – 31 sont de la **matière de terrain pour les modèles** (roche nue, grès, argile, basalte, roche lichénée, lave) ; **32 – 40 sont les neuf filons** |
+| Terrain | 1 – 40 | 40 | 13 écrites par la génération, dont **4 = le bois d'un tronc estampé** ; 14 – 31 sont de la **matière de terrain pour les modèles** (roche nue, grès, argile, basalte, roche lichénée, lave) ; **32 – 40 sont les neuf filons** |
 | Créatures | 41 – 95 | 55 | peaux, fourrures, écailles, chitine, yeux, cornes |
 | Armes et équipement | 96 – 127 | 32 | acier, or, manches, cuir, gemmes |
 | Végétation | 128 – 175 | 48 | feuillages, automne, écorces, fleurs, champignons, algues et coraux, cactus |

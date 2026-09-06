@@ -36,13 +36,13 @@ const AIR: int = 0
 const STONE: int = 1
 const DIRT: int = 2
 const GRASS: int = 3
-## Retire le 2026-09-06 : `surface_of` ne le rend plus. Voir la note ci-dessous.
-const GRASS_DRY: int = 4
+## Le bois d'un tronc ecrit dans le terrain. Voir la note ci-dessous.
+const WOOD: int = 4
 const GRASS_JUNGLE: int = 5
 const SAND: int = 6
 const SNOW: int = 7
 const ICE: int = 8
-## Retire le 2026-09-06, comme `GRASS_DRY`.
+## Retire le 2026-09-06 : `surface_of` ne le rend plus. Voir la note ci-dessous.
 const TUNDRA: int = 9
 const SWAMP: int = 10
 const GRAVEL: int = 11
@@ -50,23 +50,43 @@ const WATER: int = 12
 const WATER_DEEP: int = 13
 const COUNT: int = 14
 
-# -- Deux entrees retirees, et pourquoi elles gardent leur place --------------
+# -- Une entree recyclee : 4, d'herbe seche a bois (jalon 1.11) ---------------
 #
-# `GRASS_DRY` (4) et `TUNDRA` (9) etaient les deux franges seches heritees du
+# Le tronc d'un feuillu et le stipe d'un palmier sont **ecrits dans le terrain**
+# depuis le 2026-09-06 : on doit pouvoir les creuser, et ils porteront la
+# collision. Chacun de leurs voxels est donc un *type de bloc*, ce qui demande
+# une entree dans la plage que le generateur ecrit — 0-13.
+#
+# L'entree prise est le **4**, laisse libre le matin meme par le retrait de
+# `GRASS_DRY` : son index restait alloue pour ne pas decaler la reserve peinte
+# dans les .vox, et aucun modele ne l'employait. Il change donc de statut sans
+# qu'une frontiere bouge et sans qu'un fichier soit a repeindre — exactement le
+# geste de MAGMA et SCORIA sur 30 et 31, et exactement ce qui evite de repayer
+# l'operation de l'invariant n° 31.
+#
+# **Sa couleur est celle de l'ecorce**, et elle ne sert qu'a `place()` : un tronc
+# estampe ecrit son type ici et sa **teinte de modele** dans `CHANNEL_COLOR`,
+# donc les quatre nuances d'ecorce du lot survivent au passage dans le terrain.
+# C'est le partage pose au jalon 1.9, et c'est lui qui rend l'operation gratuite.
+#
+# -- Une entree retiree, et pourquoi elle garde sa place ----------------------
+#
+# `TUNDRA` (9) etait l'autre frange seche heritee du
 # systeme d'avant le jalon 1.12 : une prairie sous 0,46 d'humidite virait au
 # kaki, une Snowlands sous 0,50 au gris-olive. Depuis que `CWBiome` classe le
 # climat, une seconde matiere de plaine par biome ne dit rien de plus que le
 # biome — et en jeu elle disait le contraire de lui. `surface_of` ne les rend
 # plus (2026-09-06).
 #
-# **Leur index reste alloue, et ce n'est pas de la negligence.** Les entrees 1 a
+# **Son index reste alloue, et ce n'est pas de la negligence.** Les entrees 1 a
 # 13 sont contigues et la reserve de matiere des modeles commence a 14 : liberer
-# le 4 et le 9 decalerait tout ce qui suit, donc les plages 14-19 (roche nue),
+# le 9 decalerait tout ce qui suit, donc les plages 14-19 (roche nue),
 # 20-24 (gres), 25-27 (basalte) — qui sont **peintes dans les 66 fichiers .vox
 # du depot**. Le geste coute un repassage complet par `tools/repaint_models.gd`
 # pour economiser deux entrees sur 256. C'est exactement l'arbitrage de
 # l'invariant n° 31, et il se tranche dans le meme sens. Aucun modele n'employait
-# ces deux index — verifie avant de les retirer, pas apres.
+# ces deux index — verifie avant de les retirer, pas apres. Le 4 a servi le
+# soir meme, ce qui est l'argument le plus court en faveur de cette prudence.
 
 # -- Lava Lands : deux types de bloc de plus, sans deplacer une frontiere -----
 #
@@ -214,7 +234,10 @@ static func colors() -> PackedColorArray:
 	c[STONE] = Color8(94, 98, 106)
 	c[DIRT] = Color8(192, 111, 75)
 	c[GRASS] = Color8(44, 143, 77)
-	c[GRASS_DRY] = Color8(163, 165, 88)
+	# L'ecorce du lot d'arbres, teinte mediane de la rampe 148-155. Elle ne sert
+	# qu'a poser un bloc de bois a la main : un tronc estampe porte la teinte de
+	# son propre modele dans `CHANNEL_COLOR`.
+	c[WOOD] = Color8(118, 86, 58)
 	c[GRASS_JUNGLE] = Color8(58, 132, 60)
 	c[SAND] = Color8(253, 185, 82)
 	c[SNOW] = Color8(125, 181, 199)
@@ -624,7 +647,7 @@ static func name_of(index: int) -> String:
 		STONE: return "roche"
 		DIRT: return "terre"
 		GRASS: return "herbe"
-		GRASS_DRY: return "herbe seche"
+		WOOD: return "bois"
 		GRASS_JUNGLE: return "jungle"
 		SAND: return "sable"
 		SNOW: return "neige"

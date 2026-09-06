@@ -114,19 +114,28 @@ biome, **Échap** rend la souris puis quitte.
 
 ## 3. État
 
-> **La planche de validation des assets est faite** (§6quater, après §6ter) :
-> les 71 modèles ont été regardés un par un, de près, plus les 13 arbres montés.
-> **Vingt-sept ont été regénérés** ; le morcellement, qui était la moitié du
-> problème, est désormais un invariant vérifié (n° 34).
+> **Le jalon 1 est clos.** Le dernier point ouvert — le tronc écrit dans le
+> terrain — est fait (§7), et la planche de validation des assets aussi
+> (§6quater). La porte suivante est **2.6, l'apparition**.
 
-Jalon 1 (le monde) : 1.1 à 1.10 sont **portés, testés et vus en jeu** ; **1.11
-est aux trois quarts** — assets, dispersion et rendu faits, il manque le tronc
-écrit dans le terrain et la pose des filons ; **1.12 est fait**, et les trois
-défauts de pose vus en jeu après son commit sont corrigés (§6bis). Suite de
-validation : **316 vérifications, 0 échec**, ~20 s.
+Jalon 1 (le monde) : **1.1 à 1.12 sont portés, testés et vus en jeu**. Suite de
+validation : **327 vérifications, 0 échec**, ~20 s.
 
-**La prochaine tâche est donc §7** : le tronc écrit dans le terrain, qui est le
-seul point du jalon 1 qui reste et qui débloque la collision.
+**1.11 — le tronc en matière, fait** (2026-09-06, §7). Un feuillu se pose en
+deux temps : un tronc **écrit dans les données du monde** par
+`CWVoxelGenerator._stamp_trunks` — donc il se creuse, il portera la collision et
+l'éclairage voxel le voit — et un à trois houppiers instanciés au-dessus. C'est
+le premier objet du projet à traverser la matière et l'instance, et les deux
+moitiés sortent du **même tirage, dans la même liste** : `Placement.matiere`
+marque la pièce que le générateur estampe et que le rendu ignore. Le type de
+bloc est `CWPalette.WOOD`, l'index 4 recyclé le jour même ; la teinte reste
+celle du modèle, ce qui donne quatre écorces pour un seul type. Coût mesuré :
+**+5 % sur le chargement**.
+
+Ce que la capture a attrapé au passage, et qui datait du jalon 1.7 : **le
+terrain charge une boîte, la végétation garnissait un disque** — les quatre
+coins portaient du terrain sans porter de cellules. Invisible tant que l'arbre
+entier était instancié, un fût nu depuis que le tronc est de la matière.
 
 **Trois remaniements de rendu, le 2026-09-06 au soir, tous décidés en regardant
 le jeu** — le détail est en §6ter :
@@ -241,7 +250,7 @@ src/worldgen/
   cw_terrain_field.gd      climat + altitude + chenaux + éléments  ← le cœur
   cw_biome.gd              les six biomes et la règle qui les décide (1.12)
   cw_palette.gd            palette, matières de surface, coulées de lave (1.12)
-  cw_voxel_generator.gd    VoxelGeneratorScript + cache de colonnes
+  cw_voxel_generator.gd    VoxelGeneratorScript, cache de colonnes, troncs estampes
   cw_voxel_model.gd        modèle .vox préparé : deux grilles de dessin (1.12)
   cw_model_library.gd      chargement des modèles + tables par biome et par rôle
   cw_scatter.gd            grille de dispersion 16², cellules en cache
@@ -249,7 +258,8 @@ src/worldgen/
   cw_flora_drops.gd        ce que rend une plante, et les chaînes d'artisanat (1.12)
   cw_flora_renderer.gd     instanciation de la flore (MultiMesh par cellule)
   cw_tree_rules.gd         les espèces d'arbres et leurs trois montages (1.11)
-  cw_tree_scatter.gd       la couche jumelle : cellule de 64, espacement de 14
+  cw_tree_scatter.gd       la couche jumelle : cellule de 64, espacement de 14,
+                           et le tronc en matiere (1.11)
   cw_world_edits.gd        creuser, poser, interroger un bloc (jalon 1.8)
   cw_light.gd              éclairage voxel : deux passes, cases à repeindre (1.9)
   cw_world_map.gd          carte : dalles de Voronoï, découverte, teintes (1.10)
@@ -536,6 +546,26 @@ docs/images/               gabarit, carte et composition de flore, en jeu
     de soudure (`Grille.soude`) est le filet, pas le remède — un modèle qui
     demande beaucoup de soudure a une forme fausse, et le compte s'affiche pour
     ça.
+35. **Un arbre est un tirage et une liste, jamais deux.** Le tronc estampé et
+    les houppiers instanciés sortent de la même passe de montage
+    (`CWTreeScatter._monte`) ; ce sont ses deux consommateurs qui se partagent
+    la liste, par `Placement.matiere`. Recalculer la position du tronc côté
+    générateur — ce qui serait plus direct à écrire — ferait diverger les deux
+    moitiés d'un demi-bloc le jour où une constante de montage bouge, et
+    personne ne saurait laquelle des deux a raison.
+
+    Corollaire : **une matière ne se met pas à l'échelle**. La gigue d'instance
+    d'un tronc devient un rééchantillonnage vertical au plus proche voisin, et
+    c'est `Placement.hauteur` — un nombre entier de blocs — qui dit où
+    s'accroche le premier houppier. Le produit `hauteur × échelle` ne décrit
+    plus rien de posé.
+36. **La portée de la végétation est un carré, parce que le terrain est une
+    boîte.** `CWFloraRenderer` posait ses cellules dans un disque : les quatre
+    coins de la boîte chargée portaient du terrain sans porter de flore, et
+    depuis que le tronc est écrit dans le terrain, un fût nu. Toute portée
+    exprimée en cellules doit suivre la forme de ce que Voxel Tools charge, pas
+    la forme d'une distance. Le surcoût de 4/π ne se mesure pas : le verrou du
+    chargement est la génération du terrain.
 
 ## 5. Pièges connus
 
@@ -1116,59 +1146,149 @@ la planche sert alors à ce qu'elle seule sait faire, juger une silhouette.
 ---
 
 
-## 7. Ensuite — 1.11 (le tronc en matière) ou 2.6 (apparition)
+## 7. Le tronc écrit dans le terrain — **fait le 2026-09-06**
 
-> **§6quater est faite** (2026-09-06). Les deux portes sont
-> ouvertes, et elles ne demandent pas le même travail. Ma préférence va au **tronc en
-> matière** : c'est le seul point du jalon 1 qui reste, il est court, et il
-> débloque la collision — un arbre de 20 blocs qu'on traverse se remarque
-> immédiatement, et il n'y en avait pas de si gros avant le 2026-09-06.
+C'était le dernier point du jalon 1, et le premier objet du projet à traverser
+les deux mondes : **la matière et l'instance**. Un feuillu se pose désormais en
+deux temps — un tronc écrit dans les données voxels par `CWVoxelGenerator`, un à
+trois houppiers instanciés au-dessus par `CWFloraRenderer` — et les deux moitiés
+sortent du même tirage, dans la même liste de placements.
 
-**Ce qui reste de 1.11, et c'est la partie intéressante :**
+### Ce qui a rendu la chose possible, et pourquoi elle ne l'était pas avant
 
-* **le tronc écrit dans le terrain.** Aujourd'hui il est *instancié*, comme le
-  reste : il ne se creuse pas et ne porte pas de collision. La source l'écrit en
-  colonnes de blocs (`World_fillVoxelColumnTyped`), et c'est le premier objet du
-  projet à traverser la matière et l'instance — `CWWorldEdits` sait déjà écrire,
-  `CWFloraRenderer` sait déjà instancier, il faut les faire poser au même endroit
-  et **rester d'accord après une édition**. C'est pour cela que
-  `CWTreeScatter._piece` met `fx = fz = 0.5` : le tronc est centré sur sa
-  colonne, comme le sera la colonne de blocs.
+Deux décisions prises pour d'autres raisons se paient ici :
 
-  **Le passage à 1 voxel = 1 bloc lève l'obstacle qui rendait ce point
-  douteux.** Tant que les modèles d'arbres étaient à 3/40, un tronc écrit en
-  blocs et un houppier instancié à la grille fine ne pouvaient pas se rejoindre
-  proprement — c'était même l'argument structurel qui a fait changer la grille
-  (§6.1). Les deux moitiés sont maintenant sur la même maille.
-* **la pose des filons.** Les neuf modèles existent, le tirage de rareté est
+- **le lot d'arbres est à un voxel par bloc** (jalon 1.12). Un tronc dessiné à
+  3/40 n'avait aucune correspondance avec la grille du monde ; c'était
+  l'argument *structurel* qui a fait changer la grille, et c'est lui qui se
+  réalise ;
+- **`CHANNEL_TYPE` et `CHANNEL_COLOR` sont séparés** (jalon 1.9). Un voxel de
+  tronc porte le type `CWPalette.WOOD` — il est du bois pour tout le code qui
+  raisonne en blocs — et **la teinte de son propre modèle** dans le canal de
+  rendu. Les quatre écorces du lot survivent au passage dans le terrain, et
+  aucun modèle n'est à repeindre. Sans ce partage, il aurait fallu un type de
+  bloc par nuance.
+
+### Le type de bloc : l'index 4, recyclé le jour même
+
+Un tronc estampé a besoin d'un type dans la plage que le générateur écrit (0-13).
+L'entrée prise est le **4**, libéré le matin même par le retrait de `GRASS_DRY` :
+son index restait alloué pour ne pas décaler la réserve peinte dans les `.vox`, et
+aucun modèle ne l'employait. Il change donc de statut sans qu'une frontière bouge
+et sans qu'un fichier soit à repeindre — exactement le geste de `MAGMA` et
+`SCORIA` sur 30 et 31, et exactement ce qui évite de repayer l'opération de
+l'invariant n° 31.
+
+> **Ce qui reste alloué finit par servir.** La note du matin justifiait de garder
+> le 4 et le 9 plutôt que de les libérer ; le 4 a servi le soir même. C'est
+> l'argument le plus court en faveur de cette prudence, et il vaut pour le 9.
+
+### Une matière ne se met pas à l'échelle : elle se rééchantillonne
+
+La gigue d'échelle d'un arbre va de 0,85 à 1,25, et un tronc estampé ne peut pas
+être « 1,17 fois plus grand » : ses voxels sont des blocs. Un tronc fait donc
+`round(hauteur × échelle)` blocs, et ses niveaux sont copiés **au plus proche
+voisin** — la gigue survit, en nombres entiers. C'est cette hauteur-là,
+`Placement.hauteur`, qui dit où s'accroche le premier houppier ; le produit
+flottant ne décrit plus rien de posé, et un test le vérifie.
+
+Le dessin **horizontal**, lui, n'est pas mis à l'échelle : un tronc 20 % plus
+large ne se voit pas, et le garder entier maintient son empreinte alignée sur sa
+colonne — celle-là même que `_piece` centre avec `fx = fz = 0.5` depuis le
+2026-09-05, en prévision de ce jour.
+
+### Une liste, deux lecteurs
+
+`Placement.matiere` marque la seule pièce écrite dans le terrain. Un arbre reste
+**un objet, un tirage, une liste** ; ce sont ses deux consommateurs qui se la
+partagent — `CWVoxelGenerator._stamp_trunks` estampe ce qui est marqué,
+`CWFloraRenderer` ignore ce qui l'est. Dupliquer la passe de montage aurait été
+la faute évidente : deux moitiés d'arbre calculées séparément finissent toujours
+par diverger d'un demi-bloc.
+
+**Les espèces de montage ENTIER ne sont pas estampées.** Le pin, le sapin, le
+cactus géant, le rocher géant et l'arbre à épines sont des modèles entiers, que
+la source pose en entités (`docs/systems/02`, §5.2) : leur feuillage est dans le
+même fichier que leur fût, et l'écrire dans le terrain donnerait du feuillage
+qu'on ne traverse plus. On les traverse donc toujours — leur collision est un
+sujet du jalon 3.1, et ce sera un volume approché, pas de la matière.
+
+### Ce que la capture a montré, et qu'aucun test ne voyait
+
+Le premier essai en jeu a rendu des **fûts nus, sans houppier**, au bord de la
+vue. Le diagnostic a demandé trois hypothèses ; la bonne était une différence de
+*forme* que personne n'avait remarquée depuis le jalon 1.7 :
+
+> **Le terrain charge une boîte, la végétation garnissait un disque.**
+> `CWFloraRenderer` posait ses cellules dans un disque de rayon
+> `view_distance` — la forme naturelle d'une distance de vue — là où Voxel Tools
+> charge une **boîte** de blocs autour de l'observateur. Les quatre coins de la
+> boîte portaient donc du terrain sans porter de cellules. Tant que l'arbre
+> entier était instancié, la cellule manquait et l'arbre avec elle : invisible.
+> Depuis que le tronc est de la matière, le générateur l'écrit dès que son bloc
+> existe — sans rien savoir des cellules — et le coin rend un fût nu.
+
+La portée est donc un **carré**, pour les deux couches. Le prix est de 4/π, soit
+27 % de cellules en plus, payées sur le fil du pool ; ce qu'il achète est la
+seule chose qui compte ici : *ce que le terrain montre, la végétation le garnit*.
+
+Une seconde correction est venue avec : une cellule à cheval sur le bord du
+terrain chargé échouait **en bloc** (`_ground_ready` interroge la cellule
+entière), donc soixante-quatre blocs sans une plante, y compris la moitié qui
+repose sur du sol chargé. Elle se pose maintenant **à moitié** et se refait
+entière quand le terrain la rattrape. Le test par plante interroge **sa colonne**
+et non son volume : un houppier flotte à dix blocs du sol et déborde de sept,
+exiger que *son* cadre soit chargé le refuserait alors que son tronc, lui, est
+bel et bien écrit.
+
+### Ce que ça coûte
+
+**+2 à 3 secondes sur un chargement de 41**, soit de l'ordre de 5 % — à la
+limite de la dispersion des mesures. Vue de 384 blocs, quatre exécutions
+alternées : 41,1 et 41,3 s sans l'étampage, 43,5 et 44,2 s avec. L'appel ne
+touche que les blocs qui croisent la surface (les deux chemins rapides sortent
+avant), `trunks_in` consulte une à quatre cellules d'arbres — toutes en cache
+après le premier bloc de la pile verticale — et une cellule de 64 blocs contient
+de l'ordre de sept arbres.
+
+Le passage du disque au carré, lui, **ne se mesure pas** : 42,2 et 42,9 s avec
+le disque contre 41,1 et 41,3 s avec le carré, soit l'inverse du signe attendu,
+dans le bruit. Les 27 % de cellules en plus se paient sur le fil du pool, et le
+verrou du chargement est la génération du terrain, pas la végétation.
+
+> **En revanche, ce chargement de 41 s n'est pas celui que la feuille de route
+> annonce.** Elle donne **16,4 s à 384 blocs** (2026-09-05), et la mesure du
+> jour en donne 41 à 43 — étampage désactivé, donc l'écart est **antérieur à ce
+> travail**. Le coût par colonne est passé de 61 à 80 µs entre-temps
+> (`CWBiome`, les coulées de lave, la couche des arbres), ce qui explique un
+> tiers de l'écart, pas les deux autres tiers. C'est un relevé, pas un
+> diagnostic : à reprendre avant toute optimisation, et surtout avant de croire
+> le nombre écrit dans la feuille de route.
+
+### Ce qui reste ouvert, et qui n'est plus bloquant
+
+- **abattre un arbre est grossier.** `_supported` écarte tout candidat dont la
+  colonne porte une édition : creuser un tronc retire donc ses houppiers à la
+  reconstruction de la cellule, mais le fût garde son trou et reste debout. C'est
+  le premier abattage du projet, pas le dernier mot — un vrai abattage demande de
+  retirer la matière du tronc, ce qui est du jalon 3.2 (l'outil) plus qu'ici ;
+- **la collision n'est pas branchée.** Le terrain de la démo a
+  `generate_collisions = false` : la matière est là, le corps qui s'y cogne
+  n'existe pas encore. C'est le jalon 3.1 qui l'allumera, et il n'aura rien à
+  ajouter côté arbres ;
+- **la pose des filons.** Les neuf modèles existent, le tirage de rareté est
   porté (`CWPalette.roll_ore`), il manque *où* ils affleurent. Cela appartient à
-  la voie des entités, donc au jalon 2.6. **Lava Lands leur donne un contexte
-  qu'ils n'avaient pas** : une paroi de scorie est le premier endroit du monde où
-  un filon se verrait de loin.
-* **la réduction en distance.** `CWVoxelModel.reduced(n)` n'a toujours aucun
-  usage. Un arbre de 22 blocs est le premier modèle assez gros pour la
-  justifier.
+  la voie des entités, donc au jalon 2.6 — et l'estampage vient de faire la
+  démonstration du mécanisme dont ils auront besoin ;
+- **la réduction en distance.** `CWVoxelModel.reduced(n)` n'a toujours aucun
+  usage. Un houppier de 22 blocs de large est le premier modèle assez gros pour
+  la justifier, et il est maintenant seul dans son instance — le tronc ne le suit
+  plus.
 
-**Trois choses apprises en produisant, qui coûteraient cher à redécouvrir :**
+### La suite : 2.6, l'apparition
 
-* **l'ancre est le centre du gabarit**, pas le pied du tronc. Les futs sont
-  dessinés presque d'aplomb pour cette raison. Pour une **palme**, dont le point
-  d'attache est à une extrémité, l'écart était structurel — il est **réglé
-  depuis le 2026-09-06** : une palme est une paire de frondes opposées, donc
-  centrée sur son attache par construction, et l'assembleur n'a pas eu à porter
-  de décalage. Voir l'invariant n° 30 pour ce que ça impose en retour ;
-* **un test headless ne montre pas une couche de rendu.** Huit défauts n'ont été
-  trouvés qu'en capture, sur deux sessions, et aucun n'aurait pu l'être
-  autrement. D'où `-- --biome N --shot S` sur la démo (§2). La liste du
-  2026-09-06 est en §6.4. **Mais tout ne demande pas un œil** : sur les
-  vingt-sept défauts de la planche du 2026-09-06, treize se comptaient — c'était du
-  morcellement, et il est devenu un invariant (§6quater) ;
-* **une mesure vaut mieux qu'un raisonnement sur un champ qu'on n'a pas
-  regardé.** `tools/biome_stats.gd` a contredit trois seuils qui se lisaient
-  justes. Le même outil sert à revoir n'importe quel équilibre de biome, et il
-  tourne en douze secondes.
-
-Ce qui suit décrit **2.6**, l'autre porte ouverte :
+**Le jalon 1 est clos.** La porte suivante est **2.6**, la pose des points
+d'apparition, et elle est largement déblayée :
 
 - `WorldInfo_scatterObjectsInArea` (@005f56c0) est lue — elle **ne disperse pas
   d'objets**, elle choisit la liste d'espèces d'un point d'apparition selon le
@@ -1188,7 +1308,10 @@ Ce qui suit décrit **2.6**, l'autre porte ouverte :
   drapeaux dont `0x200` « porte un inventaire » et `0x1000`, `+0x58` un index
   d'apparence. `creature_generateAppearance` et `creature_initBehaviorByType`
   sont appelées juste après, ce qui donne l'enchaînement complet
-  pose → apparence → comportement.
+  pose → apparence → comportement ;
+- **et la pose des filons y trouve son appelant.** Les neuf modèles existent,
+  le tirage de rareté est porté, l'étampage vient d'être démontré sur les
+  troncs : il ne manque que *où* un filon affleure.
 
 Ce qu'il faudra décider avant d'écrire : un point d'apparition **persiste-t-il**
 comme la découverte de la carte, ou se recalcule-t-il à la volée comme la flore ?

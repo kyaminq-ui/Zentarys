@@ -62,14 +62,48 @@ extends CWScatter
 ## voisins —, ce qui est sans consequence visible et vaut mieux qu'une regle qui
 ## se contredirait d'une cellule a l'autre.
 ##
-## -- Ce que cette couche ne fait pas encore -----------------------------------
+## -- Le tronc est de la matiere, le houppier une instance --------------------
 ##
-## Le tronc est **instancie**, pas ecrit dans le terrain. Il ne se creuse donc
-## pas et ne porte pas de collision. La source, elle, ecrit ses troncs en
-## colonnes de blocs (`World_fillVoxelColumnTyped`), et c'est le troisieme temps
-## du jalon 1.11 — celui qui fera traverser a un meme objet la matiere et
-## l'instance. Le lot d'assets livre `tronc_feuillu` et `tronc_palmier`
-## precisement pour que ce temps-la soit separable de celui-ci.
+## Troisieme temps du jalon 1.11, fait le 2026-09-06. Le tronc d'un feuillu et
+## le stipe d'un palmier sont **ecrits dans les donnees du monde** par
+## `CWVoxelGenerator` : on les creuse, ils portent la collision le jour ou le
+## terrain en genere, et l'eclairage voxel les voit. Les houppiers restent
+## instancies. C'est l'architecture de la source — elle ecrit ses troncs en
+## colonnes de blocs (`World_fillVoxelColumnTyped`) et pose `tree-leaves` en
+## entite separee (`docs/systems/02`, Sec. 5.2) — et c'est le premier objet du
+## projet a traverser les deux mondes.
+##
+## Deux choses le rendent possible, et aucune n'existait avant le jalon 1.12 :
+##
+##   * **le lot d'arbres est a un voxel par bloc.** Un tronc dessine a 3/40 ne
+##     pouvait pas s'estamper : il n'y avait pas de correspondance entre ses
+##     voxels et ceux du monde. C'etait l'argument structurel qui a fait changer
+##     la grille, et il se paie ici ;
+##   * **`CHANNEL_TYPE` et `CHANNEL_COLOR` sont separes** depuis le jalon 1.9.
+##     Un voxel de tronc porte le type `CWPalette.WOOD` — donc il est du bois
+##     pour tout le code qui raisonne en blocs — et la **teinte de son propre
+##     modele** dans le canal de couleur. Les quatre nuances d'ecorce du lot
+##     survivent au passage dans le terrain, et aucun modele n'est a repeindre.
+##
+## **Les especes de montage ENTIER ne sont pas estampees** : le pin, le sapin,
+## le cactus geant, le rocher geant et l'arbre a epines sont des modeles entiers,
+## que la source pose en entites. On les traverse toujours ; leur collision est
+## un sujet du jalon 3.1, et ce sera un volume approche, pas de la matiere.
+##
+## -- Ce que la matiere coute, et ce qu'elle change ---------------------------
+##
+## L'echelle d'instance ne s'applique plus telle quelle au tronc : de la matiere
+## ne se met pas a l'echelle, elle se **reechantillonne**. Un tronc estampe fait
+## `round(hauteur * echelle)` blocs, et ses niveaux sont copies au plus proche
+## voisin — ce qui garde la gigue de hauteur, en nombres entiers. C'est cette
+## hauteur-la, gardee dans `Placement.hauteur`, qui dit ou s'accroche le premier
+## houppier ; le produit flottant ne veut plus rien dire.
+##
+## Et un tronc creuse **fait disparaitre son arbre** : `_supported` ecarte tout
+## candidat dont la colonne porte une edition, donc abattre un tronc retire ses
+## houppiers a la reconstruction de la cellule. Le fut garde son trou et reste
+## debout, ce qui est grossier — c'est le premier abattage du projet, pas le
+## dernier mot.
 
 ## Cote d'une cellule d'arbres, en blocs, et son decalage. Quatre fois la
 ## cellule de la flore : 64 = 16 << 2, donc une cellule d'arbres couvre
@@ -153,6 +187,22 @@ const ACCROCHE_HOUPPIER: float = 0.72
 ## Nettement moins de 1 : ils doivent se chevaucher, sinon on voit le tronc
 ## entre les deux.
 const EMPILEMENT: float = 0.42
+
+## Marge horizontale, en blocs, d'un tronc estampe autour de sa colonne.
+##
+## Le plus large du lot est `tropical_tronc`, 7 blocs de large, soit un rayon de
+## 3. Quatre laisse une marge d'un bloc, et un test refuse qu'un modele de tronc
+## la depasse : `trunks_in` s'en sert pour savoir quelles cellules consulter, et
+## un tronc plus large deborderait d'un bloc de terrain sans que rien ne le dise.
+const MARGE_TRONC: int = 4
+
+## Hauteur maximale, en blocs, d'un tronc estampe.
+##
+## Sert au chemin rapide du generateur : un bloc entierement au-dessus du terrain
+## ne peut pas etre saute tant qu'un tronc peut y monter. Verrouillee par un
+## test contre le lot reel — le plus haut est `palmier_tronc` de jungle a 15
+## blocs, soit 19 a l'echelle maximale.
+const HAUTEUR_TRONC_MAX: int = 32
 
 ## Melangeurs propres a cette couche. Ils doivent differer de ceux de
 ## `CWScatter`, sinon un arbre et une touffe partagent leur flux de tirages et
@@ -329,11 +379,21 @@ func _monte(out: Array, sp: Dictionary, x: int, z: int, ground: int,
 	var couronnes: Array = sp["couronnes"]
 	if couronnes.is_empty():
 		return
-	# Hauteur du tronc en blocs, a l'echelle de *cette* instance. C'est le seul
-	# calcul de cette couche qui puisse etre faux sans qu'on le voie : un
-	# houppier a un demi-bloc de trop flotte, a un demi-bloc de moins il avale la
-	# cime. D'ou `fy`, qui garde la fraction au lieu de l'arrondir.
-	var haut: float = float(tronc.height) * echelle / tronc.voxels_per_block
+
+	# -- Le tronc passe en matiere -------------------------------------------
+	#
+	# Il n'est plus instancie : `CWVoxelGenerator` l'ecrit dans les donnees du
+	# monde et `CWFloraRenderer` l'ignore. Une seule liste, deux lecteurs — voir
+	# l'en-tete, et `CWScatter.Placement.matiere`.
+	pied.matiere = true
+	pied.hauteur = maxi(1, roundi(float(tronc.height) * echelle))
+
+	# Hauteur du tronc en blocs. Elle est **entiere** depuis que le tronc est de
+	# la matiere : c'est le nombre de blocs reellement ecrits, pas le produit
+	# `hauteur x echelle`, qui ne decrit plus rien de pose. Un houppier a un
+	# demi-bloc de trop flotte, a un demi-bloc de moins il avale la cime — d'ou
+	# `fy`, qui garde la fraction pour les etages suivants.
+	var haut: float = float(pied.hauteur)
 	var bornes: Array = sp["pieces"]
 	var n: int = int(bornes[0]) + int(float(c["pieces"])
 			* float(int(bornes[1]) - int(bornes[0]) + 1))
@@ -432,6 +492,72 @@ func _piece(m: CWVoxelModel, x: int, z: int, ground: int, dy: float,
 	p.role = CWDecorRules.Role.AUCUN
 	p.scale = echelle
 	return p
+
+
+## Les troncs de matiere qui mordent dans le cadre donne, en blocs monde.
+##
+## Requete jumelle de `placements_in`, et separee d'elle pour une raison de cout :
+## la marge de `placements_in` est celle du plus grand houppier — neuf blocs —,
+## celle d'un tronc est de quatre. Le generateur appelle celle-ci pour chaque
+## bloc de donnees qui touche la surface ; elle doit balayer le moins de cellules
+## possible.
+func trunks_in(x0: int, z0: int, nx: int, nz: int) -> Array:
+	var out: Array = []
+	if not _lib.has_any():
+		return out
+	var cx0: int = cell_index(x0 - MARGE_TRONC)
+	var cx1: int = cell_index(x0 + nx - 1 + MARGE_TRONC)
+	var cz0: int = cell_index(z0 - MARGE_TRONC)
+	var cz1: int = cell_index(z0 + nz - 1 + MARGE_TRONC)
+	var x1: int = x0 + nx
+	var z1: int = z0 + nz
+	for cz in range(cz0, cz1 + 1):
+		for cx in range(cx0, cx1 + 1):
+			for p in cell(cx, cz):
+				if not p.matiere:
+					continue
+				if p.x + MARGE_TRONC < x0 or p.x - MARGE_TRONC >= x1:
+					continue
+				if p.z + MARGE_TRONC < z0 or p.z - MARGE_TRONC >= z1:
+					continue
+				out.append(p)
+	return out
+
+
+## Les voxels d'un tronc estampe : `(x, y, z, index de palette)`, en coordonnees
+## monde.
+##
+## La hauteur posee est `Placement.hauteur`, et les niveaux du modele y sont
+## copies **au plus proche voisin** : c'est ainsi qu'un tronc garde sa gigue de
+## hauteur sans quitter la grille du bloc. Le dessin horizontal, lui, n'est pas
+## mis a l'echelle — un tronc 20 % plus large ne se voit pas, et le garder
+## entier maintient l'empreinte alignee sur la colonne.
+##
+## `load_from` range les offsets par niveau croissant, ce qui permet de balayer
+## le modele **une seule fois** quelle que soit la hauteur demandee.
+static func trunk_voxels(pl: CWScatter.Placement) -> Array:
+	var out: Array = []
+	var m: CWVoxelModel = pl.model
+	if m == null or pl.hauteur <= 0:
+		return out
+	var src: int = m.height
+	# Pour chaque niveau du modele, les niveaux de sortie qui le copient.
+	var sorties: Array = []
+	sorties.resize(src)
+	for j in src:
+		sorties[j] = PackedInt32Array()
+	for k in pl.hauteur:
+		var j: int = mini(src - 1, floori(float(k) * float(src) / float(pl.hauteur)))
+		sorties[j].append(k)
+
+	var dx: PackedInt32Array = m.offsets_x(pl.rotation)
+	var dy: PackedInt32Array = m.offsets_y(pl.rotation)
+	var dz: PackedInt32Array = m.offsets_z(pl.rotation)
+	var v: PackedByteArray = m.values(pl.rotation)
+	for i in m.voxel_count:
+		for k in sorties[dy[i]]:
+			out.append(Vector4i(pl.x + dx[i], pl.y + k, pl.z + dz[i], v[i]))
+	return out
 
 
 func _tree_seed_of(cx: int, cz: int) -> int:

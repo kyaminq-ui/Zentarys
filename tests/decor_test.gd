@@ -262,13 +262,19 @@ func _test_matiere() -> void:
 	_ok("les matieres de plaine portent du decor", refusees.is_empty(),
 			str(refusees))
 
-	# -- Les deux matieres retirees ne reviennent pas ------------------------
+	# -- Ce qu'aucune surface ne doit rendre ---------------------------------
 	#
-	# `GRASS_DRY` et `TUNDRA` gardent leur index — les liberer decalerait la
-	# reserve peinte dans les .vox — mais plus rien ne doit les produire. Sans
-	# ce balayage, remettre une frange d'humidite dans `surface_of` ne leverait
-	# rien : la couleur reviendrait en jeu, et le nom du sol contredirait de
-	# nouveau celui du biome. C'est la seule chose qui tienne le retrait.
+	# `TUNDRA` garde son index — le liberer decalerait la reserve peinte dans
+	# les .vox — mais plus rien ne doit le produire. Sans ce balayage, remettre
+	# une frange d'humidite dans `surface_of` ne leverait rien : la couleur
+	# reviendrait en jeu, et le nom du sol contredirait de nouveau celui du
+	# biome. C'est la seule chose qui tienne le retrait.
+	#
+	# `WOOD` est l'autre index de cette liste, et pour la raison inverse : c'est
+	# l'ancien `GRASS_DRY`, recycle en type de bloc pour les troncs estampes du
+	# jalon 1.11. Un sol de bois serait maintenant une faute d'un genre nouveau
+	# — une surface de terrain peinte en ecorce —, et c'est le meme balayage qui
+	# l'attrape.
 	var retirees: Dictionary = {}
 	# Et les deux bandes d'altitude, retirees le meme jour : la roche nue et la
 	# calotte de neige ne doivent plus apparaitre **hors du biome dont elles
@@ -284,7 +290,7 @@ func _test_matiere() -> void:
 			for above in [-30.0, -4.0, 8.0, 40.0, 120.0, 260.0]:
 				var m: int = CWPalette.surface_of(biome, above, t, h,
 						i * 37, i * 91)
-				if m == CWPalette.GRASS_DRY or m == CWPalette.TUNDRA:
+				if m == CWPalette.WOOD or m == CWPalette.TUNDRA:
 					retirees[CWPalette.name_of(m)] = true
 				if CWDecorRules.decor_allowed(biome, m):
 					continue

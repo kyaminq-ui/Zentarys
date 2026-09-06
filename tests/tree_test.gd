@@ -51,6 +51,7 @@ func run(runner: Object) -> void:
 	_test_models()
 	_test_rules()
 	_test_scatter()
+	_test_matiere()
 
 
 func _ok(label: String, condition: bool, detail: String = "") -> void:
@@ -385,3 +386,190 @@ func _test_scatter() -> void:
 			if pl.y <= p.sea_level:
 				noyes += 1
 	_ok("aucun arbre sous le niveau de la mer", noyes == 0, "%d" % noyes)
+
+
+# -- 4. Le tronc ecrit dans le terrain (jalon 1.11) ---------------------------
+
+func _test_matiere() -> void:
+	print("[le tronc en matiere]")
+	var p := CWWorldParams.new()
+	p.world_seed = 2024
+	var g := CWVoxelGenerator.new()
+	g.params = p
+	var scatter: CWTreeScatter = g.tree_scatter_grid()
+	if not scatter.library().has_any():
+		_skip("le tronc en matiere", "aucun modele d'arbre charge")
+		return
+
+	# -- Les deux constantes de marge, contre le lot reel --------------------
+	#
+	# `MARGE_TRONC` decide quelles cellules `trunks_in` consulte et
+	# `HAUTEUR_TRONC_MAX` de combien recule le chemin rapide du generateur. Un
+	# modele qui les depasserait serait tronque au bord d'un bloc, ce qui se
+	# verrait a peine et ne leverait rien.
+	var lib: CWModelLibrary = scatter.library()
+	var trop_large := PackedStringArray()
+	var trop_haut := PackedStringArray()
+	for biome in CWTreeRules.biomes():
+		for sp in CWTreeRules.SPECIES[biome]:
+			if int(sp["montage"]) == CWTreeRules.Montage.ENTIER:
+				continue
+			var m: CWVoxelModel = lib.model(sp["tronc"])
+			if m == null:
+				continue
+			if m.radius_blocks > CWTreeScatter.MARGE_TRONC:
+				trop_large.append("%s r=%d" % [m.name, m.radius_blocks])
+			if roundi(float(m.height) * CWTreeScatter.ECHELLE_MAX) \
+					> CWTreeScatter.HAUTEUR_TRONC_MAX:
+				trop_haut.append("%s h=%d" % [m.name, m.height])
+	_ok("aucun tronc ne deborde de la marge horizontale",
+			trop_large.is_empty(), ", ".join(trop_large))
+	_ok("aucun tronc ne depasse la hauteur annoncee",
+			trop_haut.is_empty(), ", ".join(trop_haut))
+
+	# -- Qui est de la matiere, et qui n'en est pas --------------------------
+	var origin := Vector2i(p.world_origin.x >> CWTreeScatter.TREE_CELL_SHIFT,
+			p.world_origin.y >> CWTreeScatter.TREE_CELL_SHIFT)
+	var troncs: Array = []
+	var arbres: Dictionary = {}
+	for dz in range(-3, 4):
+		for dx in range(-3, 4):
+			for pl in scatter.cell(origin.x + dx, origin.y + dz):
+				var k := Vector2i(pl.x, pl.z)
+				if not arbres.has(k):
+					arbres[k] = []
+				arbres[k].append(pl)
+				if pl.matiere:
+					troncs.append(pl)
+	if troncs.is_empty():
+		_skip("le tronc en matiere", "aucun feuillu autour du point de depart")
+		return
+	print("     %d arbre(s), dont %d a tronc de matiere"
+			% [arbres.size(), troncs.size()])
+
+	# Une piece de matiere est **le tronc, et lui seul**. Deux troncs de matiere
+	# sur un meme arbre en ecriraient deux au meme endroit ; un houppier de
+	# matiere serait du feuillage qu'on ne peut plus traverser.
+	var fautes := PackedStringArray()
+	for k in arbres:
+		var n: int = 0
+		for pl in arbres[k]:
+			if pl.matiere:
+				n += 1
+				if pl.hauteur <= 0:
+					fautes.append("%s sans hauteur" % pl.model.name)
+		if n > 1:
+			fautes.append("%d troncs en (%d,%d)" % [n, k.x, k.y])
+	_ok("un arbre a au plus un tronc de matiere, et il a une hauteur",
+			fautes.is_empty(), ", ".join(fautes))
+
+	# Un arbre entier n'est jamais de la matiere : la source le pose en entite,
+	# et son feuillage est dans le meme modele que son fut.
+	var entiers: int = 0
+	for k in arbres:
+		if arbres[k].size() == 1 and arbres[k][0].matiere:
+			entiers += 1
+	_ok("un modele entier n'est pas estampe", entiers == 0, "%d" % entiers)
+
+	# -- La reechantillonnage vertical ---------------------------------------
+	#
+	# Un tronc estampe fait exactement `hauteur` blocs, du sol au sommet, sans
+	# niveau vide au milieu : un trou dans un fut se voit de loin, et une
+	# hauteur qui ne suit pas la gigue rendrait tous les arbres identiques.
+	var tronc: CWScatter.Placement = troncs[0]
+	var voxels: Array = CWTreeScatter.trunk_voxels(tronc)
+	var niveaux: Dictionary = {}
+	var hors: int = 0
+	for v in voxels:
+		niveaux[v.y] = true
+		if v.y < tronc.y or v.y >= tronc.y + tronc.hauteur:
+			hors += 1
+	_ok("le tronc estampe occupe tous ses niveaux, et aucun autre",
+			niveaux.size() == tronc.hauteur and hors == 0,
+			"%d niveaux pour %d blocs, %d hors" % [niveaux.size(),
+					tronc.hauteur, hors])
+
+	var gigue: Dictionary = {}
+	for pl in troncs:
+		gigue[pl.hauteur] = true
+	_ok("la gigue d'echelle donne des troncs de hauteurs differentes",
+			gigue.size() > 1, "%d hauteur(s) distincte(s)" % gigue.size())
+
+	# -- Le houppier se pose sur le tronc pose, pas sur un tronc reve ---------
+	#
+	# C'est le point d'accroche des deux mondes : la hauteur qui sert au montage
+	# doit etre celle des blocs reellement ecrits. Si l'un arrondit et l'autre
+	# non, le houppier flotte ou avale la cime — le defaut du 2026-09-06.
+	var k0 := Vector2i(tronc.x, tronc.z)
+	var premier: CWScatter.Placement = null
+	for pl in arbres[k0]:
+		if pl.matiere:
+			continue
+		if premier == null or pl.fy < premier.fy:
+			premier = pl
+	if premier != null:
+		var attendu: float = float(tronc.hauteur) * CWTreeScatter.ACCROCHE_HOUPPIER
+		_ok("le premier houppier s'accroche a la hauteur estampee",
+				absf(premier.fy - attendu) < 0.001,
+				"fy=%.3f, attendu %.3f" % [premier.fy, attendu])
+
+	# -- La requete du generateur --------------------------------------------
+	#
+	# `trunks_in` ne rend que de la matiere, et elle rend le tronc dont la
+	# colonne tombe dans le cadre. C'est elle que `_generate_block` appelle a
+	# chaque bloc de surface.
+	var dans: Array = scatter.trunks_in(tronc.x - 2, tronc.z - 2, 5, 5)
+	var trouve: bool = false
+	var intrus: int = 0
+	for pl in dans:
+		if not pl.matiere:
+			intrus += 1
+		if pl == tronc:
+			trouve = true
+	_ok("trunks_in rend le tronc de son cadre, et rien d'instancie",
+			trouve and intrus == 0, "%d resultat(s), %d intrus" % [dans.size(), intrus])
+
+	# -- Et le bout du chemin : le bloc genere -------------------------------
+	#
+	# La seule verification qui traverse tout — dispersion, reechantillonnage,
+	# repere monde vers repere de scene, ecriture des deux canaux. Le repere est
+	# le piege : `CWTreeScatter` compte en coordonnees monde et le bloc en
+	# coordonnees de scene, et une table rangee dans le mauvais repere ne tombe
+	# jamais juste sans que rien ne bronche (jalon 1.9).
+	var sx: int = tronc.x - p.world_origin.x
+	var sz: int = tronc.z - p.world_origin.y
+	@warning_ignore("integer_division")
+	var bx: int = floori(float(sx) / 16.0) * 16
+	@warning_ignore("integer_division")
+	var bz: int = floori(float(sz) / 16.0) * 16
+	@warning_ignore("integer_division")
+	var by: int = floori(float(tronc.y) / 16.0) * 16
+	var buf := VoxelBuffer.new()
+	buf.set_channel_depth(CWPalette.CHANNEL_COLOR, CWPalette.COLOR_DEPTH)
+	buf.create(16, 16, 16)
+	g._generate_block(buf, Vector3i(bx, by, bz), 0)
+	var bois: int = 0
+	var teintes: Dictionary = {}
+	for y in 16:
+		for z in 16:
+			for x in 16:
+				if buf.get_voxel(x, y, z, CWPalette.CHANNEL_TYPE) == CWPalette.WOOD:
+					bois += 1
+					teintes[buf.get_voxel(x, y, z, CWPalette.CHANNEL_COLOR)] = true
+	_ok("le bloc genere contient du bois", bois > 0, "%d voxel(s)" % bois)
+	# Le type est unique, la teinte ne l'est pas : c'est tout le partage du
+	# jalon 1.9. Un tronc qui sortirait d'une seule couleur voudrait dire que le
+	# canal de rendu recopie le type au lieu du modele.
+	_ok("le bois garde les nuances d'ecorce de son modele", teintes.size() > 1,
+			"%d teinte(s)" % teintes.size())
+
+	# La colonne du tronc porte du bois **au-dessus du sol** : c'est la
+	# difference entre un tronc pose et un tronc enterre.
+	var lx: int = sx - bx
+	var lz: int = sz - bz
+	var ly: int = tronc.y - by
+	if ly >= 0 and ly < 16:
+		_ok("le pied du tronc est sur sa propre colonne",
+				buf.get_voxel(lx, ly, lz, CWPalette.CHANNEL_TYPE) == CWPalette.WOOD,
+				"type %d en (%d,%d,%d)" % [buf.get_voxel(lx, ly, lz,
+						CWPalette.CHANNEL_TYPE), lx, ly, lz])

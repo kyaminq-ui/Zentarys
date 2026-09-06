@@ -188,6 +188,20 @@ class Placement extends RefCounted:
 	## du meme modele n'ont pas la meme taille. Multiplie l'echelle de dessin,
 	## pas la position — l'ancre reste au sol et au centre de l'empreinte.
 	var scale: float = 1.0
+	## Cette piece est-elle **ecrite dans le terrain** plutot qu'instanciee ?
+	##
+	## Vrai pour le seul tronc d'un feuillu ou d'un palmier (jalon 1.11, troisieme
+	## temps). Une piece de matiere est produite par la meme passe et rangee dans
+	## la meme liste que les autres — un arbre est un objet, pas deux —, mais ses
+	## deux consommateurs se la partagent : `CWVoxelGenerator` l'estampe,
+	## `CWFloraRenderer` l'ignore. Une seule source de verite, deux lectures.
+	##
+	## `hauteur` est alors la hauteur estampee **en blocs entiers**, qui n'est pas
+	## `model.height * scale` : de la matiere ne se met pas a l'echelle, elle se
+	## reechantillonne. C'est cette valeur-la, et non le produit, qui dit ou
+	## s'accroche le premier houppier.
+	var matiere: bool = false
+	var hauteur: int = 0
 
 	## Position de l'ancre, en blocs, coordonnees monde.
 	func origin() -> Vector3:

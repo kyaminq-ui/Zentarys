@@ -128,6 +128,11 @@ func scatter_grid() -> CWScatter:
 ## Grille de dispersion des **arbres** — la couche jumelle, cellule de 64 blocs
 ## et bibliotheque a part (`CWTreeScatter`). Meme raison d'etre ici : elle
 ## s'appuie sur le meme champ de terrain que la flore et que la generation.
+##
+## **Le generateur s'en sert, lui** (jalon 1.11) : les troncs sont ecrits dans
+## les donnees du monde par `_stamp_trunks`. C'est le meme exemplaire que celui
+## du rendu — un seul cache de cellules, donc le tronc estampe et le houppier
+## instancie viennent forcement du meme tirage.
 func tree_scatter_grid() -> CWTreeScatter:
 	field()
 	return _tree_scatter
@@ -221,12 +226,19 @@ func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: i
 	# Chemins rapides : bloc entierement vide ou entierement plein. Ce sont eux
 	# qui rendent praticable un monde de mille blocs de haut.
 	#
-	# La flore ne s'invite pas ici : ses modeles sont treize fois plus fins que la
-	# grille du terrain (CWVoxelModel.VOXELS_PER_BLOCK), donc ils ne sont pas
-	# ecrits dans les donnees du monde mais instancies par-dessus
-	# (`CWFloraRenderer`). Le generateur n'a plus a les consulter, ni a garder
-	# vivant un bloc vide pour la moitie haute d'une plante.
-	if float(y_min) > patch.highest and y_min > sea:
+	# La flore ne s'invite pas ici : ses modeles sont quatre a six fois plus fins
+	# que la grille du terrain, donc ils ne sont pas ecrits dans les donnees du
+	# monde mais instancies par-dessus (`CWFloraRenderer`). Le generateur n'a plus
+	# a les consulter, ni a garder vivant un bloc vide pour la moitie haute d'une
+	# plante.
+	#
+	# **Les troncs, eux, s'invitent** depuis le jalon 1.11 : ils sont ecrits dans
+	# le terrain. Le vide au-dessus du sol n'est donc plus vide sur la hauteur
+	# d'un tronc, et le chemin rapide doit reculer d'autant. La borne est une
+	# constante et non une mesure du voisinage : un tronc pose hors du bloc peut
+	# y mordre, et sa colonne n'est pas dans ce releve de hauteurs.
+	if float(y_min) > patch.highest + float(CWTreeScatter.HAUTEUR_TRONC_MAX) \
+			and y_min > sea:
 		return
 	if float(y_max) < patch.lowest - float(subsurface_depth):
 		out_buffer.fill(CWPalette.STONE, CWPalette.CHANNEL_TYPE)
@@ -255,6 +267,67 @@ func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: i
 			if top < sea:
 				_fill_run(out_buffer, lx, lz, y_min, y_max, stride,
 						top + 1, sea, CWPalette.water_index(float(sea - top)))
+
+	_stamp_trunks(out_buffer, origin_in_voxels, size, stride, lod, p, patch)
+
+
+## Ecrit dans le bloc les troncs qui le traversent (jalon 1.11).
+##
+## -- Pourquoi ici, et pas par la couche d'edition ----------------------------
+##
+## Un tronc est du monde procedural, pas une modification du joueur : le passer
+## par `CWWorldEdits` mettrait chaque arbre du monde sur le disque. Il est donc
+## ecrit a la generation, comme la source le fait
+## (`World_fillVoxelColumnTyped`), ce qui lui donne gratuitement la persistance
+## — il n'y a rien a persister —, l'edition, l'eclairage et la collision.
+##
+## -- Ce que ca coute ---------------------------------------------------------
+##
+## L'appel ne concerne que les blocs qui touchent la surface : les autres sont
+## sortis par les deux chemins rapides. `trunks_in` consulte une a quatre
+## cellules d'arbres, toutes en cache apres le premier bloc de la pile
+## verticale, et une cellule de 64 blocs contient de l'ordre de sept arbres.
+##
+## -- Le type et la couleur ---------------------------------------------------
+##
+## Le type ecrit est `CWPalette.WOOD` pour **tous** les troncs, la teinte est
+## celle du voxel du modele. C'est le partage du jalon 1.9 : le canal semantique
+## dit « du bois », le canal de rendu garde l'ecorce claire du bouleau et la
+## sombre du tropical. Sans lui, il aurait fallu un type de bloc par nuance.
+func _stamp_trunks(buf: VoxelBuffer, origin: Vector3i, size: Vector3i,
+		stride: int, lod: int, p: CWWorldParams, patch: ColumnPatch) -> void:
+	# Le LOD n'est pas gere : un tronc de trois blocs de large disparait a la
+	# premiere reduction, et `VoxelTerrain` ne demande que le niveau 0. La garde
+	# est la pour le jour ou la pyramide reviendrait sur le tapis.
+	if lod != 0 or _shutting_down:
+		return
+	var trees: CWTreeScatter = tree_scatter_grid()
+	if trees == null:
+		return
+	# La dispersion travaille en coordonnees monde, le bloc en coordonnees de
+	# scene. C'est le meme decalage qu'au jalon 1.9, et c'est le piege de repere
+	# que `nextsteps.md` signale : une table rangee dans le mauvais repere ne
+	# tombe jamais juste, et rien ne bronche.
+	var wx: int = p.world_origin.x + origin.x
+	var wz: int = p.world_origin.y + origin.z
+	var placements: Array = trees.trunks_in(wx, wz, size.x, size.z)
+	if placements.is_empty():
+		return
+
+	var y_min: int = origin.y
+	var y_max: int = origin.y + size.y - 1
+	for pl in placements:
+		for v in CWTreeScatter.trunk_voxels(pl):
+			if v.y < y_min or v.y > y_max:
+				continue
+			var lx: int = v.x - wx
+			var lz: int = v.z - wz
+			if lx < 0 or lz < 0 or lx >= size.x or lz >= size.z:
+				continue
+			buf.set_voxel(CWPalette.WOOD, lx, v.y - y_min, lz,
+					CWPalette.CHANNEL_TYPE)
+			buf.set_voxel(CWPalette.raw_of(v.w), lx, v.y - y_min, lz,
+					CWPalette.CHANNEL_COLOR)
 
 
 func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,

@@ -88,6 +88,10 @@ var _last_cell: Vector2i = Vector2i(0x7FFFFFFF, 0x7FFFFFFF)
 ## Cellules tirees, mais dont le terrain n'est pas encore charge. Voir
 ## `set_terrain`.
 var _waiting: Array[Vector2i] = []
+## Cellules posees **incompletes** : leur sol n'etait charge que par endroits.
+## Elles restent dans `_waiting` et se refont en entier des que le terrain les
+## rattrape. Voir `_plantes_posables`.
+var _partiel: Dictionary = {}
 var _terrain: VoxelTool = null
 
 
@@ -156,6 +160,7 @@ func clear() -> void:
 	_live.clear()
 	_queue.clear()
 	_waiting.clear()
+	_partiel.clear()
 	_wanted.clear()
 	_last_cell = Vector2i(0x7FFFFFFF, 0x7FFFFFFF)
 
@@ -188,6 +193,7 @@ func _drop_edited() -> void:
 		if _live.has(c):
 			_live[c].queue_free()
 			_live.erase(c)
+			_partiel.erase(c)
 			_wanted.clear()
 
 
@@ -213,20 +219,32 @@ func _refresh_wanted() -> void:
 	# camera change de cellule**, soit tous les seize blocs parcourus. Emettre les
 	# anneaux dans l'ordre donne la meme chose — ce qu'on a sous les yeux d'abord —
 	# pour le prix du parcours seul.
-	var reach2: int = reach * reach
+	# -- Un carre, et non un disque -----------------------------------------
+	#
+	# La portee etait un disque (`dx*dx + dz*dz <= reach*reach`) : c'est la forme
+	# naturelle d'une distance de vue, et c'est faux ici. Le terrain, lui, charge
+	# une **boite** de blocs autour de l'observateur — Voxel Tools ne connait que
+	# ca —, donc les quatre coins de la boite portaient du terrain sans porter de
+	# cellules. La flore y manquait sans qu'on le remarque ; depuis que le tronc
+	# est ecrit dans le terrain (jalon 1.11), le meme coin rend un **fut nu, sans
+	# houppier**, et le defaut se voit. Les deux couches suivent maintenant la
+	# meme forme.
+	#
+	# Le prix est de 4/pi, soit 27 % de cellules en plus. Il se paie sur le fil
+	# du pool, et il achete la seule chose qui compte ici : ce que le terrain
+	# montre, la vegetation le garnit.
 	for r in range(0, reach + 1):
 		for dz in range(-r, r + 1):
 			# L'anneau de rayon r : ses deux lignes entieres, puis les deux seules
-			# colonnes qui restent. Sans ce saut on reparcourrait le disque entier
+			# colonnes qui restent. Sans ce saut on reparcourrait le carre entier
 			# a chaque rayon.
 			var step: int = 1 if absi(dz) == r else 2 * r
 			var dx: int = -r
 			while dx <= r:
-				if dx * dx + dz * dz <= reach2:
-					var c := Vector2i(here.x + dx, here.y + dz)
-					_wanted[c] = true
-					if not _live.has(c):
-						pending.append(c)
+				var c := Vector2i(here.x + dx, here.y + dz)
+				_wanted[c] = true
+				if not _live.has(c):
+					pending.append(c)
 				dx += step
 	_queue = pending
 
@@ -239,6 +257,7 @@ func _refresh_wanted() -> void:
 	for c in stale:
 		_live[c].queue_free()
 		_live.erase(c)
+		_partiel.erase(c)
 
 
 ## Fait avancer la construction : un lot en vol a la fois.
@@ -252,10 +271,7 @@ func _pump() -> void:
 		# immediat, et c'est le fil principal qui cree les noeuds.
 		for c in _batch:
 			if _wanted.has(c) and not _live.has(c):
-				if _ground_ready(c):
-					_build_node(c)
-				else:
-					_waiting.append(c)
+				_poser(c)
 		_batch.clear()
 
 	if _queue.is_empty():
@@ -282,14 +298,53 @@ func _retry_waiting() -> void:
 	var again: Array[Vector2i] = []
 	for i in n:
 		var c: Vector2i = _waiting[i]
-		if not _wanted.has(c) or _live.has(c):
+		if not _wanted.has(c):
 			continue
-		if _ground_ready(c):
-			_build_node(c)
-		else:
+		# Une cellule deja posee n'est reprise que si elle l'a ete a moitie, et
+		# seulement quand tout son sol est la : la refaire coute un noeud entier,
+		# et une cellule complete n'a rien a y gagner.
+		if _live.has(c):
+			if not _partiel.has(c) or not _ground_ready(c):
+				again.append(c)
+				continue
+			_live[c].queue_free()
+			_live.erase(c)
+			_partiel.erase(c)
+		if not _poser(c):
 			again.append(c)
 	_waiting = _waiting.slice(n)
 	_waiting.append_array(again)
+
+
+## Pose une cellule, entiere si son sol est la, a moitie sinon. Rend vrai quand
+## il n'y a plus rien a attendre.
+##
+## -- Pourquoi une pose partielle ---------------------------------------------
+##
+## `_ground_ready` interroge la **cellule entiere**, donc une cellule a cheval
+## sur le bord du terrain charge echouait en bloc : aucune plante, aucun arbre,
+## sur les soixante-quatre blocs, y compris la moitie qui repose sur du sol
+## charge. Personne ne l'avait vu tant que les deux moities d'un arbre etaient
+## instanciees ensemble — la cellule manquait, l'arbre entier avec elle.
+##
+## Depuis que le tronc est ecrit dans le terrain (jalon 1.11), le defaut se voit
+## : le generateur estampe le tronc des que son bloc existe, sans rien savoir des
+## cellules, et une cellule refusee laissait donc un **fut nu, sans houppier**,
+## sur tout le pourtour de la vue. C'est ce que la capture du 2026-09-06 a
+## montre. Les deux couches doivent s'accorder au bloc pres, pas a la cellule.
+func _poser(c: Vector2i) -> bool:
+	var plants: Array = _scatter.cell(c.x, c.y)
+	if plants.is_empty():
+		return true
+	if _ground_ready(c):
+		_build_node(c, plants)
+		return true
+	var posables: Array = _plantes_posables(plants)
+	if not posables.is_empty():
+		_build_node(c, posables)
+		_partiel[c] = true
+	_waiting.append(c)
+	return false
 
 
 ## Vrai si les blocs de terrain sont charges sous les plantes de la cellule.
@@ -298,6 +353,9 @@ func _retry_waiting() -> void:
 ## entiere : le terrain ne charge qu'une tranche autour de l'observateur
 ## (`view_distance_vertical_ratio`), donc exiger toute la hauteur du monde
 ## reviendrait a ne jamais rien poser.
+##
+## C'est le **chemin rapide** : une seule requete pour toute la cellule, et elle
+## suffit partout sauf au bord du terrain charge. Voir `_plantes_posables`.
 func _ground_ready(c: Vector2i) -> bool:
 	if _terrain == null:
 		return true
@@ -316,14 +374,47 @@ func _ground_ready(c: Vector2i) -> bool:
 			Vector3(size, hi - lo + 1.0, size)))
 
 
+## Les plantes de la liste dont le sol est charge, une par une.
+##
+## Chemin froid : il ne sert qu'aux cellules du bord, celles dont la requete
+## d'ensemble a echoue. Ailleurs on paie une seule requete pour toute la cellule,
+## et c'est ce qui rend ce test-ci abordable — `is_area_editable` sur soixante
+## touffes a chaque cellule serait un cout sur le fil principal.
+##
+## **Ce qu'on interroge est la colonne, pas la piece.** Un houppier flotte a dix
+## blocs du sol et deborde de sept : demander que *son* volume soit charge le
+## refuserait des que son cadre depasse la limite du terrain, alors que son
+## tronc, lui, est bel et bien ecrit — c'est ainsi qu'un fut nu apparaissait au
+## bord de la vue. La bonne question est celle que se pose le generateur avant
+## d'estamper : **le bloc de sol de cette colonne existe-t-il ?**
+func _plantes_posables(plants: Array) -> Array:
+	var out: Array = []
+	for pl in plants:
+		var pos: Vector3 = pl.origin() - Vector3(
+				float(_origin.x), 0.0, float(_origin.y))
+		# `pl.y` est le premier bloc d'air : le sol est juste dessous.
+		if _terrain.is_area_editable(AABB(
+				Vector3(floorf(pos.x), float(pl.y - 1), floorf(pos.z)),
+				Vector3(1.0, 2.0, 1.0))):
+			out.append(pl)
+	return out
+
+
 ## Un noeud par cellule, un MultiMesh par modele qu'elle emploie.
-func _build_node(c: Vector2i) -> void:
-	var plants: Array = _scatter.cell(c.x, c.y)
+##
+## `plants` est la liste a poser : celle de la cellule, ou le sous-ensemble dont
+## le sol est charge (`_poser`).
+func _build_node(c: Vector2i, plants: Array) -> void:
 	if plants.is_empty():
 		return
 
 	var by_model: Dictionary = {}
 	for pl in plants:
+		# Une piece de matiere est ecrite dans le terrain par le generateur, pas
+		# instanciee ici : l'instancier en plus donnerait deux troncs au meme
+		# endroit, dont un qui ne se creuse pas. Voir `CWScatter.Placement.matiere`.
+		if pl.matiere:
+			continue
 		if not by_model.has(pl.model):
 			by_model[pl.model] = []
 		by_model[pl.model].append(pl)

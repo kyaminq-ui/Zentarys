@@ -27,19 +27,21 @@ Statuts : ✅ fait · 🔶 partiel · ⬜ à faire · ⛔ hors périmètre
 Le terrain conditionne tout le reste : physique, rendu, placement des créatures
 et des structures.
 
-**Les dix systèmes du terrain sont portés et vérifiés** (1.1 à 1.10) : le monde
-se génère, se creuse, se sauvegarde, s'éclaire, se garnit et se cartographie.
-**Deux systèmes sont ouverts par-dessus**, et ni l'un ni l'autre ne remet le
-terrain en cause :
+**Les douze systèmes du monde sont portés et vérifiés.** Le monde se génère, se
+creuse, se sauvegarde, s'éclaire, se garnit, se cartographie et se boise :
 
-- **1.11**, la grande végétation — un lot d'assets et une seconde couche de
-  dispersion. Assets et dispersion faits ; reste le tronc écrit dans le terrain ;
+- **1.1 à 1.10**, le terrain ;
+- **1.11**, la grande végétation — un lot d'assets, une seconde couche de
+  dispersion, et **le tronc écrit dans le terrain**, qui est le premier objet du
+  projet à traverser la matière et l'instance. **Fait le 2026-09-06** ;
 - **1.12**, les six biomes — une couche de classification climatique au-dessus
   des matières de surface, et la refonte des deux lots d'assets qui en découle.
-  **Fait le 2026-09-06.**
+  **Fait le 2026-09-06**, et les deux lots revus un par un sur planche le même
+  jour.
 
-Le reste des points ouverts est de la finition, listée en dette technique, plus
-les questions d'analyse encore pendantes de `docs/systems/02`, §9.
+**Le jalon 1 est clos.** Ce qui reste est de la finition, listée en dette
+technique, plus les questions d'analyse encore pendantes de `docs/systems/02`,
+§9. La porte suivante est **2.6, l'apparition**.
 
 | # | Système | Source analysée | Statut | Note |
 |---|---|---|---|---|
@@ -53,7 +55,7 @@ les questions d'analyse encore pendantes de `docs/systems/02`, §9.
 | 1.8 | Colonnes persistantes, édition | `Chunk_getColumnAt` @00406100 + `VoxelTool` | ✅ | `docs/systems/03` |
 | 1.9 | Éclairage voxel | `VoxelChunk_propagateSunlight` @0059a0e0 | ✅ | porté, rendu passé en `COLOR_RAW` ; `docs/systems/04` |
 | 1.10 | Carte du monde | `WorldMap.cpp`, `loadLandscapeTile` @006024d0, `NameGen_generateRegionName` | ✅ | pièces de Voronoï, découverte, noms ; `docs/systems/05` |
-| 1.11 | **Arbres et grande végétation** | voie des entités, `docs/systems/02` §5.2 | 🔶 | **assets (24 + 9 filons) et dispersion faits, arbres en jeu** ; reste le tronc écrit dans le terrain (collision) et la pose des filons |
+| 1.11 | **Arbres et grande végétation** | voie des entités, `docs/systems/02` §5.2 | ✅ | assets, dispersion, montage, et **le tronc écrit dans le terrain** ; reste la pose des filons, qui appartient à 2.6 |
 | 1.12 | **Les six biomes** | climat de 1.3 + biomes de l'alpha 2013 | ✅ | couche `CWBiome` au-dessus des matières, Lava Lands et ses coulées, **42 modèles de flore et 24 d'arbres regénérés** (la flore a été refaite le soir même : 38 modèles, à 4 voxels par bloc et 6 pour les petits props) |
 
 ### 1.6 — Éléments de tuile (fait)
@@ -571,7 +573,7 @@ en met dix-huit par région.
 
 ---
 
-### 1.11 — Arbres et grande végétation (assets faits, code à faire)
+### 1.11 — Arbres et grande végétation (fait)
 
 Le jalon 1.7 a porté la **flore basse** : ce qui pousse au sol, treize fois plus
 fin qu'un bloc, instancié sans entité. Il ne couvre pas **ce qui a une
@@ -741,20 +743,55 @@ colonne, leur altitude et leur échelle ; les houppiers se posent à une hauteur
 **fractionnaire** (`Placement.fy`, ajouté pour eux), la hauteur d'un tronc étant
 un nombre de voxels divisé par 40/3 qui ne tombe pas sur un bloc.
 
-**3 — L'assemblage.** Un feuillu se pose en deux temps : un tronc écrit dans les
-données voxels (donc il se creuse, et il porte collision), puis un à trois
-houppiers instanciés au-dessus. C'est le premier objet du projet qui traverse les
-deux mondes — la matière et l'instance —, et c'est ce qui le rend intéressant :
-`CWWorldEdits` sait déjà écrire, `CWFloraRenderer` sait déjà instancier, il faut
-les faire poser au même endroit et rester d'accord après une édition.
+**3 — L'assemblage. ✅ Fait le 2026-09-06.** Un feuillu se pose en deux temps :
+un tronc **écrit dans les données voxels** — donc il se creuse, il portera la
+collision et l'éclairage voxel le voit — puis un à trois houppiers instanciés
+au-dessus. C'est le premier objet du projet qui traverse les deux mondes.
 
-**Ce qu'il faudra décider :**
+L'écriture est faite par le **générateur** (`CWVoxelGenerator._stamp_trunks`) et
+non par la couche d'édition : un tronc est du monde procédural, pas une
+modification du joueur, et le passer par `CWWorldEdits` mettrait chaque arbre du
+monde sur le disque. C'est aussi ce que fait la source
+(`World_fillVoxelColumnTyped`). Deux décisions prises pour d'autres raisons se
+paient ici : le lot d'arbres est **à un voxel par bloc** depuis 1.12 — sans quoi
+il n'y aurait aucune correspondance entre les voxels du modèle et ceux du monde —
+et **`CHANNEL_TYPE` et `CHANNEL_COLOR` sont séparés** depuis 1.9, ce qui permet
+au tronc de porter le type `WOOD` et **la teinte de son propre modèle**. Sans ce
+partage, il aurait fallu un type de bloc par nuance d'écorce.
 
-- **la collision.** La flore n'en a pas, et c'est délibéré. Un arbre de 12 blocs
-  qu'on traverse se remarque tout de suite. Le tronc écrit dans le terrain la
-  donne gratuitement ; le houppier, non.
+> **Une matière ne se met pas à l'échelle : elle se rééchantillonne.** La gigue
+> d'instance va de 0,85 à 1,25, et un tronc estampé ne peut pas être « 1,17 fois
+> plus grand » — ses voxels sont des blocs. Il fait donc `round(hauteur × échelle)`
+> blocs, niveaux copiés au plus proche voisin, et c'est cette hauteur entière qui
+> dit où s'accroche le premier houppier. Un arbre reste **un tirage et une
+> liste** : `Placement.matiere` marque la pièce que le générateur estampe et que
+> le rendu ignore (invariant n° 35).
+
+**Les espèces de montage ENTIER ne sont pas estampées** — le pin, le sapin, le
+cactus géant, le rocher géant, l'arbre à épines : leur feuillage est dans le même
+fichier que leur fût, et l'écrire donnerait du feuillage qu'on ne traverse plus.
+La source les pose en entités. Leur collision est un sujet du jalon 3.1, et ce
+sera un volume approché.
+
+**Ce que la validation en jeu a attrapé, et qui datait du jalon 1.7 :** le
+terrain charge une **boîte** de blocs, la végétation garnissait un **disque**.
+Les quatre coins de la boîte portaient donc du terrain sans porter de cellules —
+invisible tant que l'arbre entier était instancié, un **fût nu** dès que le tronc
+est devenu de la matière. Les deux couches suivent maintenant la même forme
+(invariant n° 36). Coût mesuré de l'étampage : **+5 % sur le chargement**
+(41 s → 43,5 s à 384 blocs de vue).
+
+**Ce qui reste :**
+
+- **la collision n'est pas branchée.** Le terrain de la démo a
+  `generate_collisions = false` : la matière est là, le corps qui s'y cogne
+  n'existe pas encore. C'est le jalon 3.1.
+- **abattre un arbre est grossier.** Creuser un tronc retire ses houppiers — la
+  colonne porte une édition, donc la dispersion écarte le candidat — mais le fût
+  garde son trou et reste debout.
 - **la réduction en distance.** `CWVoxelModel.reduced(n)` est prêt et ne sert
-  encore à rien. Un arbre est le premier modèle assez gros pour la justifier.
+  encore à rien. Un houppier de 22 blocs de large est le premier modèle assez
+  gros pour la justifier, et il est maintenant seul dans son instance.
 - ~~**la sélection.**~~ **Tranché le 2026-09-05 : son propre champ.** Le rôle
   `ARBRE` ne rejoint pas `CWDecorRules.FAMILIES`, pour deux raisons. Les deux
   crêtes de la flore sont à 0,01 et tranchent une *famille de décor* — de l'herbe
@@ -1027,7 +1064,7 @@ sans valeur tant que les jalons 2 et 3 ne sont pas là.
 
 | Sujet | Statut | Détail |
 |---|---|---|
-| Suite de tests headless | ✅ | 316 vérifications, `tests/worldgen_test.gd` |
+| Suite de tests headless | ✅ | 327 vérifications, `tests/worldgen_test.gd` |
 | Planche de validation des assets | ✅ | `scenes/model_portraits.tscn` : un modèle par capture, seul, deux angles, plus les arbres **montés** ; 84 sujets en 5,6 s |
 | Gabarit d'échelle en jeu | ✅ | `src/demo/scale_board.gd`, capture automatique ; mires en blocs et modèles à la grille fine |
 | Capture différée de la démo | ✅ | `TerrainDemo.auto_shot_delay` + `--quit-after` : regarder une couche sans piloter la fenêtre |
@@ -1035,7 +1072,7 @@ sans valeur tant que les jalons 2 et 3 ne sont pas là.
 | Groupement de la flore en grappes | ✅ | il n'y avait pas de mécanisme à écrire : la crête de bruit à 0,05 le produit seule (variance/moyenne 14,3 contre ~1) |
 | Table de sélection du décor | ✅ | `src/worldgen/cw_decor_rules.gd` : deux crêtes à 0,01, neuf rôles, `docs/systems/02` §8.5-8.6 |
 | Lacet libre du décor | ⬜ | trois rôles le demandent ; `CWVoxelModel` ne précalcule que quatre quarts de tour |
-| Éclairage et LOD des modèles instanciés | ⬜ | ni la flore ni les arbres ne profitent de l'éclairage voxel (1.9) ni d'une réduction en distance ; `CWVoxelModel.reduced(n)` est prêt et n'a toujours aucun usage. Les arbres, posés depuis le 2026-09-05, sont le premier modèle assez gros pour la justifier |
+| Éclairage et LOD des modèles instanciés | 🔶 | **le tronc a rejoint le terrain** (1.11) : il est éclairé et se creuse comme lui. Ce qui reste instancié — flore, houppiers, arbres entiers — ne profite toujours ni de l'éclairage voxel ni d'une réduction en distance ; `CWVoxelModel.reduced(n)` est prêt et n'a toujours aucun usage |
 | Aperçu de la carte hors du jeu | ✅ | `tools/preview_map.gd`, vierge et parcourue |
 | Cache disque des dalles de carte | ⬜ | 43 ms la dalle, recalculée à chaque session ; l'original la compresse en base |
 | Inventaire des modèles `.vox` | ✅ | `tools/inspect_model.gd` : plages de palette, échelle par lot, et **compte de morceaux** |
@@ -1082,6 +1119,15 @@ Quatre corrections, dans l'ordre de leur effet :
 |---|---|---|
 | 384 blocs | **16 s** (8 fils, flux avec index) | 35 000 |
 | 768 blocs | **120 s** | 198 000 |
+
+> ⚠️ **Ces deux nombres ne tiennent plus, et l'écart n'est pas expliqué.**
+> Mesuré le 2026-09-06 sur la même machine, même commande, même vue de 384
+> blocs : **41 à 43 s**, pour un pic de 70 000 tâches. Six exécutions, avec et
+> sans l'étampage des troncs — l'écart est donc antérieur au jalon 1.11. Le coût
+> par colonne est passé de 61 à 80 µs entre-temps (`CWBiome`, les coulées de
+> lave), ce qui explique un tiers de la différence, et le pic de tâches a doublé,
+> ce qui n'est pas expliqué du tout. **À reprendre avant toute optimisation** :
+> il y a probablement plus à gagner ici que dans le portage en GDExtension.
 
 Le débit ne s'écroule pas quand l'empreinte grandit : 1 290 tâches/s à 384,
 1 650 à 768. C'est le **nombre** de blocs qui explose — il croît comme le
