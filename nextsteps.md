@@ -55,7 +55,7 @@ ne s'ouvre pas proprement (il est déclaré dans `project.godot`).
 ## 2. Commandes
 
 ```
-# Suite de validation (297 vérifications, ~20 s)
+# Suite de validation (329 vérifications, ~20 s)
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd
 
 # Réimport après ajout d'un class_name (sinon l'éditeur ne le voit pas)
@@ -84,11 +84,9 @@ C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path 
 
 # Répartition des six biomes et des matières de surface, mesurée sur le champ
 # réel (zones échantillonnées, pas de sondage, graine). C'est le garde-fou de
-# tout déplacement de seuil dans `CWBiome` — voir §6. Depuis le jalon 1.13 il
-# donne aussi **le facteur de falaise par dixièmes et la part des terres qui
-# bascule en roche** : c'est lui qui a dit que 45 degrés ne rendaient rien
-# (§7ter.4). Il coûte cinq fois le prix d'une colonne par sondage, son pas de
-# 256 unités ne retombant jamais sur un sommet de treillis déjà calculé.
+# tout déplacement de seuil dans `CWBiome` — voir §6. Son histogramme de pente,
+# ajouté avec la falaise, est reparti avec elle ; les chiffres qu'il a produits
+# sont gardés en §7ter.4, et le rétablir est de la mesure, pas de la conception.
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/biome_stats.gd
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/biome_stats.gd -- 144 512
 
@@ -119,8 +117,9 @@ python tools/blender/generer_arbres.py
 #
 # Se poser a un point **nomme** plutot qu'au premier endroit qui convient : les
 # coordonnees sont celles de l'ATH, donc celles qu'on lit sur une capture
-# precedente. C'est ce qu'il faut pour viser un objet local — une falaise, un
-# element de tuile — au lieu de relancer --biome jusqu'a tomber dessus.
+# precedente. C'est ce qu'il faut pour viser un objet local — un element de
+# tuile, un bosquet — au lieu de relancer --biome jusqu'a tomber dessus. Ajoutee
+# pour la falaise, elle lui a survecu.
 # **La demo tourne sur la graine 2024**, pas sur le 1337 des outils headless.
 ./godot.windows.editor.double.x86_64.exe --path . scenes/terrain_demo.tscn \
     --resolution 1600x900 -- --ici 8396632 8396464 --shot 30 --vue 224
@@ -156,11 +155,16 @@ biome, **Échap** rend la souris puis quitte.
 
 ## 3. État
 
-> **Le jalon 1 est clos.** La falaise (§7ter) est faite, et l'analyse des lacs
-> a été menée dans la foulée : **la fonction que la feuille de route désignait
-> n'était pas la bonne** — elle ne fait ni eau ni chemin, c'est le douzième nom
-> trompeur, et l'élément de tuile 12 n'est donc pas un plan d'eau (§7bis.2,
-> `docs/systems/02` §10).
+> **La falaise a été portée puis retirée le même jour** (§7ter.4) : le portage
+> était fidèle et les tests verts, mais peindre de la roche sur un flanc à
+> vingt-sept degrés fait une tache, pas une paroi. **Une falaise ne se peint
+> pas, elle se taille** — elle attend un terme de relief, pas une règle de
+> surface. Les mesures sont gardées.
+>
+> L'analyse des lacs, elle, a tenu : **la fonction que la feuille de route
+> désignait n'était pas la bonne** — elle ne fait ni eau ni chemin, c'est le
+> douzième nom trompeur, et l'élément de tuile 12 n'est donc pas un plan d'eau
+> (§7bis.2, `docs/systems/02` §10).
 >
 > **L'eau est écrite dans `generateBiomeContent`, et sa porte est le champ de
 > chenaux que ce projet porte depuis le jalon 1.4** — il ne manquait pas un
@@ -177,8 +181,9 @@ biome, **Échap** rend la souris puis quitte.
 > **La première chose à faire demain est en §0**, en tête de ce fichier : une
 > lecture, et les lacs se débloquent.
 
-Jalon 1 (le monde) : **1.1 à 1.13 sont portés, testés et vus en jeu**. Suite de
-validation : **332 vérifications, 0 échec**, ~20 s.
+Jalon 1 (le monde) : **1.1 à 1.12 sont portés, testés et vus en jeu** ; 1.13, la
+falaise, a été portée puis retirée (§7ter.4). Suite de validation :
+**329 vérifications, 0 échec**, ~20 s.
 
 **1.11 — le tronc en matière, fait** (2026-09-06, §7). Un feuillu se pose en
 deux temps : un tronc **écrit dans les données du monde** par
@@ -626,27 +631,7 @@ docs/images/               gabarit, carte et composition de flore, en jeu
     la forme d'une distance. Le surcoût de 4/π ne se mesure pas : le verrou du
     chargement est la génération du terrain.
 
-37. **`CWPalette.surface_of` a sept paramètres, et le septième n'a pas de
-    valeur par défaut.** Le facteur de falaise (jalon 1.13) est demandé à
-    l'appelant, alors qu'un défaut à zéro aurait laissé compiler les sept sites
-    d'appel sans un mot. C'est délibéré : un appelant qui l'oublierait rendrait
-    un monde **sans une falaise**, c'est-à-dire exactement le monde d'avant, et
-    aucun test ne le verrait — le sien passerait, les autres aussi. Les sept
-    sont les deux du générateur (le patch et la requête ponctuelle), les deux
-    dispersions, la carte, l'ATH de `terrain_demo` et `tools/biome_stats.gd`.
-    **L'ATH est celui qu'on oublie** : il n'est dans aucun test, et l'erreur y
-    sort en `Parse Error` au lancement de la démo, ce qui ressemble à un blocage
-    de chargement.
-38. **`CWTerrainField.cliff_factor` doit rester une fonction pure de (x, z).**
-    C'est ce qui accorde les deux consommateurs de `voxel_of` (invariant n° 18),
-    et c'est ce qui permet à la dispersion, à la carte et à l'ATH de décrire la
-    même falaise que le terrain. La mémoïsation en est la seule entorse, et son
-    mutex est **relâché pendant l'échantillonnage de colonne** : un échantillon
-    descend dans la grille d'éléments de tuile, qui a son propre verrou. Le
-    tenir pendant ce temps serait la manière la plus directe d'inventer un
-    interblocage entre fils de génération. Deux fils calculent alors deux fois
-    le même sommet, ce qui est sans conséquence puisque le champ est pur.
-39. **La démo et les outils headless ne tournent pas sur la même graine.**
+37. **La démo et les outils headless ne tournent pas sur la même graine.**
     `terrain_demo` porte `world_seed = 2024`, `CWWorldParams` a `1337` par
     défaut, et `tools/biome_stats.gd` prend la sienne en argument. Un point
     repéré par un sondage headless puis visé par `--ici` décrit donc **deux
@@ -1103,10 +1088,17 @@ de hauteurs ; il ne tient plus dès qu'on marche dessus.
 
 Les trois constantes — `SNOW_LINE_BASE`, `ROCK_BAND`, `ROCK_MIN` — restent, et
 ne servent plus qu'à Lava Lands, dont la règle décrit un volcan et non une
-altitude. Elles serviront de point de départ le jour où la **falaise** aura sa
-règle : la source force le type 6 sur la falaise
-(`terrain_surfaceColor_blend`), et ce sera une **pente** à mesurer, pas une
-altitude — c'est probablement là que la roche nue doit revenir.
+altitude.
+
+> **La suite de ce paragraphe a été écrite le matin même et démentie le soir.**
+> Elle annonçait que la roche nue reviendrait par la **falaise**, sur une pente
+> mesurée plutôt que sur une altitude. La falaise a été portée exactement comme
+> annoncé, et retirée le soir : ce qui manquait n'était ni le champ ni le
+> seuil, c'était **le relief**. Une pente n'est pas plus une raison de peindre
+> une matière nue qu'une altitude ne l'était ; l'une comme l'autre teintent une
+> surface au lieu de créer un lieu. Le compte rendu est en §7ter.4, et la
+> conclusion des deux retraits est la même à un mot près : *une matière qui ne
+> porte rien est un trou, et une matière qui n'habille rien est une tache.*
 
 Répartition mesurée après (`tools/biome_stats.gd`) : herbe 37,2 %, neige 27,0 %,
 gravier 23,9 %, marais 6,6 %, scorie 2,4 %, sable 2,0 %, jungle 0,5 %, magma
@@ -1537,8 +1529,9 @@ niveau maximum des joueurs présents, §7 —, ce qui plaide pour la seconde voi
 - **La numérotation des blocs** est presque établie :
   `terrain_surfaceColor_blend` (@005c56e0) est la règle de surface de l'original
   et n'écrit que cinq types — 4 par défaut, 9, 10, 12 et 6 forcé par l'appelant
-  sur la falaise. Reste à trancher lequel de ses deux paramètres climatiques est
-  la température (`docs/systems/02`, §9).
+  sur la falaise (cette cinquième branche a été portée puis retirée, §7ter.4 ;
+  la lecture de la source, elle, tient). Reste à trancher lequel de ses deux
+  paramètres climatiques est la température (`docs/systems/02`, §9).
 
 Un cache disque du terrain reste prématuré : la couche d'éléments de tuile écrit
 encore dans les données du monde, et c'est elle qui bougerait la première.
@@ -1570,19 +1563,27 @@ un ordre de préférence, c'est celui de leurs dépendances. S'y ajoute un
 troisième point, demandé le même jour : **la collision du branchage, du
 feuillage, des filons et des cactus**.
 
-**Deux des quatre sont retombés le jour même.** La falaise est faite (§7ter.4).
-Et les **chemins** sortent de la liste : la fonction qui devait les porter n'en
+**Deux des quatre sont retombés le jour même.** La falaise a été portée puis
+retirée (§7ter.4) — elle ne reviendra pas par une règle de surface, et elle
+n'est plus dans cette liste. Et les **chemins** en sortent aussi : la fonction qui devait les porter n'en
 contient pas, ce qui confirme la correction du jalon 1.6 — la source n'a pas de
 réseau de routes, et en faire un serait une création de ce projet, à décider
 comme telle. Restent les **lacs**, dont la source est trouvée ailleurs, et la
 **collision**.
 
-### 1 — La falaise — **faite le 2026-09-06, voir §7ter**
+### 1 — La falaise — **portée puis retirée le 2026-09-06, voir §7ter.4**
 
 Elle était le premier des trois points, et le seul qui n'attendait aucune
 décision : une règle de la source, quelques lignes dans `surface_of`, un seuil
 déjà relevé. Ce qui restait à écrire était la *mesure* du facteur, et c'est elle
-qui a demandé deux essais et une capture. Le compte rendu est en §7ter.
+qui a demandé deux essais et une capture — puis le rendu en jeu l'a fait
+retirer le soir même.
+
+**Ce qu'il faut en retenir avant de rouvrir le sujet** : peindre de la roche sur
+une pente ne fait pas une falaise dans un terrain qui n'a pas de parois (0,65
+bloc de dénivelé maximal d'une colonne à la suivante). La falaise n'est donc
+**pas un point de règle de surface** ; c'est un travail sur le champ
+d'altitude, sans jalon ouvert, et les mesures qui le cadrent sont en §7ter.4.
 
 ### 2 — Les lacs — **la fonction est lue, et elle n'était pas la bonne**
 
@@ -1784,12 +1785,13 @@ au jalon 2 plutôt qu'à la fin du jalon 1.
 ---
 
 
-## 7ter. Cette session — **moins de flore, trois assets retirés, et la falaise**
+## 7ter. Le 2026-09-06 — **moins de flore, trois assets retirés, et la falaise faite puis défaite**
 
 Demandé le 2026-09-06 dans cet ordre, et c'est l'ordre où ça a été fait : baisser
 la quantité de flore en général, retirer les deux grands arbres de Snowlands,
 retirer le cactus géant du désert et refaire ses deux cactus de flore, puis
-passer au point suivant de §7bis.
+passer au point suivant de §7bis — la falaise, **portée le matin et retirée le
+soir sur le rendu en jeu** (§7ter.4).
 
 ### 7ter.1 La densité de flore descend de 40 %, uniformément
 
@@ -1895,70 +1897,92 @@ la place d'avoir une forme :
   étaient censées ponctuer : une sur quatorze laisse voir le fût, qui est le
   sujet.
 
-### 7ter.4 La falaise — le premier point de §7bis
+### 7ter.4 La falaise — portée le matin, retirée le soir
 
-**Portée.** Le détail est dans `docs/ROADMAP.md`, §1.13 ; ce qui suit est ce
-qu'il faut savoir avant d'y toucher.
+**Retirée.** Demandée en une phrase : *au final ça ne rend pas si bien que ça en
+jeu.* Le code est parti en entier — `CLIFF_STEP`, `CLIFF_SLOPE_REF`, le treillis
+et son cache, `cliff_factor`, `CWPalette.CLIFF_RIDGE`, le septième paramètre de
+`surface_of` et `surface_index`, l'histogramme de `biome_stats`, les trois
+vérifications de `decor_test`, et les invariants n° 37 et 38. Ce qui suit est ce
+qui **ne** doit pas repartir avec, parce que ça a coûté deux essais et une
+capture et que ça décrit le terrain et non la règle.
 
-`CWPalette.surface_of` prend un **septième paramètre**, `cliff`, et il est
-**obligatoire**. Une valeur par défaut de zéro aurait laissé compiler tous les
-appelants ; un appelant qui l'oublierait rendrait un monde sans une falaise,
-identique à celui d'avant, et rien ne le signalerait. Il y a **sept** appelants —
-les deux du générateur (le patch et la requête ponctuelle), les deux
-dispersions, la carte, l'ATH de la démo et `biome_stats` — et **l'ATH de la démo
-est celui qu'on oublie** : il n'est dans aucun test, et l'erreur y sort en
-`SCRIPT ERROR: Parse Error` au lancement, ce qui ressemble à un blocage de
-chargement et non à une signature manquante. Compté : trois quarts d'heure.
+#### Ce que le retrait apprend, et qui n'était dans aucun test
 
-`CWTerrainField.cliff_factor(x, z)` est la mesure, et elle est **pure fonction
-de (x, z)** hors mémoïsation — c'est ce qui permet aux deux consommateurs de
-`voxel_of` de s'accorder (invariant n° 18), et c'est la vérification des 4 096
-points de la suite qui le tient. Le cache de sommets de treillis a son propre
-mutex, **relâché pendant l'échantillonnage de colonne** : un échantillon descend
-dans la grille d'éléments de tuile, qui a son propre verrou, et le tenir pendant
-ce temps serait la manière la plus directe d'inventer un interblocage. Deux fils
-qui demandent le même sommet le calculent donc deux fois, ce qui est sans
-conséquence — le champ est pur.
+Le portage était fidèle : la règle est bien dans la source, le seuil de 0,5 est
+relevé et non choisi, la pente était mesurée, les trois vérifications passaient,
+le surcoût était sous le bruit de mesure. Il a quand même échoué, et **la cause
+était lisible dans les mesures du matin sans qu'on la lise** :
 
-**Deux mesures ont corrigé deux intuitions**, et ce sont elles qui valent d'être
-retenues :
+> À `CLIFF_SLOPE_REF = 2,0` la règle rendait 0,62 % des terres. On a lu « le
+> seuil est trop haut » ; il fallait lire **« il n'y a pas de falaise dans ce
+> terrain »**. Baisser le seuil à 1,0 n'a pas trouvé de parois — il a **teinté
+> des flancs à vingt-sept degrés**. De la roche grise sur un flanc vert ne se
+> lit pas comme une paroi, elle se lit comme une tache.
+>
+> **Une falaise ne se peint pas, elle se taille.** Tant que `_height_from` ne
+> produit pas de discontinuité, il n'y a rien à habiller, et aucune règle de
+> surface ne fabriquera la forme qui manque.
 
-1. **quarante-cinq degrés ne décrit rien dans ce monde.** Premier essai,
-   `CLIFF_SLOPE_REF = 2,0` : 0,62 % des terres, c'est-à-dire rien. La cause n'est
-   pas le treillis, c'est le terrain — sur huit mille colonnes en ligne, le plus
+**C'est le même défaut de méthode que les bandes d'altitude (§6ter.6), pris par
+un troisième bout** — et §6ter.6 annonçait justement, le matin même, que la
+roche nue reviendrait par la pente. Elle est revenue par la pente, et elle est
+repartie. À chaque fois : une règle défendable, des tests verts, et un échec que
+seul un écran montre. *Une matière qui ne porte rien est un trou ; une matière
+qui n'habille rien est une tache.*
+
+**À quelle condition elle peut revenir** — c'est un travail sur
+`CWTerrainField._height_from` et pas sur `CWPalette` : un terme de terrasse, une
+discontinuité, quelque chose qui casse la douceur du bruit à interpolation
+cosinus. Pas de jalon ouvert pour ça ; les trois mesures ci-dessous le cadrent.
+
+#### Les trois mesures, gardées telles quelles
+
+Elles portent sur le **champ d'altitude** et resserviront à l'identique.
+
+1. **Ce monde n'a pas de parois.** Sur huit mille colonnes en ligne, le plus
    grand dénivelé d'un bloc au suivant est de **0,65 bloc**. Un relief fait de
-   bruit de valeur à interpolation cosinus est lisse par construction ; ce qu'il
-   a de plus raide est un flanc, et un flanc de montagne de ce monde est à un
-   demi. À 1,0 la roche prend 4,4 % des terres ;
-2. **un pas de treillis long ne mesure pas la paroi, il mesure le flanc qui la
-   porte.** À 8 blocs comme à 4, la part qui bascule est la même (4,5 % contre
-   4,4 %), mais la **queue** de la distribution change du tout au tout : au-delà
-   d'un facteur de 0,9, huit blocs donnent 0,02 % des terres et quatre en
-   donnent 0,29 %, quinze fois plus. Ce qui l'a tranché est une capture — à
-   huit, la frontière entre la roche et l'herbe est un découpage à huit blocs
-   posé en travers de terrasses qui en font trois ; à quatre, elle s'engrène
-   avec elles.
+   bruit de valeur à interpolation cosinus est lisse par construction ; ce
+   qu'il a de plus raide est un flanc, et un flanc de montagne de ce monde est
+   à un demi.
+2. **Quarante-cinq degrés ne décrit rien ici.** `CLIFF_SLOPE_REF = 2,0` rendait
+   0,62 % des terres ; à 1,0 — quatre blocs de dénivelé sur huit parcourus — la
+   roche prenait 4,4 % des terres, 3,4 % du monde.
+3. **Un pas de treillis long mesure le flanc, pas la paroi.** À 8 blocs comme à
+   4, la part qui bascule est la même (4,5 contre 4,4 %), mais la **queue** de
+   la distribution change du tout au tout : au-delà d'un facteur de 0,9, huit
+   blocs donnent 0,02 % des terres et quatre en donnent 0,29 %, quinze fois
+   plus.
 
-**Le coût est sous le bruit de mesure.** Borne haute théorique +6 % par colonne
-(un sommet de treillis toutes les seize colonnes) ; médiane de cinq passes sur le
-banc de la suite, **76,9 µs avec contre 76,1 sans**, soit +1 %, quand la
-dispersion d'une passe à l'autre est de ±6 %. **Ne pas citer un chiffre tiré
-d'une passe unique** : la première mesure faite ainsi disait +4,6 % et c'était du
-bruit.
+Et une mesure de coût, si la mesure de pente devait revenir : un treillis de 4
+blocs à sommets partagés — seize colonnes pour quatre échantillons, en cache —
+coûte au plus **+6 % par colonne** en borne haute, et **+1 %** mesuré (76,9 µs
+contre 76,1, médiane de cinq passes). Prendre la colonne voisine aurait triplé
+le coût d'une colonne, qui est le verrou du chargement. **Ne pas citer un
+chiffre tiré d'une passe unique** : la première mesure faite ainsi disait +4,6 %
+et c'était du bruit, la dispersion d'une passe à l'autre étant de ±6 %.
 
-> **Un piège de méthode, et il vaut pour toute capture à venir.** La démo tourne
-> sur `world_seed = 2024`, les outils headless sur le défaut **1337**. Un point
-> repéré au sondage et visé à la capture décrit alors deux endroits différents,
-> et rien ne le dit : les coordonnées sont valides des deux côtés, seul le
-> terrain change. Tout script jetable qui sert à viser une capture doit poser
-> `p.world_seed = 2024`.
+#### Deux leçons d'outillage, qui survivent au retrait
 
-`--ici x z` a été ajouté à la démo pour cela : se poser à un point **nommé**, là
-où `--biome` se pose au premier endroit qui convient. Une falaise est un objet
-local, et jusque-là on relançait la recherche de biome jusqu'à tomber dessus.
-`place_at` est la seconde moitié de `_finish_biome_search`, extraite pour que les
-deux posent la caméra à la même hauteur — sans quoi les captures ne se comparent
-pas.
+> **L'ATH de la démo est l'appelant qu'on oublie.** Quand `surface_of` a pris un
+> paramètre de plus, les six appelants du moteur ont été corrigés et le septième
+> — `_update_hud` — ne l'a pas été : il n'est dans aucun test, et l'erreur y sort
+> en `SCRIPT ERROR: Parse Error` au lancement, ce qui ressemble à un blocage de
+> chargement et non à une signature manquante. Compté : trois quarts d'heure.
+> Toute signature partagée qui change doit être cherchée dans `src/demo/` aussi.
+
+> **La démo et les outils headless ne tournent pas sur la même graine** —
+> `world_seed = 2024` contre le défaut 1337. Un point repéré au sondage et visé
+> à la capture décrit alors deux endroits différents, et rien ne le dit : les
+> coordonnées sont valides des deux côtés, seul le terrain change. Tout script
+> jetable qui sert à viser une capture doit poser `p.world_seed = 2024`.
+> C'est l'invariant n° 37.
+
+`--ici x z` a été ajouté à la démo pour cela — se poser à un point **nommé**, là
+où `--biome` se pose au premier endroit qui convient — et il **survit à ce qui
+l'avait motivé** : il sert pour tout objet local. `place_at` est la seconde
+moitié de `_finish_biome_search`, extraite pour que les deux posent la caméra à
+la même hauteur, sans quoi les captures ne se comparent pas.
 
 ## 8. Assets voxels
 

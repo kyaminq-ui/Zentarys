@@ -896,7 +896,7 @@ func _update_hud() -> void:
 	var c: Vector3 = generator.field().sample_column(wx, wz)
 	var biome: int = CWBiome.at(c.x, c.y, c.z, params.sea_level)
 	var surface: int = CWPalette.surface_of(biome, c.x - float(params.sea_level),
-			c.y, c.z, wx, wz, generator.field().cliff_factor(wx, wz))
+			c.y, c.z, wx, wz)
 
 	var busy: String = ""
 	if _search_status != "":

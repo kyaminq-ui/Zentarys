@@ -282,12 +282,6 @@ func _test_matiere() -> void:
 	# d'humidite, elles ne portaient rien : `decor_allowed` refuse le decor sur
 	# la roche et sur la neige hors Snowlands, donc chaque sommet de Greenlands
 	# rendait un plateau nu. Une matiere qui ne porte rien est un trou.
-	#
-	# **Le balayage se fait a plat**, facteur de falaise nul, et c'est tout
-	# l'objet de la verification jumelle qui suit : depuis le jalon 1.13 la
-	# roche nue revient, mais elle revient sur une *pente* et sur rien d'autre.
-	# Balayer avec un facteur quelconque melangerait les deux et ne dirait plus
-	# rien — ni que le sol plat est reste garni, ni que la paroi est nue.
 	var sols_nus: Dictionary = {}
 	for i in 4096:
 		var t: float = float(i % 64) / 63.0
@@ -295,7 +289,7 @@ func _test_matiere() -> void:
 		for biome in CWBiome.all():
 			for above in [-30.0, -4.0, 8.0, 40.0, 120.0, 260.0]:
 				var m: int = CWPalette.surface_of(biome, above, t, h,
-						i * 37, i * 91, 0.0)
+						i * 37, i * 91)
 				if m == CWPalette.WOOD or m == CWPalette.TUNDRA:
 					retirees[CWPalette.name_of(m)] = true
 				if CWDecorRules.decor_allowed(biome, m):
@@ -308,57 +302,8 @@ func _test_matiere() -> void:
 							CWPalette.name_of(m)]] = true
 	_ok("aucune matiere retiree n'est produite", retirees.is_empty(),
 			str(retirees.keys()))
-	_ok("aucun biome ne produit de matiere nue hors Oceans et Lava Lands (a plat)",
+	_ok("aucun biome ne produit de matiere nue hors Oceans et Lava Lands",
 			sols_nus.is_empty(), str(sols_nus.keys()))
-
-	# -- Et la falaise, qui est l'exception exacte de ce qui precede ---------
-	#
-	# Deux verifications, une par sens, et il faut les deux :
-	#
-	#   1. **au-dessus du seuil, toute terre ferme est de la roche.** Une regle
-	#      qui ne s'appliquerait qu'a certains biomes rendrait une paroi de
-	#      desert en sable, ce qui est un mur de sable ;
-	#   2. **le fond marin n'y est pas soumis.** Le talus continental est la
-	#      plus grande pente du monde ; sans l'exception, la moitie du fond
-	#      passerait en roche, et personne ne verra jamais la difference par
-	#      douze blocs de fond.
-	#
-	# Le point qui compte, et c'est la raison d'etre de la paire : **l'exception
-	# est la pente, pas l'altitude**. Les deux boucles balayent les memes
-	# altitudes, du fond marin au sommet ; seul le facteur change.
-	var falaises_molles: Dictionary = {}
-	var fond_durci: bool = false
-	for i in 1024:
-		var t: float = float(i % 32) / 31.0
-		var h: float = float(i / 32) / 31.0
-		for above in [-30.0, -4.0, 8.0, 40.0, 120.0, 260.0]:
-			for biome in CWBiome.all():
-				var m: int = CWPalette.surface_of(biome, above, t, h,
-						i * 37, i * 91, CWPalette.CLIFF_RIDGE + 0.01)
-				if biome == CWBiome.OCEANS:
-					fond_durci = fond_durci or m == CWPalette.STONE
-				elif m != CWPalette.STONE:
-					falaises_molles["%s/%s" % [CWBiome.name_of(biome),
-							CWPalette.name_of(m)]] = true
-	_ok("au-dessus du seuil, toute terre ferme est de la roche",
-			falaises_molles.is_empty(), str(falaises_molles.keys()))
-	_ok("le fond marin n'a pas de falaise", not fond_durci)
-
-	# Et le seuil est bien un seuil : juste en dessous, rien ne change. Sans
-	# ceci, une comparaison ecrite `>=` au lieu de `>` passerait inapercue tant
-	# que le facteur n'est pas exactement 0,5 — ce qui est le cas partout sauf
-	# sur un sol parfaitement plat, ou il vaut zero.
-	var basculent: Dictionary = {}
-	for biome in CWBiome.all():
-		if biome == CWBiome.OCEANS:
-			continue
-		var plat: int = CWPalette.surface_of(biome, 40.0, 0.5, 0.5, 7, 11, 0.0)
-		var sous: int = CWPalette.surface_of(biome, 40.0, 0.5, 0.5, 7, 11,
-				CWPalette.CLIFF_RIDGE)
-		if plat != sous:
-			basculent[CWBiome.name_of(biome)] = true
-	_ok("au seuil exact, la matiere ne bascule pas encore",
-			basculent.is_empty(), str(basculent.keys()))
 
 
 # -- 4. La composition regionale ----------------------------------------------

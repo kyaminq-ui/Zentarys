@@ -352,12 +352,12 @@ func _build_cell(cx: int, cz: int) -> Array:
 		if col.x < float(sea):
 			continue
 		var biome_c: int = CWBiome.at(col.x, col.y, col.z, sea)
-		# La matiere exacte du point est verifiee, comme pour la flore : un
-		# bosquet de Greenlands ne monte pas sur la roche nue de sa propre
-		# montagne, ni sur sa calotte de neige.
+		# La matiere exacte du point est verifiee, comme pour la flore : le
+		# biome dit ou l'on est, la matiere dit si ca porte quelque chose. Un
+		# bosquet ne pousse ni sur la scorie d'une Lava Lands, ni sur une plage,
+		# ni sur le fond marin.
 		var surface: int = CWPalette.surface_of(biome_c,
-				col.x - float(sea), col.y, col.z, x, z,
-				_field.cliff_factor(x, z))
+				col.x - float(sea), col.y, col.z, x, z)
 		if not CWDecorRules.decor_allowed(biome_c, surface):
 			continue
 		var sp: Dictionary = CWTreeRules.species_at(biome_c, float(c["pick"]))

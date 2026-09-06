@@ -27,7 +27,7 @@ Statuts : ✅ fait · 🔶 partiel · ⬜ à faire · ⛔ hors périmètre
 Le terrain conditionne tout le reste : physique, rendu, placement des créatures
 et des structures.
 
-**Les treize premiers systèmes du monde sont portés et vérifiés**, le
+**Les douze premiers systèmes du monde sont portés et vérifiés**, le
 quatorzième est analysé et attend d'être écrit. Le monde se génère, se creuse,
 se sauvegarde, s'éclaire, se garnit, se cartographie et se boise :
 
@@ -39,17 +39,20 @@ se sauvegarde, s'éclaire, se garnit, se cartographie et se boise :
   des matières de surface, et la refonte des deux lots d'assets qui en découle.
   **Fait le 2026-09-06**, et les deux lots revus un par un sur planche le même
   jour ;
-- **1.13**, la falaise — la cinquième et dernière règle de la table de surface
-  d'origine, qui rend au relief la roche que 1.12 lui avait retirée, et la lui
-  rend **sur la pente et non sur l'altitude**. **Fait le 2026-09-06.**
+- **1.13**, la falaise — portée le 2026-09-06 au matin et **retirée le soir
+  même** : la règle de la source est juste, la pente était mesurée, les tests
+  passaient, et le rendu en jeu ne valait pas la peine. C'est le premier système
+  que ce projet défait pour une raison qui n'est ni un bogue ni une erreur
+  d'analyse, et le compte rendu ci-dessous garde la mesure — c'est elle qui dit
+  à quelle condition une falaise pourra revenir.
 
-**Le jalon 1 est clos**, et **1.14 — les lacs** est le seul système du monde
-encore devant. Son analyse est faite (`docs/systems/02`, §10) et elle a corrigé
-deux erreurs de ce dépôt : `World_generateWaterOrPathFeature` **ne fait ni eau
-ni chemin** — c'est le douzième nom trompeur — et l'élément de tuile 12 n'est
-donc pas un plan d'eau. L'eau est écrite dans `generateBiomeContent`, et **sa
-porte est le champ de chenaux porté au jalon 1.4** : il ne manquait pas un
-champ, il manquait un seuil.
+**1.14 — les lacs** est le seul système du monde encore devant. Son analyse est
+faite (`docs/systems/02`, §10) et elle a corrigé deux erreurs de ce dépôt :
+`World_generateWaterOrPathFeature` **ne fait ni eau ni chemin** — c'est le
+douzième nom trompeur — et l'élément de tuile 12 n'est donc pas un plan d'eau.
+L'eau est écrite dans `generateBiomeContent`, et **sa porte est le champ de
+chenaux porté au jalon 1.4** : il ne manquait pas un champ, il manquait un
+seuil.
 
 Il reste ensuite la **collision**, objet par objet (`nextsteps.md`, §7bis.3), la
 finition listée en dette technique, et les questions d'analyse pendantes de
@@ -72,7 +75,7 @@ entités est **2.6, l'apparition**.
 | 1.10 | Carte du monde | `WorldMap.cpp`, `loadLandscapeTile` @006024d0, `NameGen_generateRegionName` | ✅ | pièces de Voronoï, découverte, noms ; `docs/systems/05` |
 | 1.11 | **Arbres et grande végétation** | voie des entités, `docs/systems/02` §5.2 | ✅ | assets, dispersion, montage, et **le tronc écrit dans le terrain** ; reste la pose des filons, qui appartient à 2.6 |
 | 1.12 | **Les six biomes** | climat de 1.3 + biomes de l'alpha 2013 | ✅ | couche `CWBiome` au-dessus des matières, Lava Lands et ses coulées, **42 modèles de flore et 24 d'arbres regénérés** (la flore a été refaite le soir même : 38 modèles, à 4 voxels par bloc et 6 pour les petits props) |
-| 1.13 | **La falaise** | `terrain_surfaceColor_blend` @005c56e0, 5ᵉ branche | ✅ | seuil relevé (0,5), pente mesurée sur un treillis de 4 blocs ; 4,4 % des terres en roche nue |
+| 1.13 | **La falaise** | `terrain_surfaceColor_blend` @005c56e0, 5ᵉ branche | ⬜ | **portée puis retirée le 2026-09-06** — peindre la roche ne suffit pas, il faudrait tailler la paroi ; mesures gardées ci-dessous |
 | 1.14 | **Les lacs** | `WorldInfo_generateBiomeContent` @005e4850, seconde passe | 🔶 | **analysé**, `docs/systems/02` §10 : porte = champ de chenaux à 0,02 (3,4 % des terres, mesuré), niveau quantifié au pas de 5, berges creusées. Reste à écrire — plan en sept points, `nextsteps.md` §7bis.2 |
 
 ### 1.6 — Éléments de tuile (fait)
@@ -1066,91 +1069,78 @@ tenaient sur **un bloc de section** sur quatorze de haut, parce qu'un rayon de
 1,0 décroissant ne garde qu'un voxel par étage. Verdict modèle par modèle,
 mesures et remèdes dans `nextsteps.md`, §6quater.
 
-### 1.13 — La falaise (fait, 2026-09-06)
+### 1.13 — La falaise (portée puis retirée, 2026-09-06)
 
-**La cinquième et dernière règle de la table de surface d'origine**, et la seule
-que le jalon 1.12 n'avait pas portée. `terrain_surfaceColor_blend` (@005c56e0)
-laisse son appelant forcer le bloc **6 — la roche** quand « le facteur de
-falaise dépasse 0,5 » (`docs/systems/02`, §9.1).
+**Écrite le matin, retirée le soir, sur une seule phrase :** *au final ça ne rend
+pas si bien que ça en jeu.* Rien de ce qui suit n'est une erreur — la règle est
+bien dans la source, la pente était mesurée et non devinée, les trois
+vérifications passaient, le surcoût était sous le bruit de mesure. Ce qui a
+manqué est ailleurs, et c'est ce que cette section garde.
 
-Elle referme un trou ouvert volontairement le matin même. Les trois bandes
-d'altitude avaient été retirées parce qu'**une matière qui ne porte rien est un
-trou dans le monde** : la roche nue et la calotte de neige rendaient des
-plateaux où l'on marchait sans rien rencontrer. Le raisonnement était juste et
-le remède trop large — une montagne *a* de la roche, simplement elle en a sur
-ses **flancs raides**, pas sur ses sommets plats. **L'exception est la pente,
-pas l'altitude**, et c'est la source qui le dit.
+#### Ce qui a été porté
 
-#### Le seuil est relevé, la mesure est de ce projet
+`terrain_surfaceColor_blend` (@005c56e0) laisse son appelant forcer le bloc
+**6 — la roche** quand « le facteur de falaise dépasse 0,5 »
+(`docs/systems/02`, §9.1). La décompilation donne le seuil et le nom du facteur ;
+elle ne donne pas son calcul. Le facteur écrit ici était donc une pente mesurée
+sur le champ d'altitude, prise sur un **treillis de 4 blocs** à sommets partagés
+— seize colonnes pour quatre échantillons, en cache — et rapportée à une
+constante de référence, `CLIFF_SLOPE_REF`, pour que tout ce qui était inventé
+tienne en un seul nombre.
 
-La décompilation donne 0,5 et le nom du facteur ; elle ne donne pas son calcul.
-Ce qui est écrit ici est donc une pente mesurée sur le champ d'altitude, et le
-seuil est **gardé à 0,5** pour que tout ce qui est inventé tienne dans une seule
-constante — `CWTerrainField.CLIFF_SLOPE_REF`, la pente qui vaut un facteur de 1.
+#### Les trois mesures, qui restent vraies
 
-La pente ne se prend pas entre deux colonnes voisines, et pour deux raisons dont
-la seconde est la vraie :
+Elles ont coûté deux essais et une capture chacune, et elles décrivent le
+**terrain**, pas la règle. Elles resserviront telles quelles.
 
-1. **elle coûterait le monde.** Une colonne vaut ~75 µs et c'est le verrou du
-   chargement ; deux colonnes de plus par colonne générée, c'est un terrain
-   trois fois plus lent ;
-2. **une pente d'un bloc ne décrit pas une falaise.** Le champ porte un octave
-   de détail à 1e-2 : d'une colonne à la suivante il monte et redescend partout,
-   y compris au milieu d'une plaine.
+- **Ce monde n'a pas de parois verticales.** Sur huit mille colonnes en ligne,
+  le plus grand dénivelé d'un bloc au suivant est de **0,65 bloc**. Un relief
+  fait de bruit de valeur à interpolation cosinus est lisse par construction ;
+  ce qu'il a de plus raide est un flanc.
+- **Chercher quarante-cinq degrés, c'est chercher ce qui n'existe pas.** Premier
+  essai, `CLIFF_SLOPE_REF = 2,0` : **0,62 % des terres**, c'est-à-dire rien. À
+  1,0 — quatre blocs de dénivelé sur huit parcourus, vingt-sept degrés moyens —
+  la roche prenait **4,4 % des terres**, 3,4 % du monde.
+- **Un pas de treillis long mesure le flanc, pas la paroi.** À 8 blocs la part
+  qui bascule ne bouge pas (4,5 contre 4,4 %) mais la queue de la distribution
+  se vide : au-delà d'un facteur de 0,9, huit blocs donnent 0,02 % des terres et
+  quatre en donnent 0,29 %, quinze fois plus.
 
-Elle se prend donc sur un **treillis de 4 blocs**, dont les sommets sont
-partagés — seize colonnes se répartissent quatre échantillons, en cache. Borne
-haute du surcoût : +6 % par colonne ; mesuré sur le banc de la suite, +1 %,
-c'est-à-dire **sous le bruit de mesure** (±6 % d'une passe à l'autre).
+#### Pourquoi elle a été retirée, et ce que ça apprend
 
-#### Ce que la mesure a corrigé, et qu'aucun raisonnement n'aurait donné
+Les trois mesures ci-dessus se contredisent moins qu'elles ne s'additionnent, et
+lues ensemble elles disent la chose que la capture a montrée :
 
-Comme au jalon 1.12, `tools/biome_stats.gd` a contredit la valeur qui se lisait
-juste. Premier essai : `CLIFF_SLOPE_REF = 2,0`, soit un seuil à quarante-cinq
-degrés — la définition qu'on donne d'une falaise sans y réfléchir. Résultat :
-**0,62 % des terres**, c'est-à-dire rien.
+> **Une falaise ne se peint pas, elle se taille.** À vingt-sept degrés, de la
+> roche grise posée sur un flanc vert ne se lit pas comme une paroi : elle se
+> lit comme une **tache**, une plaque de couleur au milieu d'une pente que rien
+> ne distingue de ses voisines. Le seuil avait été baissé de 2,0 à 1,0
+> précisément parce qu'à 2,0 la règle ne rendait rien — mais ce que 0,62 %
+> disait n'était pas « le seuil est trop haut », c'était **« il n'y a pas de
+> falaise dans ce terrain »**. Baisser le seuil n'a pas trouvé de parois, il a
+> teinté des flancs.
 
-La raison n'est pas le treillis, elle est le **terrain**. Ce monde n'a pas de
-parois verticales : mesuré sur huit mille colonnes en ligne, le plus grand
-dénivelé d'un bloc au suivant est de **0,65 bloc**. Un relief fait de bruit de
-valeur à interpolation cosinus est lisse par construction ; ce qu'il a de plus
-raide est un flanc, et un flanc de montagne de ce monde est à un demi. Chercher
-quarante-cinq degrés, c'était chercher ce qui n'existe pas.
+C'est le **même défaut de méthode que les bandes d'altitude retirées le matin
+même**, pris par un troisième bout, et c'est ce qui rend le cas cher à
+redécouvrir : à chaque fois la règle est défendable, à chaque fois elle passe
+les tests, et à chaque fois elle échoue sur une chose qu'aucun test headless ne
+voit. Les bandes ne **portaient rien** ; la falaise ne **ressemblait à rien**.
+Une matière n'est jamais jugée par sa règle de placement, elle est jugée par ce
+qu'on voit en marchant dessus.
 
-À `CLIFF_SLOPE_REF = 1,0` — quatre blocs de dénivelé sur huit parcourus — la
-roche prend **4,4 % des terres**, 3,4 % du monde : assez pour que chaque massif
-ait ses flancs nus, assez peu pour qu'une colline reste verte jusqu'en haut.
+**À quelle condition elle peut revenir.** Il faudrait que le champ d'altitude
+produise d'abord des parois — un terme de terrasse, une discontinuité, quelque
+chose qui casse la douceur du bruit à interpolation cosinus. La roche viendrait
+alors *habiller* une forme qui existe, au lieu d'essayer de la suggérer seule.
+C'est un travail sur `CWTerrainField._height_from`, pas sur `CWPalette`, et il
+n'a pas de jalon : le noter ici suffit, avec les trois mesures qui le cadrent.
+`CWPalette.SNOW_LINE_BASE`, `ROCK_BAND` et `ROCK_MIN` restent en place pour Lava
+Lands et serviront encore de point de départ.
 
-Le pas du treillis a été essayé à 8 avant d'être ramené à 4. La part qui bascule
-ne bouge pas (4,5 % contre 4,4 %) mais la **queue** de la distribution se
-remplit : au-delà d'un facteur de 0,9, huit blocs donnent 0,02 % des terres et
-quatre en donnent 0,29 %, quinze fois plus. Un pas long ne mesure pas la paroi,
-il mesure le flanc qui la porte. Ce qui l'a tranché est une capture : à huit, la
-frontière entre la roche et l'herbe est un découpage à huit blocs posé en
-travers de terrasses qui en font trois ; à quatre, elle s'engrène avec elles.
-
-#### Deux écarts assumés à l'ordre de la source
-
-Dans l'original le bloc 6 est forcé **par l'appelant**, donc après tout le reste.
-Ici la falaise passe avant les matières de terre ferme, et deux cas s'en
-écartent :
-
-- **le fond marin n'a pas de falaise.** Le talus continental est la plus grande
-  pente du monde ; sans l'exception, la moitié du fond passerait en roche, et
-  personne ne verra jamais la différence entre du gravier et de la roche par
-  douze blocs de fond ;
-- **elle passe devant Lava Lands.** Les bassins de magma sont plats par
-  construction et ne passent jamais le seuil, donc la différence est nulle de ce
-  côté ; sur les coulées elle joue dans le bon sens — une coulée descend un
-  ravin, elle ne tient pas sur une falaise.
-
-Trois vérifications de `tests/decor_test.gd` tiennent la règle par ses deux
-bouts : à plat, aucun biome ne produit de matière nue (c'est le balayage du
-jalon 1.12, désormais explicitement « à plat ») ; au-dessus du seuil, **toute**
-terre ferme est de la roche ; au seuil exact, rien ne bascule encore. Et
-`--ici x z` a été ajouté à la démo pour viser une capture sur un point nommé :
-une falaise est un objet local, et jusque-là on relançait la recherche de biome
-jusqu'à tomber dessus.
+**Ce qui est resté du jalon.** L'option `--ici x z` de la démo, ajoutée pour
+viser une capture sur un point nommé plutôt que de relancer `--biome` jusqu'à
+tomber sur ce qu'on cherche. Elle a survécu à ce qui l'avait motivée, et elle
+sert pour tout objet local.
 
 ---
 
@@ -1460,6 +1450,7 @@ de le résoudre.
 
 | Date | Fait |
 |---|---|
+| 2026-09-06 (soir) | **La falaise est retiree, une demi-journee apres avoir ete portee.** Demande en une phrase — *au final ca ne rend pas si bien que ca en jeu* — et c'est **le premier systeme que ce projet defait sans qu'il y ait ni bogue ni erreur d'analyse** : la regle etait bien dans la source, la pente etait mesuree et non devinee, les trois verifications passaient, le surcout etait sous le bruit de mesure. (1) **Ce qui a manque n'etait dans aucun test, et les mesures du matin le disaient deja.** A 2,0 — quarante-cinq degres — la regle rendait 0,62 % des terres, et on avait lu « le seuil est trop haut » la ou il fallait lire **« il n'y a pas de falaise dans ce terrain »**. Le monde a un denivele maximal de 0,65 bloc d'une colonne a la suivante ; baisser le seuil a 1,0 n'a pas trouve de parois, il a **teinte des flancs a vingt-sept degres**, et de la roche grise sur un flanc vert se lit comme une tache, pas comme une paroi. *Une falaise ne se peint pas, elle se taille* — il faudra un terme de terrasse dans `_height_from` avant que `CWPalette` ait quoi que ce soit a habiller. (2) **C'est le meme defaut de methode que les bandes d'altitude, retirees le matin meme, pris par un troisieme bout** : regle defendable, tests verts, et un echec que seul un ecran montre. Les bandes ne *portaient* rien, la falaise ne *ressemblait* a rien. (3) **Retrait complet** : `CLIFF_STEP`, `CLIFF_SLOPE_REF`, le treillis et son cache a deux generations, `cliff_factor`, `CWPalette.CLIFF_RIDGE`, le septieme parametre de `surface_of` et `surface_index` sur ses six sites d'appel, l'histogramme de `biome_stats` et les trois verifications de `decor_test`. **Les invariants n° 37 et 38 tombent avec la regle qu'ils gardaient**, et l'ancien n° 39 — les deux graines — devient le n° 37. Les mesures, elles, sont **gardees en toutes lettres** dans `ROADMAP` §1.13 et `nextsteps` §7ter.4 : elles decrivent le terrain et pas la regle, et elles resserviront telles quelles. `--ici x z` survit a ce qui l'avait motive. (4) **Deux notes devenues fausses sont corrigees au passage** dans `cw_palette.gd` : celle des trois constantes de ligne de neige, qui annoncait la falaise comme a venir, et celle de `surface_of`, qui decrivait encore trois bandes d'altitude alors qu'il n'en reste qu'une — la plage. **329 verifications, 0 echec** (les trois de la falaise en moins), colonne redescendue de 76,9 a **73,8 us**, repartition des matieres identique au chiffre pres a celle d'avant le portage — herbe 37,2 %, neige 27,0 %, gravier 23,9 %, marais 6,6 %, scorie 2,4 %, sable 2,0 %, jungle 0,5 %, magma 0,5 %, **plus une colonne de roche** hors Lava Lands. Verifie en capture sur Greenlands. |
 | 2026-09-06 (matin, 4) | **Les lacs : l'algorithme complet, et une decision d'architecture deux fois plus petite qu'annoncee.** (1) **La porte de l'eau est le champ de chenaux, que ce projet porte depuis le jalon 1.4.** `WorldInfo_sampleTerrainHeight` (@005f9340) ne lit aucune hauteur : c'est `|bruit(1e-3) + bruit(1e-2)x0,1|`, module par un bruit non graine, plus un terme de crete — mot pour mot `CWTerrainField._channel`. *Il ne manquait pas un champ, il manquait un seuil* : 0,02. La feuille de route ecrivait « le reseau de chenaux creuse bien les vallees, mais rien ne les remplit » ; ce qui les remplit est le meme reseau. **Mesure avant d'ecrire** : 3,40 % des terres passent la porte, et la rampe triangulaire n'en garde que 45 %, soit ~1,5 % des terres en eau, en chapelets le long des fonds de vallee. Ni vide ni envahissant — la verification valait d'etre faite, c'est la lecon de la premiere regle de Lava Lands. (2) **L'algorithme est complet** : niveau quantifie au pas de 5, rampe triangulaire `t` sur la position dans le palier, remplissage de `[q - 5t + 2, q]` en eau si `t >= 0,4`, **sol humide (type 3) en q** — ce qui ferme une question ouverte depuis le jalon 1.7, `FAMILIES_SURFACE` etant la seule exception attachee a une matiere et personne ne sachant qui produisait cette matiere —, une chance sur 200 d'un objet sur la rive, puis **creusement des berges** de `q+1` a `niveau + 5x(1-(50v)^3) + bruit` : un bol maximal au centre du chenal et nul au bord de la porte. Sans ces quatre dernieres lignes l'eau serait enterree. (3) **La decision d'architecture est tranchee, et elle etait deux fois plus petite qu'annoncee.** La source ecrit l'eau comme matiere — l'issue n° 2 des trois, les deux autres etant nos inventions. Mais surtout : **ce projet ecrit deja l'eau dans les donnees**, `voxel_of` rendant `water_index` pour tout `top < y <= sea` ; sa note le dit en toutes lettres depuis le jalon 1.8. Ce qui est global n'est donc pas le stockage mais **le niveau**, un scalaire a rendre local. Il n'y a pas de bascule matiere/vide a faire. (4) **`Terrain_sampleHeightAtWorldXY` (@005989d0) est un treizieme nom trompeur** : elle ne lit aucune altitude, elle ne rend une valeur que dans les cellules de region de type 1 et zero partout ailleurs — une exclusion locale, pas un garde-fou. (5) **Un seul verrou reste, et c'est une lecture, pas un choix** : quelle hauteur `terrain_generateColumnColor` rend, la finale ou l'ossature continentale. C'est le niveau de l'eau, et l'ecart se voit. Plan de portage en sept points dans `nextsteps.md`, §7bis.2. Aucun code touche, 332 verifications. |
 | 2026-09-06 (matin, 3) | **Les lacs : la fonction designee n'etait pas la bonne, et l'eau etait ailleurs.** (1) **`World_generateWaterOrPathFeature` (@005df960) ne fait ni eau ni chemin** — c'est le **douzieme nom trompeur** du depot d'analyse. Ses 2 025 lignes batissent un grand objet de vegetation en sept varietes : sept `paintSphere`, cinq `World_generateFoliageBlob`, huit `WorldInfo_placeStructure` en quatre rotations, et une variete qui est une **spirale** de trente disques sur quatre tours et demi. La preuve tient dans un octet : les seuls types qu'elle ecrit sont `0x27` et `0x28`, soit — le bit `0x20` etant un drapeau — les types **7 (bois) et 8 (feuillage)**, et c'est `World_generateFoliageBlob`, dont le nom est sur, qui ecrit le second. (2) **Consequence : l'element de tuile 12 n'est pas un plan d'eau**, contrairement a ce que `docs/systems/02` §4 affirmait avec « confiance haute ». La confiance portait sur *quel appel* le type 12 fait — juste et verifie — et non sur *ce que cet appel fait*, qui n'etait qu'un nom emprunte. C'est la douzieme fois, et la premiere ou l'erreur avait traverse jusqu'a une table de ce projet. (3) **L'eau est ecrite dans `WorldInfo_generateBiomeContent`**, la fonction deja portee pour la flore, dans une **autre passe** de la meme cellule : porte tres etroite (un champ normalise sous 0,02), niveau rendu par `terrain_generateColumnColor` — qui rend une hauteur, correction deja notee —, **quantifie au pas de 5**, puis remplissage vertical de `{0, 0, 255x(1-t), type 2}`. (4) **La question d'architecture que la feuille de route gardait ouverte est donc tranchee par la source, et par la deuxieme de ses trois issues : l'eau est de la matiere ecrite**, avec un niveau local et par paliers. Les deux autres issues etaient nos inventions. Le cout annonce ne bouge pas — la regle d'effacement du jalon 1.8 tombe, et avec elle `World_getBlockAt` et `CWWorldEdits.erase_value` — mais on sait maintenant quoi ecrire au lieu de choisir entre trois paris. (5) **Et les chemins sortent du jalon** : aucune des sept varietes ne trace quoi que ce soit entre deux points, ce qui confirme la correction du jalon 1.6. Un reseau reliant les bourgs serait une creation de ce projet. Analyse complete : `docs/systems/02`, §10. Aucun code touche, aucune verification changee. |
 | 2026-09-06 (matin, 2) | **Jalon 1.13 : la falaise, et trois assets retires.** (1) **La cinquieme et derniere regle de la table de surface d'origine est portee.** `terrain_surfaceColor_blend` force le bloc 6 — la roche — quand « le facteur de falaise depasse 0,5 » ; le seuil est relevé, la *mesure* est de ce projet. Elle referme un trou ouvert volontairement la veille : les bandes d'altitude avaient ete retirees parce qu'une matiere qui ne porte rien est un trou dans le monde, et le remede etait trop large — une montagne a de la roche sur ses **flancs**, pas sur ses sommets plats. **L'exception est la pente, pas l'altitude.** (2) **La pente se prend sur un treillis de 4 blocs**, dont les sommets sont partages : seize colonnes se repartissent quatre echantillons, en cache. Prendre la colonne voisine aurait triple le cout d'une colonne — le verrou du chargement — *et* donne un moins bon resultat, l'octave de detail montant et redescendant partout, y compris en pleine plaine. Borne haute du surcout : +6 % ; mesure, +1 %, sous le bruit de mesure (±6 % d'une passe a l'autre). (3) **Deux mesures ont corrige deux intuitions.** Premier essai a quarante-cinq degres : **0,62 % des terres**, c'est-a-dire rien. La cause n'est pas le treillis mais le terrain — sur huit mille colonnes en ligne, le plus grand denivele d'un bloc au suivant est de **0,65 bloc** ; un relief fait de bruit de valeur a interpolation cosinus est lisse par construction, et ce qu'il a de plus raide est un flanc. A 1,0 la roche prend 4,4 % des terres. Et le pas du treillis, essaye a 8, est ramene a 4 : la part qui bascule ne bouge pas (4,5 contre 4,4 %) mais la **queue** de la distribution se remplit quinze fois, un pas long mesurant le flanc et non la paroi. Tranche sur capture — a huit, la frontiere roche/herbe est un decoupage a huit blocs pose en travers de terrasses qui en font trois. (4) **`surface_of` prend un septieme parametre, sans valeur par defaut** (invariant n° 37) : un defaut a zero aurait laisse compiler les sept sites d'appel et rendu un monde sans une falaise, que rien n'aurait signale. L'ATH de la demo est celui qu'on oublie — il n'est dans aucun test. (5) **Trois assets retires et deux refaits, demandes le meme jour.** Les deux grands arbres de Snowlands : un montage GRAND se lit a l'etalement de ses cinq masses, une taiga se lit a ses fleches, et les peindre en froid n'y changeait rien. Le `cactus_geant` : a un voxel par bloc un saguaro n'a ni cannelure ni epine, il a la forme que la grille lui laisse. Le desert garde ses cactus par la couche de flore, ou ils sont refaits a 4 voxels par bloc — un saguaro cannele de 4 blocs et un **figuier de barbarie**, qui est deja le nom que `CWFloraDrops` leur donne depuis le jalon 1.7 sans qu'aucun n'en ait eu la forme. (6) **La densite de flore baisse de 40 %, uniformement.** Le reglage du jalon 1.12 avait vu juste et pas assez loin : on ne compare pas une densite a une densite, on la compare a la **surface de sol qui reste libre**. **332 verifications, 0 echec**, verifie en capture sur Greenlands, Snowlands et Deserts. |

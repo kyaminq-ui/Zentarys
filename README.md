@@ -10,9 +10,10 @@ GDScript idiomatique.
 
 ## État
 
-**Le jalon 1 — le monde — est complet.** Bruit de valeur, LCG, sites de région,
-mélanges climatiques, champ d'altitude, réseau de chenaux, éléments de tuile
-(bourgs, cratères, caldeiras, pitons), générateur voxel et rendu en cubes
+**Le jalon 1 — le monde — est porté à une exception près : les lacs.** Bruit de
+valeur, LCG, sites de région, mélanges climatiques, champ d'altitude, réseau de
+chenaux, éléments de tuile (bourgs, cratères, caldeiras, pitons), générateur
+voxel et rendu en cubes
 colorés. S'y ajoutent une couche de flore instanciée — dispersée selon les deux
 fréquences de bruit de l'original, et **choisie par sa règle de sélection**,
 deux crêtes de bruit qui donnent à chaque région sa composition —, l'édition du
@@ -22,15 +23,21 @@ avec ses noms et sa découverte.
 
 **Le monde a six biomes** — Greenlands, Snowlands, Deserts, Jungles, Lava Lands,
 Oceans. Un biome est une zone *climatique* : il décide ce qui pousse, tandis que
-la matière du sol — herbe, sable, neige, roche nue, magma — est une conséquence
-du biome et de l'altitude. Chacun porte son propre lot de modèles : **38 pour la
-flore basse** — quatre voxels par bloc pour ce qui a du volume, six pour les
-herbes et les fleurs, dont toute la forme tient dans un trait — et **24 pour les
-arbres**, dessinés à la maille du bloc comme le terrain lui-même.
+la matière du sol — herbe, sable, neige, marais, magma — est une conséquence du
+biome, et une seule bande d'altitude la traverse encore : la plage. La roche nue
+a été essayée deux fois hors de Lava Lands, sur l'altitude puis sur la pente, et
+retirée les deux fois — `docs/ROADMAP.md` §1.13 dit pourquoi. Chacun porte son
+propre lot de modèles : **38 pour la flore basse** — quatre voxels par bloc pour
+ce qui a du volume, six pour les herbes et les fleurs, dont toute la forme tient
+dans un trait — et **24 pour les arbres**, dessinés à la maille du bloc comme le
+terrain lui-même.
 
-Deux chantiers suivent : la fin du **jalon 1.11**, le tronc d'arbre écrit dans le
-terrain — donc la collision —, et le **jalon 2**, créatures et comportements, en
-commençant par les points d'apparition, dont les constantes sont déjà relevées.
+Trois chantiers suivent : le **jalon 1.14**, les lacs — analysé, algorithme
+complet en main, l'eau se posant là où le réseau de chenaux du jalon 1.4 passe
+sous un seuil ; la **collision**, objet par objet, maintenant que le tronc des
+arbres est écrit dans le terrain ; et le **jalon 2**, créatures et
+comportements, en commençant par les points d'apparition, dont les constantes
+sont déjà relevées.
 
 - `docs/ROADMAP.md` — les cinq jalons, leur avancement, les mesures
 - `docs/systems/01_generation_terrain.md` — l'analyse du système de terrain

@@ -422,12 +422,12 @@ func _build_cell(cx: int, cz: int) -> Array:
 		var c: Vector3 = _field.sample_column(x, z)
 		var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
 		var surface: int = CWPalette.surface_of(biome, c.x - float(sea),
-				c.y, c.z, x, z, _field.cliff_factor(x, z))
+				c.y, c.z, x, z)
 		# Sous l'eau, seul le fond marin se garnit : le reste de la flore
 		# n'aurait pas de sens et se verrait de loin a travers l'eau.
 		if c.x < float(sea) and surface != CWPalette.GRAVEL:
 			continue
-		# Roche nue, coulee de lave, calotte de sommet : rien n'y pousse. C'est
+		# Scorie, coulee de lave, neige hors Snowlands : rien n'y pousse. C'est
 		# le filtre qui remplace l'ancienne table par matiere — voir
 		# `CWDecorRules.decor_allowed`.
 		if not CWDecorRules.decor_allowed(biome, surface):
