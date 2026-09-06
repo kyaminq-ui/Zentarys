@@ -70,7 +70,7 @@ func _render(f: CWTerrainField, x0: int, z0: int, step: int) -> Image:
 		# de la grille d'elements de la boucle de colonnes.
 		var row: PackedFloat32Array = f.sample_patch(x0, z0 + py * step, RES, 1, step)
 		for px in RES:
-			var v: float = row[px * 3]
+			var v: float = row[px * 4]
 			h[py * RES + px] = v
 			lo = minf(lo, v)
 			hi = maxf(hi, v)

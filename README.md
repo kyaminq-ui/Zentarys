@@ -10,10 +10,9 @@ GDScript idiomatique.
 
 ## État
 
-**Le jalon 1 — le monde — est porté à une exception près : les lacs.** Bruit de
-valeur, LCG, sites de région, mélanges climatiques, champ d'altitude, réseau de
-chenaux, éléments de tuile (bourgs, cratères, caldeiras, pitons), générateur
-voxel et rendu en cubes
+**Le jalon 1 — le monde — est complet.** Bruit de valeur, LCG, sites de région,
+mélanges climatiques, champ d'altitude, réseau de chenaux, éléments de tuile
+(bourgs, cratères, caldeiras, pitons), générateur voxel et rendu en cubes
 colorés. S'y ajoutent une couche de flore instanciée — dispersée selon les deux
 fréquences de bruit de l'original, et **choisie par sa règle de sélection**,
 deux crêtes de bruit qui donnent à chaque région sa composition —, l'édition du
@@ -32,10 +31,13 @@ ce qui a du volume, six pour les herbes et les fleurs, dont toute la forme tient
 dans un trait — et **24 pour les arbres**, dessinés à la maille du bloc comme le
 terrain lui-même.
 
-Trois chantiers suivent : le **jalon 1.14**, les lacs — analysé, algorithme
-complet en main, l'eau se posant là où le réseau de chenaux du jalon 1.4 passe
-sous un seuil ; la **collision**, objet par objet, maintenant que le tronc des
-arbres est écrit dans le terrain ; et le **jalon 2**, créatures et
+**L'eau de surface est là** : des mares en chapelets le long des fonds de
+vallée, posées par le même réseau de chenaux qui les creuse — il ne manquait pas
+un champ, il manquait un seuil. 1,9 % des terres en eau, profondeur d'un à quatre
+blocs.
+
+Deux chantiers suivent : la **collision**, objet par objet, maintenant que le
+tronc des arbres est écrit dans le terrain ; et le **jalon 2**, créatures et
 comportements, en commençant par les points d'apparition, dont les constantes
 sont déjà relevées.
 

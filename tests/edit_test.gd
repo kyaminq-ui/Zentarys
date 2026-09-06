@@ -102,29 +102,47 @@ func _test_generated_voxel() -> void:
 	# Colonne synthetique : on verifie la regle seule, sans dependre du relief.
 	var top: int = 40
 	_ok("la surface est au sommet de la colonne",
-			CWVoxelGenerator.voxel_of(top, top, CWPalette.GRASS, sub, sea)
+			CWVoxelGenerator.voxel_of(top, top, CWPalette.GRASS, sub, sea, 1, 0)
 					== CWPalette.GRASS)
 	_ok("juste sous la surface, la couche meuble",
-			CWVoxelGenerator.voxel_of(top - 1, top, CWPalette.GRASS, sub, sea)
+			CWVoxelGenerator.voxel_of(top - 1, top, CWPalette.GRASS, sub, sea, 1, 0)
 					== CWPalette.subsurface_index(CWPalette.GRASS))
 	_ok("sous la couche meuble, la roche",
-			CWVoxelGenerator.voxel_of(top - sub, top, CWPalette.GRASS, sub, sea)
+			CWVoxelGenerator.voxel_of(top - sub, top, CWPalette.GRASS, sub, sea, 1, 0)
 					== CWPalette.STONE)
 	_ok("au-dessus de la colonne et de la mer, de l'air",
-			CWVoxelGenerator.voxel_of(top + 1, top, CWPalette.GRASS, sub, sea)
+			CWVoxelGenerator.voxel_of(top + 1, top, CWPalette.GRASS, sub, sea, 1, 0)
 					== CWPalette.AIR)
 	# Le cas qui casse quand on teste la roche en premier : sans couche meuble,
 	# le remplissage de roche monte jusqu'au sommet et c'est la surface qui doit
 	# gagner. Le monde genere montre de l'herbe ; la requete doit aussi.
 	_ok("sans couche meuble, la surface l'emporte encore sur la roche",
-			CWVoxelGenerator.voxel_of(top, top, CWPalette.GRASS, 0, sea)
+			CWVoxelGenerator.voxel_of(top, top, CWPalette.GRASS, 0, sea, 1, 0)
 					== CWPalette.GRASS)
+	# L'etang du jalon 1.14 recouvre le terrain, donc il est teste en premier :
+	# une colonne dont le sol est a `top` et qui porte de l'eau de `top+1` a
+	# `top+3` doit rendre de l'eau sur les trois, de l'air au-dessus, et son sol
+	# inchange en dessous. Le point qui compte est le dernier : sans le test en
+	# premier, `y > top and y > sea` rendrait de l'air **dans** la mare.
+	var etang_ok: bool = true
+	for dy in [1, 2, 3]:
+		etang_ok = etang_ok and CWPalette.is_water(
+				CWVoxelGenerator.voxel_of(top + dy, top, CWPalette.GRASS, sub,
+						sea, top + 1, top + 3))
+	_ok("une mare posee au-dessus de la mer rend de l'eau", etang_ok)
+	_ok("au-dessus de la mare, de l'air",
+			CWVoxelGenerator.voxel_of(top + 4, top, CWPalette.GRASS, sub, sea,
+					top + 1, top + 3) == CWPalette.AIR)
+	_ok("sous la mare, le sol est intact",
+			CWVoxelGenerator.voxel_of(top, top, CWPalette.GRASS, sub, sea,
+					top + 1, top + 3) == CWPalette.GRASS)
+
 	# Colonne noyee : de l'eau au-dessus du fond, jusqu'au niveau de la mer.
 	_ok("au-dessus d'un fond noye, de l'eau jusqu'a la mer",
-			CWVoxelGenerator.voxel_of(sea - 3, sea - 10, CWPalette.GRAVEL, sub, sea)
+			CWVoxelGenerator.voxel_of(sea - 3, sea - 10, CWPalette.GRAVEL, sub, sea, 1, 0)
 					!= CWPalette.AIR
 			and CWVoxelGenerator.voxel_of(sea + 1, sea - 10, CWPalette.GRAVEL,
-					sub, sea) == CWPalette.AIR)
+					sub, sea, 1, 0) == CWPalette.AIR)
 
 	# Et maintenant l'accord avec le generateur lui-meme, sur du vrai relief :
 	# on genere un bloc et on interroge la regle en chaque point.
@@ -152,6 +170,62 @@ func _test_generated_voxel() -> void:
 								CWPalette.name_of(want), CWPalette.name_of(got)]
 	_ok("la requete ponctuelle dit la meme chose que le bloc genere (%d points)"
 			% probed, mismatched == 0, "%d ecarts, %s" % [mismatched, first])
+
+	# Et la meme chose **sur une mare**, ce qui est une verification a part et
+	# non un doublon : le bloc de l'origine du monde n'en contient pas, et
+	# l'etang du jalon 1.14 est justement le premier recouvrement qui ne se
+	# deduit pas de la hauteur de colonne. Une berge creusee d'un cote et pas de
+	# l'autre ne se verrait nulle part ailleurs — ni dans un test de regle, ni
+	# dans un test de champ, seulement ici.
+	var f2: CWTerrainField = g.field()
+	var sea2: int = p.sea_level
+	var mare := Vector2i(0, 0)
+	var trouvee: bool = false
+	for rx in range(-400, 400, 7):
+		for rz in range(-400, 400, 7):
+			var wc: Vector4 = f2.sample_column_full(
+					p.world_origin.x + rx, p.world_origin.y + rz)
+			var pr: Vector3i = CWTerrainField.column_profile(wc.x, wc.w, sea2)
+			if pr.y <= pr.z:
+				mare = Vector2i(rx, rz)
+				trouvee = true
+				break
+		if trouvee:
+			break
+	_ok("une mare existe a portee du point de depart", trouvee)
+	if trouvee:
+		var wm: Vector4 = f2.sample_column_full(
+				p.world_origin.x + mare.x, p.world_origin.y + mare.y)
+		var pm: Vector3i = CWTerrainField.column_profile(wm.x, wm.w, sea2)
+		@warning_ignore("integer_division")
+		var bx: int = floori(float(mare.x) / 16.0) * 16
+		@warning_ignore("integer_division")
+		var bz: int = floori(float(mare.y) / 16.0) * 16
+		@warning_ignore("integer_division")
+		var by: int = floori(float(pm.z) / 16.0) * 16
+		var buf2 := VoxelBuffer.new()
+		buf2.create(16, 16, 16)
+		g._generate_block(buf2, Vector3i(bx, by, bz), 0)
+		var bad: int = 0
+		var eau_vue: int = 0
+		var premier: String = ""
+		for lz in 16:
+			for lx in 16:
+				for ly in 16:
+					var w2: int = buf2.get_voxel(lx, ly, lz, CWPalette.CHANNEL_TYPE)
+					var g2: int = g.generated_voxel(bx + lx, by + ly, bz + lz)
+					if CWPalette.is_water(w2) and by + ly > sea2:
+						eau_vue += 1
+					if w2 != g2:
+						bad += 1
+						if premier == "":
+							premier = "(%d, %d, %d) : bloc %s, requete %s" % [
+									bx + lx, by + ly, bz + lz,
+									CWPalette.name_of(w2), CWPalette.name_of(g2)]
+		_ok("le bloc de la mare contient bien de l'eau au-dessus de la mer",
+				eau_vue > 0, "%d voxels" % eau_vue)
+		_ok("les deux consommateurs s'accordent sur une mare",
+				bad == 0, "%d ecarts, %s" % [bad, premier])
 
 
 # -- 3. Les bornes du monde ---------------------------------------------------

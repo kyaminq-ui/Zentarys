@@ -51,8 +51,16 @@ const PATCH_WAIT_MAX_MS: int = 500
 
 ## Carte de hauteurs et de blocs de surface pour l'empreinte (x, z) d'un bloc.
 class ColumnPatch extends RefCounted:
+	## Dessus de la matiere, **creusement des etangs compris** : c'est le sol
+	## reellement genere, pas la sortie brute du champ. Le creusement abaisse la
+	## colonne, donc `lowest` le suit sans rien de plus — et c'est necessaire,
+	## les deux chemins rapides de `_generate_block` s'appuyant dessus.
 	var heights: PackedFloat32Array
 	var surfaces: PackedByteArray
+	## Deux entiers par colonne : l'intervalle d'eau d'etang, borne haute
+	## **incluse**. `bas > haut` — le cas courant — veut dire pas d'eau.
+	## L'ocean n'est pas ici : il se deduit du niveau de la mer.
+	var ponds: PackedInt32Array
 	var lowest: float = INF
 	var highest: float = -INF
 
@@ -170,8 +178,20 @@ func clear_caches() -> void:
 ## un temoin d'eau si `z <= 0` et un temoin d'air sinon, `z = 0` etant son niveau
 ## de la mer. Ici l'eau est ecrite dans les donnees, mais la regle est la meme et
 ## `CWWorldEdits` la rejoue a l'effacement. Voir `docs/systems/03`, section 4.
+##
+## `[pond_lo, pond_hi]` est l'intervalle d'eau d'etang du jalon 1.14, borne
+## haute **incluse** ; `pond_lo > pond_hi` veut dire pas d'etang, et c'est le cas
+## de 96,6 % des colonnes. Il est **teste en premier**, parce qu'un etang
+## *recouvre* le terrain : l'ordre des tests doit suivre celui des recouvrements
+## de `_generate_block`, comme la note ci-dessus l'exige deja pour la roche.
+##
+## `top` est ici le sol **apres creusement** (`CWTerrainField.column_profile`),
+## pas la sortie brute du champ ; les deux consommateurs doivent lui passer la
+## meme valeur, et c'est ce que la verification des 4 096 points compare.
 static func voxel_of(y: int, top: int, surface: int, subsurface: int,
-		sea: int) -> int:
+		sea: int, pond_lo: int, pond_hi: int) -> int:
+	if y >= pond_lo and y <= pond_hi:
+		return CWPalette.water_index(float(pond_hi - y))
 	if y == top:
 		return surface
 	if y > top:
@@ -194,10 +214,54 @@ func generated_voxel(x: int, y: int, z: int) -> int:
 	var p: CWWorldParams = f.params()
 	var wx: int = p.world_origin.x + x
 	var wz: int = p.world_origin.y + z
-	var c: Vector3 = f.sample_column(wx, wz)
-	var surface: int = CWPalette.surface_index(
-			c.x, c.y, c.z, p.sea_level, wx, wz)
-	return voxel_of(y, floori(c.x), surface, subsurface_depth, p.sea_level)
+	var c: Vector4 = f.sample_column_full(wx, wz)
+	var sea: int = p.sea_level
+	var prof: Vector3i = CWTerrainField.column_profile(c.x, c.w, sea)
+	var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
+	var surface: int = CWPalette.surface_of(biome, c.x - float(sea),
+			c.y, c.z, wx, wz)
+	surface = pond_surface(surface, biome, prof,
+			CWTerrainField.pond_gate(c.x, c.w, sea))
+	return voxel_of(y, prof.x, surface, subsurface_depth, sea, prof.y, prof.z)
+
+
+## Matiere de surface d'une colonne, une fois l'etang pris en compte.
+##
+## Deux cas viennent de la source, et le troisieme est une reserve de ce projet.
+##
+## **Le lit d'une mare garde la matiere de dessous, pas celle de dessus.** La
+## source ne repeint pas le fond : elle ecrase d'eau des blocs qui etaient de la
+## couche meuble, et c'est cette couche qu'on voit a travers l'eau. Rendre
+## l'herbe du dessus mettrait une prairie verte au fond de chaque mare.
+##
+## **Une colonne de la porte sans eau porte du sol humide** — c'est la **rive**,
+## et non le lit. Le pseudo-code de `docs/systems/02` disait le contraire ; la
+## relecture de la source a montre que l'ecriture du type 3 est gardee par « le
+## bloc qui s'y trouve n'est pas de l'eau », garde qui echoue precisement quand
+## il y en a. Le sol humide est donc l'anneau autour de chaque mare, ce qui est
+## beaucoup mieux : `CWDecorRules.FAMILIES_SURFACE` y fait pousser des roseaux,
+## et un roseau se tient sur la rive.
+##
+## > **Et la rive n'est humide que dans le biome qui sait la garnir.** C'est une
+## > reserve assumee, pas un oubli. `FAMILIES_SURFACE[SWAMP]` appelle le role
+## > ROSEAU, et le seul modele de roseau du lot est `jungles/roseau` : poser du
+## > sol humide dans les cinq autres biomes rendrait un anneau **nu** autour de
+## > chaque mare. C'est exactement le defaut qui a fait retirer les franges
+## > d'humidite, puis les bandes d'altitude, puis la falaise — *une matiere qui
+## > ne porte rien est un trou dans le monde*, et on ne le repaiera pas une
+## > quatrieme fois pour un anneau de deux blocs. La table lue est
+## > `FAMILIES_SURFACE_BIOME`, qui declare deja quel biome garnit quelle
+## > matiere : le jour ou chaque biome aura son roseau, elle grandira et la rive
+## > suivra sans qu'on retouche a ceci.
+static func pond_surface(surface: int, biome: int, prof: Vector3i,
+		in_gate: bool) -> int:
+	if not in_gate:
+		return surface
+	if prof.y <= prof.z:
+		return CWPalette.subsurface_index(surface)
+	if int(CWDecorRules.FAMILIES_SURFACE_BIOME.get(CWPalette.SWAMP, -1)) == biome:
+		return CWPalette.SWAMP
+	return surface
 
 
 func _get_used_channels_mask() -> int:
@@ -251,6 +315,8 @@ func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: i
 		for lx in size.x:
 			var h: float = patch.heights[i]
 			var surface: int = patch.surfaces[i]
+			var pond_lo: int = patch.ponds[i * 2]
+			var pond_hi: int = patch.ponds[i * 2 + 1]
 			i += 1
 			var top: int = floori(h)
 
@@ -268,6 +334,19 @@ func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: i
 			if top < sea:
 				_fill_run(out_buffer, lx, lz, y_min, y_max, stride,
 						top + 1, sea, CWPalette.water_index(float(sea - top)))
+			# L'etang, en dernier : il *recouvre* tout ce qui precede, et c'est
+			# l'ordre que `voxel_of` reproduit en le testant en premier. Les
+			# deux se croisent au ras du rivage, ou une mare peut mordre sous le
+			# niveau de la mer ; c'est de l'eau des deux cotes.
+			#
+			# Un seul intervalle, et non un remplissage par bloc : une mare
+			# plafonne a **quatre** blocs de fond — la rampe triangulaire ne
+			# peut pas faire mieux, et une verification de la suite le
+			# verrouille — la ou `water_index` ne bascule en eau profonde qu'a
+			# huit. Les deux nuances ne peuvent donc pas se cotoyer dans une
+			# mare, et `voxel_of` rend la meme chose colonne par colonne.
+			_fill_run(out_buffer, lx, lz, y_min, y_max, stride,
+					pond_lo, pond_hi, CWPalette.WATER)
 
 	_stamp_trunks(out_buffer, origin_in_voxels, size, stride, lod, p, patch)
 
@@ -378,6 +457,7 @@ func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,
 	var n: int = size.x * size.z
 	patch.heights.resize(n)
 	patch.surfaces.resize(n)
+	patch.ponds.resize(n * 2)
 	# Une seule descente dans le champ : sample_patch ne consulte le cache de
 	# fenetres de sites qu'une fois par zone traversee, au lieu d'une fois par
 	# colonne.
@@ -385,7 +465,7 @@ func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,
 	var j: int = 0
 	for i in n:
 		var h: float = raw[j]
-		patch.heights[i] = h
+		var chan: float = raw[j + 3]
 		# Meme parcours que `sample_patch` : iz a l'exterieur, ix a l'interieur.
 		# La regle de surface a besoin des coordonnees monde depuis le jalon
 		# 1.12 — voir `CWPalette.lava_flow`.
@@ -394,11 +474,37 @@ func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,
 		var ix: int = i - iz * size.x
 		var cx: int = ox + ix * stride
 		var cz: int = oz + iz * stride
-		patch.surfaces[i] = CWPalette.surface_index(h, raw[j + 1], raw[j + 2],
-				sea, cx, cz)
-		patch.lowest = minf(patch.lowest, h)
-		patch.highest = maxf(patch.highest, h)
-		j += 3
+
+		# L'etang du jalon 1.14. `column_profile` rend le sol **apres**
+		# creusement ; c'est lui qu'on range dans `heights`, et non la sortie
+		# brute du champ.
+		#
+		# **C'est le piege de cette passe** : les deux chemins rapides de
+		# `_generate_block` s'appuient sur `lowest` et `highest`. Un creusement
+		# abaisse la colonne, donc si `lowest` gardait la hauteur d'avant, un
+		# bloc entierement plein de roche serait rendu la ou il y a desormais un
+		# trou — et le fond de la mare serait invisible, bouche par le chemin
+		# rapide. Prendre le minimum **apres** le profil est tout ce qu'il faut,
+		# et c'est la raison pour laquelle le creusement s'exprime ici en
+		# abaissement de colonne plutot qu'en passe separee.
+		var prof: Vector3i = CWTerrainField.column_profile(h, chan, sea)
+		var ph: float = float(prof.x)
+		patch.heights[i] = ph
+		patch.ponds[i * 2] = prof.y
+		patch.ponds[i * 2 + 1] = prof.z
+
+		var biome: int = CWBiome.at(h, raw[j + 1], raw[j + 2], sea)
+		var surf: int = CWPalette.surface_of(biome, h - float(sea),
+				raw[j + 1], raw[j + 2], cx, cz)
+		patch.surfaces[i] = pond_surface(surf, biome, prof,
+				CWTerrainField.pond_gate(h, chan, sea))
+
+		patch.lowest = minf(patch.lowest, ph)
+		# `highest` borne le vide au-dessus du monde : c'est la **surface libre**
+		# qui compte, eau comprise, sinon le chemin rapide du haut rendrait de
+		# l'air a la place du dessus d'une mare.
+		patch.highest = maxf(patch.highest, maxf(ph, float(prof.z)))
+		j += 4
 
 	_patch_mutex.lock()
 	if _patches.size() >= HEIGHTMAP_CACHE_CAP:
@@ -413,8 +519,15 @@ func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,
 ## Carte de hauteurs neutre, rendue quand l'arret survient pendant une attente.
 func _empty_patch(size: Vector3i) -> ColumnPatch:
 	var patch := ColumnPatch.new()
-	patch.heights.resize(size.x * size.z)
-	patch.surfaces.resize(size.x * size.z)
+	var n: int = size.x * size.z
+	patch.heights.resize(n)
+	patch.surfaces.resize(n)
+	# Un intervalle d'eau vide se dit `bas > haut` : le zero par defaut d'un
+	# `PackedInt32Array` dirait [0, 0], soit un bloc d'eau a l'altitude zero
+	# dans chaque colonne d'un bloc rendu pendant l'arret.
+	patch.ponds.resize(n * 2)
+	for k in n:
+		patch.ponds[k * 2] = 1
 	patch.lowest = 0.0
 	patch.highest = 0.0
 	return patch

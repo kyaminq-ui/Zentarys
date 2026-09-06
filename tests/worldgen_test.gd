@@ -289,6 +289,65 @@ func _test_terrain_field() -> void:
 	_ok("champ de chenaux positif", c_lo >= 0.0, "min %f" % c_lo)
 	_ok("champ de chenaux module", c_hi > 0.25, "[%f, %f]" % [c_lo, c_hi])
 
+	# -- Les etangs (jalon 1.14) ---------------------------------------------
+	#
+	# `pond_span` est la seule arithmetique de la regle, et elle se teste seule :
+	# pas de bruit, pas de sites, pas de niveau de la mer. C'est ce qui permet
+	# de verrouiller la rampe triangulaire par ses valeurs remarquables plutot
+	# que par une mesure statistique, laquelle passerait encore si la rampe
+	# etait decalee d'un palier.
+	var sea_t: int = 0
+	var creux_ok: bool = true
+	var prof_max: int = 0
+	var eau_frac: int = 0
+	var pas: int = 0
+	# Un palier entier, echantillonne au centieme.
+	for i in 500:
+		var above: float = float(i) * 0.01
+		var sp: Vector3i = CWTerrainField.pond_span(above)
+		pas += 1
+		if sp.y <= sp.z:
+			eau_frac += 1
+			prof_max = maxi(prof_max, sp.z - sp.y + 1)
+			# Le sol est toujours juste sous l'eau, et l'eau ne monte jamais
+			# au-dessus du palier.
+			if sp.x != sp.y - 1 or sp.z != (int(above) / 5) * 5:
+				creux_ok = false
+		elif sp.x < (int(above) / 5) * 5:
+			# A sec, le lit ne descend jamais sous son palier : il y reste, ou
+			# il remonte vers le terrain dans le dernier quart.
+			creux_ok = false
+	_ok("l'eau est toujours posee juste au-dessus du sol, au niveau du palier",
+			creux_ok)
+	_ok("la profondeur d'une mare plafonne a quatre blocs", prof_max == 4,
+			"max %d" % prof_max)
+	# La porte de la rampe. La troncature entiere de la source la place a
+	# `t > 0,2` et non `t >= 0,4` : `bas = int(q - 5t + 2) <= q` equivaut a
+	# `2 - 5t < 1`. Cela fait 60 % du palier et non 45 %, et c'est mesure sur
+	# le monde a 58,4 % de la porte — les deux s'accordent.
+	var part: float = 100.0 * float(eau_frac) / float(pas)
+	_ok("la rampe laisse passer l'eau sur ~60 %% du palier (%.1f %%)" % part,
+			part > 55.0 and part < 65.0)
+	# Les deux bords d'un palier sont secs, son milieu est au plus profond.
+	var bord: Vector3i = CWTerrainField.pond_span(20.0)
+	# Le sommet de la rampe est a `frac = 0,5`, soit deux blocs et demi dans le
+	# palier — c'est la que `t` vaut 1 et que la mare fait ses quatre blocs.
+	var milieu: Vector3i = CWTerrainField.pond_span(22.5)
+	_ok("le bord d'un palier est sec", bord.y > bord.z)
+	_ok("le sommet de la rampe porte le fond le plus bas",
+			milieu.y <= milieu.z and milieu.z - milieu.y + 1 == 4,
+			str(milieu))
+	# Et la porte : hors d'elle, la colonne n'est pas touchee.
+	var intact: Vector3i = CWTerrainField.column_profile(120.4, 0.5, 64)
+	_ok("hors de la porte, la colonne est rendue telle quelle",
+			intact == Vector3i(120, 1, 0), str(intact))
+	var sous_mer: Vector3i = CWTerrainField.column_profile(30.0, 0.001, 64)
+	_ok("sous le niveau de la mer, pas d'etang",
+			sous_mer == Vector3i(30, 1, 0), str(sous_mer))
+	_ok("un etang ne se pose qu'au-dessus de la mer",
+			not CWTerrainField.pond_gate(30.0, 0.001, 64)
+			and CWTerrainField.pond_gate(120.0, 0.001, 64))
+
 
 # -- 4b. Elements de tuile ----------------------------------------------------
 

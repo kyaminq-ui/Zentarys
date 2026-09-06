@@ -346,10 +346,17 @@ func _build_cell(cx: int, cz: int) -> Array:
 
 		var x: int = int(c["x"])
 		var z: int = int(c["z"])
-		var col: Vector3 = _field.sample_column(x, z)
+		var col: Vector4 = _field.sample_column_full(x, z)
 		# Un arbre les pieds dans l'eau n'existe pas ici : le sol humide est une
 		# matiere a part, au-dessus du niveau de la mer.
 		if col.x < float(sea):
+			continue
+		# Ni dans une mare (jalon 1.14). Un arbre est estampe dans le terrain
+		# depuis le jalon 1.11 : un tronc pose au niveau d'avant creusement
+		# traverserait l'eau sur toute sa hauteur, et il est ecrit dans la
+		# matiere, donc rien ne le retirerait ensuite.
+		var prof: Vector3i = CWTerrainField.column_profile(col.x, col.w, sea)
+		if prof.y <= prof.z:
 			continue
 		var biome_c: int = CWBiome.at(col.x, col.y, col.z, sea)
 		# La matiere exacte du point est verifiee, comme pour la flore : le
@@ -358,12 +365,17 @@ func _build_cell(cx: int, cz: int) -> Array:
 		# ni sur le fond marin.
 		var surface: int = CWPalette.surface_of(biome_c,
 				col.x - float(sea), col.y, col.z, x, z)
+		surface = CWVoxelGenerator.pond_surface(surface, biome_c, prof,
+				CWTerrainField.pond_gate(col.x, col.w, sea))
 		if not CWDecorRules.decor_allowed(biome_c, surface):
 			continue
 		var sp: Dictionary = CWTreeRules.species_at(biome_c, float(c["pick"]))
 		if sp.is_empty():
 			continue
-		var ground: int = floori(col.x) + 1
+		# Le sol est celui **d'apres** creusement : sur la rive d'une mare, la
+		# colonne a ete tranchee, et un arbre pose a la hauteur brute du champ
+		# flotterait de quelques blocs.
+		var ground: int = prof.x + 1
 		if not _supported(x, z, ground):
 			continue
 		_monte(out, sp, x, z, ground, c)

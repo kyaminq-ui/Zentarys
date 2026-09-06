@@ -764,15 +764,26 @@ pour chaque colonne (x, z) de la cellule :
                  1 - (frac - 0,5) x 4    sinon,  et si t < 0 : (t+1)^2 - 1
         bas    = q - 5t + 2
 
-        si bas <= q :                                -- vrai ssi t >= 0,4
+        lit    = q                       si t >= 0
+                 (int)(q - 5t)           sinon        -- au-dessus de q
+
+        si bas <= q :                                -- vrai ssi t > 0,2
             remplir [bas, q] d'EAU (type 2), couleur (0, 0, 255 x (1 - t))
-            écrire du SOL HUMIDE (type 3) en q       -- le lit, et la rive
-            une chance sur 200 : poser un objet en q
+
+        si le bloc en `lit` N'EST PAS de l'eau :      -- donc : pas de mare ici
+            écrire du SOL HUMIDE (type 3) en lit      -- la RIVE, pas le lit
+            une chance sur 200 : poser un objet en lit
 
         -- puis on ouvre la colonne au-dessus : les berges
         creux = niveau + 5 x (1 - (50v)^3) + (bruit(x x 0,02, z x 0,02) + 1) x 2
-        remplir [q + 1, creux[ d'AIR
+        remplir [lit + 1, creux[ d'AIR
 ```
+
+> **Ce bloc a été corrigé le 2026-09-06 au soir, en relisant la source ligne à
+> ligne pour l'écrire** (`WorldInfo.cpp:2694-2806`). La version précédente était
+> juste dans les grandes lignes et fausse sur trois points, dont le premier
+> change le sens de la passe. Les trois corrections sont détaillées ci-dessous
+> et portées telles quelles.
 
 #### 10.2.1 Ce que chaque ligne apporte
 
@@ -809,11 +820,31 @@ pour chaque colonne (x, z) de la cellule :
    continue**. La profondeur maximale est de quatre blocs, atteinte au milieu
    du palier ;
 
-4. **le lit est du sol humide (type 3)**, et c'est la boucle qui ferme une
-   question ouverte du jalon 1.7 : `CWDecorRules.FAMILIES_SURFACE` donne au sol
-   humide sa propre composition — roseau, sous-bois humide — et c'est la
-   **seule exception attachée à une matière** du projet. On savait quoi y faire
-   pousser sans savoir qui produisait la matière. C'est cette passe ;
+4. **le sol humide (type 3) est la RIVE, pas le lit** — correction du
+   2026-09-06 au soir. Son écriture est gardée par « le bloc qui se trouve là
+   n'est pas de l'eau », garde qui échoue précisément quand il y en a : le type
+   3 n'apparaît donc que sur les colonnes de la porte **où l'eau ne monte pas**,
+   c'est-à-dire l'anneau autour de chaque mare.
+
+   C'est beaucoup mieux ainsi, et ça ferme quand même la question ouverte du
+   jalon 1.7 : `CWDecorRules.FAMILIES_SURFACE` donne au sol humide sa propre
+   composition — roseau, sous-bois humide —, c'est la **seule exception attachée
+   à une matière** du projet, et un roseau se tient sur la rive et non au fond.
+   La lecture précédente aurait planté les roseaux sous l'eau ;
+
+4bis. **le lit remonte au-dessus du palier dans le dernier quart.** Quand `t`
+   passe sous zéro — `frac > 0,75`, un quart des colonnes de la porte — la
+   source place le sol humide à `q + 5|t|` et non à `q`, et commence son
+   creusement au-dessus. C'est ce qui évite une marche franche de cinq blocs à
+   chaque bord de palier : la rive remonte vers le terrain réel au lieu d'être
+   tranchée net ;
+
+4ter. **la porte de la rampe est `t > 0,2`, pas `t >= 0,4`.** L'écart vient de
+   la troncature entière : `bas = (int)(q - 5t + 2) <= q` équivaut à
+   `2 - 5t < 1`, et non à `q - 5t + 2 <= q`. Cela fait **60 % du palier** au
+   lieu des 45 % annoncés — mesuré sur notre champ après portage : **58,4 % des
+   colonnes de la porte**, les deux s'accordent. La profondeur maximale, elle,
+   reste bien de quatre blocs ;
 
 5. **les berges sont creusées, et l'eau n'est donc pas enterrée.** Sans les
    quatre dernières lignes, remplir `[bas, q]` d'eau sous un terrain plus haut

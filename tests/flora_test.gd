@@ -291,6 +291,7 @@ func _test_scatter() -> void:
 	var total: int = 0
 	var out_of_cell: int = 0
 	var off_ground: int = 0
+	var noyees: int = 0
 	var wrong_surface: int = 0
 	for dz in 24:
 		for dx in 24:
@@ -300,9 +301,20 @@ func _test_scatter() -> void:
 				total += 1
 				if CWScatter.cell_of(pl.x) != cx or CWScatter.cell_of(pl.z) != cz:
 					out_of_cell += 1
-				var c: Vector3 = f.sample_column(pl.x, pl.z)
-				if pl.y != floori(c.x) + 1:
+				# Le sol est celui **d'apres** creusement (jalon 1.14), pas la
+				# sortie brute du champ : sur la rive d'une mare la colonne est
+				# tranchee de quelques blocs, et comparer a la hauteur brute
+				# faisait sortir 145 plantes « flottantes » qui ne l'etaient
+				# pas. La regle verifiee ici est celle du monde genere.
+				var c4: Vector4 = f.sample_column_full(pl.x, pl.z)
+				var c := Vector3(c4.x, c4.y, c4.z)
+				var prof: Vector3i = CWTerrainField.column_profile(
+						c.x, c4.w, p.sea_level)
+				if pl.y != prof.x + 1:
 					off_ground += 1
+				# Et l'autre moitie de la meme regle : aucune plante dans l'eau.
+				if prof.y <= prof.z:
+					noyees += 1
 				var biome: int = CWBiome.at(c.x, c.y, c.z, p.sea_level)
 				if not sc.library().for_biome(biome).has(pl.model):
 					wrong_surface += 1
@@ -312,6 +324,8 @@ func _test_scatter() -> void:
 	_ok("chaque plante est dans sa cellule", out_of_cell == 0, "%d hors" % out_of_cell)
 	_ok("chaque plante pose sur le sol de sa colonne", off_ground == 0,
 			"%d flottantes" % off_ground)
+	_ok("aucune plante ne pousse dans une mare", noyees == 0,
+			"%d noyees" % noyees)
 	_ok("chaque plante appartient a son biome", wrong_surface == 0,
 			"%d mal affectees" % wrong_surface)
 

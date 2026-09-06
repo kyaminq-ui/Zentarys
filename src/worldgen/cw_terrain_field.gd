@@ -147,8 +147,25 @@ func _window_of(x: int, z: int) -> Array:
 
 ## Altitude, temperature et humidite d'une colonne, en un seul passage.
 ## Retour : Vector3(altitude, temperature, humidite).
+##
+## **C'est l'altitude du champ, etangs non compris.** Qui a besoin du sol
+## reellement genere — la dispersion, le generateur — passe par
+## `sample_column_full` puis `column_profile` : un etang creuse sa colonne, et
+## un objet pose a l'altitude rendue ici y flotterait au-dessus de l'eau.
 func sample_column(x: int, z: int) -> Vector3:
-	var c: Vector3 = sample_column_raw(x, z)
+	var c: Vector4 = sample_column_full(x, z)
+	return Vector3(c.x, c.y, c.z)
+
+
+## Altitude, climat **et champ de chenaux** d'une colonne, en un seul passage.
+##
+## Le quatrieme terme est la porte des etangs (jalon 1.14) : il est deja calcule
+## par `_height_from`, qui s'en sert pour eteindre le detail dans les vallees.
+## Le sortir ici ne coute donc pas un echantillon de bruit de plus — c'est ce qui
+## permet a la dispersion de savoir si elle seme dans une mare sans payer une
+## seconde descente dans le champ.
+func sample_column_full(x: int, z: int) -> Vector4:
+	var c: Vector4 = _sample_raw4(x, z)
 	c.x *= _p.height_scale
 	return c
 
@@ -159,7 +176,17 @@ func sample_column(x: int, z: int) -> Vector3:
 ## l'altitude figee dans un element est comparee au terrain qui l'entoure.
 ## Passer par la sortie mise a l'echelle melangerait les deux domaines des que
 ## `height_scale` s'ecarte de 1.
+##
+## **Les etangs ne s'y appliquent pas non plus**, et pour une raison plus forte
+## que l'echelle : la couche d'elements de tuile lit cette altitude pour figer
+## celle d'un element, et un etang qui se creuserait dans cette lecture
+## deplacerait l'element, qui deplacerait le terrain, qui deplacerait l'etang.
 func sample_column_raw(x: int, z: int) -> Vector3:
+	var c: Vector4 = _sample_raw4(x, z)
+	return Vector3(c.x, c.y, c.z)
+
+
+func _sample_raw4(x: int, z: int) -> Vector4:
 	var zx0: int = CWWorldParams.zone_of(x - ZONE_SIZE)
 	var zz0: int = CWWorldParams.zone_of(z - ZONE_SIZE)
 	return _sample(x, z, zx0, zz0, _sites.get_window(zx0, zz0), feature_at(x, z))
@@ -167,8 +194,10 @@ func sample_column_raw(x: int, z: int) -> Vector3:
 
 ## Echantillonne d'un coup l'empreinte (x, z) d'un bloc.
 ##
-## Rend un tableau de 3 x nx x nz flottants : altitude, temperature, humidite
-## pour chaque colonne, en balayant z puis x.
+## Rend un tableau de **4** x nx x nz flottants : altitude, temperature,
+## humidite et **champ de chenaux** pour chaque colonne, en balayant z puis x.
+## Le quatrieme terme est la porte des etangs (jalon 1.14) ; il est deja calcule
+## par le champ d'altitude, donc il ne coute rien de plus ici.
 ##
 ## Interet : les 256 colonnes d'un bloc de 16 tombent presque toujours dans la
 ## meme zone de 16384 unites, donc dans la meme fenetre 3 x 3 de sites. En
@@ -177,7 +206,7 @@ func sample_column_raw(x: int, z: int) -> Vector3:
 ## colonne.
 func sample_patch(x0: int, z0: int, nx: int, nz: int, step: int) -> PackedFloat32Array:
 	var out := PackedFloat32Array()
-	out.resize(nx * nz * 3)
+	out.resize(nx * nz * 4)
 	var last_zx: int = 0x7FFFFFFF
 	var last_zz: int = 0x7FFFFFFF
 	var last_tx: int = 0x7FFFFFFF
@@ -205,16 +234,17 @@ func sample_patch(x0: int, z0: int, nx: int, nz: int, step: int) -> PackedFloat3
 				feature = feature_at(x, z)
 				last_tx = tx
 				last_tz = tz
-			var c: Vector3 = _sample(x, z, zx0, zz0, win, feature)
+			var c: Vector4 = _sample(x, z, zx0, zz0, win, feature)
 			out[i] = c.x * scale
 			out[i + 1] = c.y
 			out[i + 2] = c.z
-			i += 3
+			out[i + 3] = c.w
+			i += 4
 	return out
 
 
 func _sample(x: int, z: int, zx0: int, zz0: int, win: Array,
-		feature: CWTileFeature) -> Vector3:
+		feature: CWTileFeature) -> Vector4:
 	var wp: Vector2 = warped_point(x, z)
 
 	# Passe 1 : site le plus proche du point deforme. Ce meme site sert ensuite
@@ -239,8 +269,10 @@ func _sample(x: int, z: int, zx0: int, zz0: int, win: Array,
 				best_j = zz0 + j
 	if is_inf(best_d2):
 		# Uniquement possible au bord du monde. L'original abandonne ici et
-		# renvoie une valeur non initialisee ; on rend un fond oceanique.
-		return Vector3(float(_p.sea_level - 100), 0.5, 0.5)
+		# renvoie une valeur non initialisee ; on rend un fond oceanique. Le
+		# chenal rendu est 1,0 — tres au-dessus de la porte des etangs — parce
+		# qu'un bord de monde sans site n'a pas de vallee ou en poser un.
+		return Vector4(float(_p.sea_level - 100), 0.5, 0.5, 1.0)
 
 	# Passe 2 : les deux ponderations, sur la meme fenetre.
 	var cw_sum: float = 0.0
@@ -283,7 +315,7 @@ func _sample(x: int, z: int, zx0: int, zz0: int, win: Array,
 	var chan: float = _channel(x, z, edge_d2, win, wp, best_d2)
 	var height: float = _height_from(x, z, base_height, land_ratio, chan, edge_d2,
 			feature)
-	return Vector3(height, temperature, humidity)
+	return Vector4(height, temperature, humidity, chan)
 
 
 ## Site de region le plus proche du point deforme, ou null au bord du monde.
@@ -500,6 +532,133 @@ func _apply_feature(h: float, feature: CWTileFeature, weight: float,
 			else:
 				h += 150.0
 	return h
+
+
+# -- Les etangs (jalon 1.14) --------------------------------------------------
+#
+# L'eau de surface de l'original n'est ni un element de tuile ni un niveau
+# global : c'est une seconde passe de `WorldInfo_generateBiomeContent`
+# (@005e4850), colonne par colonne, dont **la porte est le champ de chenaux**
+# porte au jalon 1.4. Il ne manquait pas un champ, il manquait un seuil.
+# Analyse et pseudo-code : `docs/systems/02`, Sec. 10.
+#
+# -- Ce que la source fait, dans l'ordre --------------------------------------
+#
+#   1. porte : `chan <= 0,02` — 3,4 % des terres, mesure ;
+#   2. le niveau est **quantifie au pas de 5** au-dessus du niveau de la mer ;
+#   3. une **rampe triangulaire** `t` sur la position dans le palier decide s'il
+#      y a de l'eau et quelle profondeur : nulle aux deux bouts du palier, 1 en
+#      son milieu. C'est elle qui fait des **chapelets de mares** le long d'un
+#      fond de vallee plutot qu'une riviere continue — l'eau apparait et
+#      disparait a chaque fois que le terrain traverse un multiple de 5 ;
+#   4. la colonne est **ouverte au-dessus** du plan d'eau : sans ce creusement,
+#      l'eau serait une poche enterree sous le terrain d'origine.
+#
+# -- Deux ecarts avec la note du depot, releves en relisant la source ---------
+#
+# `docs/systems/02` Sec. 10.2 en donnait un pseudo-code juste dans les grandes
+# lignes et faux sur deux points, tous deux corriges ici et dans la note :
+#
+#   * **le sol humide n'est pas le lit de l'etang, c'est sa rive.** La source
+#     ecrit le type 3 a la hauteur `lit`, sous la garde « le bloc qui s'y trouve
+#     n'est pas de l'eau » — garde qui echoue precisement quand il y a de l'eau.
+#     Le sol humide n'apparait donc que sur les colonnes de la porte **ou l'eau
+#     ne monte pas**, c'est-a-dire l'anneau autour de chaque mare. C'est
+#     beaucoup mieux ainsi : `CWDecorRules.FAMILIES_SURFACE` fait pousser des
+#     **roseaux** sur cette matiere, et un roseau se tient sur la rive, pas au
+#     fond ;
+#   * **le lit remonte au-dessus du palier dans le dernier quart.** Quand `t`
+#     devient negatif — `frac > 0,75`, un quart des colonnes de la porte — la
+#     source place le sol humide a `q + 5|t|` et non a `q`. C'est ce qui evite
+#     une marche franche de cinq blocs a chaque bord de palier : la rive remonte
+#     vers le terrain reel au lieu d'etre tranchee net.
+
+## Seuil du champ de chenaux sous lequel une colonne peut porter de l'eau.
+## Releve dans la source sous la forme `1 - 50 x chan >= 0`.
+const POND_GATE: float = 0.02
+
+## Pas de quantification du niveau d'eau, en blocs. C'est lui qui donne a l'eau
+## sa surface plate et aux mares leur decoupage en chapelet.
+const POND_STEP: int = 5
+
+
+## Profil d'etang d'une colonne, en blocs **au-dessus du niveau de la mer**.
+##
+## `above` est l'altitude de la colonne au-dessus du niveau de la mer.
+## Rend `Vector3i(sol, eau_bas, eau_haut)` :
+##
+##   * `sol` est le dessus de la matiere apres creusement — la colonne est
+##     tranchee a cette hauteur, ce qui est l'effet net des quatre dernieres
+##     lignes de la source ;
+##   * `[eau_bas, eau_haut]` est l'intervalle d'eau, **vide quand
+##     `eau_bas > eau_haut`**, ce qui est le cas courant : la rampe ne laisse
+##     passer l'eau que sur 45 % des colonnes de la porte.
+##
+## **Pure et sans etat**, ce qui est la condition pour que les quatre
+## consommateurs s'accordent (invariant n. 18) — le bloc genere, la requete
+## ponctuelle et les deux dispersions decrivent la meme mare.
+##
+## Les troncatures suivent celles de la source (`(int)` en C, vers zero) et non
+## un arrondi vers le bas : `bas` passe par des valeurs negatives au ras du
+## rivage, ou les deux ne donnent pas le meme bloc.
+static func pond_span(above: float) -> Vector3i:
+	var a: float = maxf(above, 0.0)
+	@warning_ignore("integer_division")
+	var q: int = (int(a) / POND_STEP) * POND_STEP
+	var frac: float = (a - float(q)) / float(POND_STEP)
+
+	# La rampe triangulaire. Au-dela du sommet elle redescend quatre fois plus
+	# vite qu'elle n'est montee, puis **passe sous zero** dans le dernier quart
+	# du palier, ou la source l'adoucit en `(t+1)^2 - 1`.
+	var t: float
+	if frac >= 0.5:
+		t = 1.0 - (frac - 0.5) * 4.0
+		if t < 0.0:
+			t = (t + 1.0) * (t + 1.0) - 1.0
+	else:
+		t = frac * 2.0
+
+	var bas: int = int(float(q) - t * 5.0 + 2.0)
+	if bas <= q:
+		# De l'eau : elle occupe [bas, q], et la matiere s'arrete juste dessous.
+		# `bas <= q` equivaut exactement a `t >= 0,4`, donc a `frac` entre 0,2
+		# et 0,65 : la profondeur maximale est de quatre blocs, au milieu du
+		# palier.
+		return Vector3i(bas - 1, bas, q)
+
+	# Pas d'eau : la colonne est simplement tranchee au niveau du lit, qui est
+	# le palier lui-meme sauf dans le dernier quart (voir la note ci-dessus).
+	var lit: int = q if t >= 0.0 else int(float(q) - t * 5.0)
+	return Vector3i(lit, 1, 0)
+
+
+## Profil complet d'une colonne, etang compris, en altitudes de bloc
+## **absolues**. C'est le point unique ou la porte, le niveau de la mer et la
+## rampe se rencontrent ; tout le reste du projet passe par ici.
+##
+## Hors de la porte — 96,6 % des terres — rend la colonne telle quelle et un
+## intervalle d'eau vide, donc le monde d'avant le jalon 1.14 au bloc pres.
+##
+## **Un etang ne se pose pas sous la mer.** La source travaille dans un domaine
+## ou le niveau de la mer vaut zero et borne son niveau a zero ; ici la borne
+## devient le test `height > sea`, sans quoi la porte trancherait le fond marin
+## au niveau de la mer et souleverait l'ocean entier.
+##
+## La porte est sortie en `pond_gate` parce que **deux decisions la lisent** :
+## celle-ci et la matiere de rive (`CWVoxelGenerator.pond_surface`). Les avoir
+## ecrites deux fois aurait donne une rive humide sur une colonne non creusee le
+## jour ou l'une des deux bougerait.
+static func pond_gate(height: float, chan: float, sea: int) -> bool:
+	return chan <= POND_GATE and height > float(sea)
+
+
+static func column_profile(height: float, chan: float, sea: int) -> Vector3i:
+	if not pond_gate(height, chan, sea):
+		return Vector3i(floori(height), 1, 0)
+	var p: Vector3i = pond_span(height - float(sea))
+	if p.y > p.z:
+		return Vector3i(p.x + sea, 1, 0)
+	return Vector3i(p.x + sea, p.y + sea, p.z + sea)
 
 
 # -- Reseau de chenaux --------------------------------------------------------

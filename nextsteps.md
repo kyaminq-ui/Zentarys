@@ -7,35 +7,36 @@ il contient des décisions qui coûtent cher à redécouvrir.
 
 ## 0. Demain, la première chose à faire
 
-**Écrire les lacs. La lecture qui bloquait est faite, et la réponse simplifie le
-plan.** Tout est en main : sept points en §7bis.2, algorithme complet en
-`docs/systems/02` §10.2, porte mesurée à 3,4 % des terres.
+**Le jalon 1 est clos.** Les lacs sont portés (§7quater), et avec eux le dernier
+système du monde qui restait au périmètre. Deux portes s'ouvrent, et elles ne
+mènent pas au même endroit :
 
-> **`terrain_generateColumnColor` rend la hauteur FINALE de la colonne** — et
-> mieux que ça : **c'est la hauteur que ce projet calcule déjà**.
-> `terrain_generateColumnColor` (@005c5e20, client) et `World_baseHeightField`
-> (@004f9b70, serveur) sont **la même fonction**, celle du jalon 1.4. Ses quatre
-> graines de déformation d'éléments sont mot pour mot les nôtres. Le niveau d'un
-> étang est donc `CWTerrainField.sample_column(x, z).x`, sans rien de nouveau à
-> calculer. Lecture et preuves en `docs/systems/02` §10.4.
+1. **La collision, objet par objet** (§7bis.3) — c'est la fin du jalon 1 côté
+   finition. Le tableau y est fait : cinq modèles entiers à passer en matière
+   (le morceau facile, une ligne chacun), le branchage et les filons déjà réglés,
+   et **un seul vrai arbitrage**, le feuillage — matière (×12 sur ce qu'un arbre
+   écrit, soit ~+25 % de chargement) ou volume approché au jalon 3.1. Rien de
+   tout cela ne se voit tant que `generate_collisions` est à faux sur le terrain
+   de la démo.
+2. **2.6, l'apparition** — l'autre porte, et elle mène au jalon 2. Elle n'attend
+   rien : la fonction est lue, les constantes de pose extraites, la couche
+   d'éléments existe depuis 1.6 et la carte sait les afficher.
 
-**Ce que ça change au plan de §7bis.2 :** son **point 1 tombe à moitié**. Il n'y
-a pas d'ossature `cont` à sortir de `_height_from` — la hauteur est déjà là. Ce
-que `_sample` doit encore remonter est la **valeur de chenal**, dont la passe se
-sert deux fois : comme porte (`chan <= 0,02`) et dans le creusement des berges
-(`5 × (1 − (50·chan)³)`). Donc toujours un `Vector4`, mais la quatrième
-composante est `chan` et non une seconde hauteur — et elle est déjà calculée
-dans `_height_from`, ce qui reste à coût nul.
+**Ce qui n'est pas une porte, malgré les apparences :** les chemins entre points
+d'intérêt (hors périmètre — la source n'a pas de réseau de routes, en faire un
+serait une création de ce projet, à décider comme telle) et la falaise (portée
+puis retirée le 2026-09-06, §7ter.4 — elle attend un terme de relief, pas une
+règle de surface).
 
-**Les six autres points de §7bis.2 sont inchangés.** Le piège nommé est le n° 5 :
-les deux chemins rapides de `_generate_block` s'appuient sur `patch.lowest`, et
-le creusement des berges l'invalide.
+**Deux petites choses laissées ouvertes par les lacs**, aucune bloquante :
 
-**Une question annexe est ouverte par la même lecture, et elle n'est pas dans le
-chemin des lacs** — `docs/systems/02` §10.5 : la pente de l'original se mesure
-**à un bloc**, sur une grille de hauteurs précalculée par cellule, seuil 0,3. Ce
-n'est pas ce qu'on avait écrit à la falaise, et c'est noté pour le jour où le
-sujet reviendra ; ça ne rouvre rien aujourd'hui.
+- **la rive n'est humide qu'en Jungles**, faute d'un roseau par biome (§7quater,
+  la réserve). C'est un besoin d'assets, pas de code ;
+- **deux termes du champ de chenaux ne sont pas portés** : les bosses par type
+  de cellule de région, qui *interdisent* l'eau près d'un bourg
+  (`docs/systems/02` §10.2.1). Les porter déplacerait le lit des vallées
+  existantes, donc c'est un travail à faire d'un bloc, avec une capture avant et
+  après.
 
 ## 1. Où sont les choses
 
@@ -57,7 +58,7 @@ ne s'ouvre pas proprement (il est déclaré dans `project.godot`).
 ## 2. Commandes
 
 ```
-# Suite de validation (329 vérifications, ~20 s)
+# Suite de validation (344 vérifications, ~20 s)
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd
 
 # Réimport après ajout d'un class_name (sinon l'éditeur ne le voit pas)
@@ -117,6 +118,10 @@ python tools/blender/generer_arbres.py
     --resolution 1600x900 -- --biome 7 --shot 32 --vue 256
 #   options : --sans-arbres, --sans-flore, pour isoler une couche
 #
+# Reperer une mare, pour viser une capture dessus. Rend des coordonnees pretes
+# a passer a `--ici`, **sur la graine 2024** — celle de la demo, invariant n. 37.
+./godot.windows.editor.double.x86_64.exe --headless --path . -s tools/find_pond.gd
+
 # Se poser a un point **nomme** plutot qu'au premier endroit qui convient : les
 # coordonnees sont celles de l'ATH, donc celles qu'on lit sur une capture
 # precedente. C'est ce qu'il faut pour viser un objet local — un element de
@@ -157,38 +162,24 @@ biome, **Échap** rend la souris puis quitte.
 
 ## 3. État
 
-> **La falaise a été portée puis retirée le même jour** (§7ter.4) : le portage
-> était fidèle et les tests verts, mais peindre de la roche sur un flanc à
-> vingt-sept degrés fait une tache, pas une paroi. **Une falaise ne se peint
+> **Le jalon 1 est clos.** Les lacs (§7quater) sont portés, et c'était le dernier
+> système du monde au périmètre. L'eau suit les fonds de vallée en rubans
+> ramifiés : **1,90 % des terres en eau, 1,35 % en rive**, profondeur 1 à 4
+> blocs. Sa porte était le champ de chenaux du jalon 1.4 — il ne manquait pas un
+> champ, il manquait un seuil.
+>
+> **La falaise, elle, a été portée puis retirée le même jour** (§7ter.4) : le
+> portage était fidèle et les tests verts, mais peindre de la roche sur un flanc
+> à vingt-sept degrés fait une tache, pas une paroi. **Une falaise ne se peint
 > pas, elle se taille** — elle attend un terme de relief, pas une règle de
 > surface. Les mesures sont gardées.
 >
-> L'analyse des lacs, elle, a tenu : **la fonction que la feuille de route
-> désignait n'était pas la bonne** — elle ne fait ni eau ni chemin, c'est le
-> douzième nom trompeur, et l'élément de tuile 12 n'est donc pas un plan d'eau
-> (§7bis.2, `docs/systems/02` §10).
->
-> **L'eau est écrite dans `generateBiomeContent`, et sa porte est le champ de
-> chenaux que ce projet porte depuis le jalon 1.4** — il ne manquait pas un
-> champ, il manquait un seuil : 0,02, soit 3,4 % des terres, mesuré. La décision
-> d'architecture qu'on gardait ouverte est tranchée, et elle était deux fois
-> plus petite qu'on ne croyait : **ce projet écrit déjà l'eau comme matière**,
-> ce qui est global n'est pas le stockage mais le *niveau*. Le plan de portage
-> tient en sept points (§7bis.2) et **un seul verrou reste, qui est une lecture
-> et non un choix** : quelle hauteur `terrain_generateColumnColor` rend.
->
-> **Restent donc les lacs — à écrire, plan en main — et la collision, objet par
-> objet (§7bis.3).** 2.6, l'apparition, reste l'autre porte ouverte.
->
-> **La lecture qui bloquait les lacs est faite** (2026-09-06 au soir,
-> `docs/systems/02` §10.4) : `terrain_generateColumnColor` rend la hauteur
-> **finale**, et c'est la fonction que ce projet porte depuis le jalon 1.4 — le
-> niveau d'un étang est `sample_column(x, z).x`. Le plan de §7bis.2 y perd la
-> moitié de son premier point. **Il n'y a plus qu'à écrire.**
+> **Restent la collision, objet par objet (§7bis.3), et 2.6, l'apparition.**
+> Les deux portes sont décrites en §0, en tête de ce fichier.
 
-Jalon 1 (le monde) : **1.1 à 1.12 sont portés, testés et vus en jeu** ; 1.13, la
-falaise, a été portée puis retirée (§7ter.4). Suite de validation :
-**329 vérifications, 0 échec**, ~20 s.
+Jalon 1 (le monde) : **1.1 à 1.12 et 1.14 sont portés, testés et vus en jeu** ;
+1.13, la falaise, a été portée puis retirée (§7ter.4). Suite de validation :
+**344 vérifications, 0 échec**, ~20 s.
 
 **1.11 — le tronc en matière, fait** (2026-09-06, §7). Un feuillu se pose en
 deux temps : un tronc **écrit dans les données du monde** par
@@ -1590,7 +1581,12 @@ bloc de dénivelé maximal d'une colonne à la suivante). La falaise n'est donc
 **pas un point de règle de surface** ; c'est un travail sur le champ
 d'altitude, sans jalon ouvert, et les mesures qui le cadrent sont en §7ter.4.
 
-### 2 — Les lacs — **la fonction est lue, et elle n'était pas la bonne**
+### 2 — Les lacs — **faits le 2026-09-06, voir §7quater**
+
+> **Cette section est le plan, et il a été suivi.** Elle est gardée telle quelle
+> parce qu'elle porte l'analyse ; ce qui a été *trouvé en l'exécutant* — trois
+> corrections au pseudo-code, dont une qui change le sens de la passe — est en
+> §7quater. À lire dans cet ordre si le sujet revient.
 
 > **Tout ce que cette section disait avant le 2026-09-06 reposait sur un nom, et
 > le nom était faux.** L'analyse est en `docs/systems/02`, §10. Ce qui suit
@@ -1999,6 +1995,132 @@ où `--biome` se pose au premier endroit qui convient — et il **survit à ce q
 l'avait motivé** : il sert pour tout objet local. `place_at` est la seconde
 moitié de `_finish_biome_search`, extraite pour que les deux posent la caméra à
 la même hauteur, sans quoi les captures ne se comparent pas.
+
+## 7quater. Les lacs — **faits le 2026-09-06 au soir**
+
+Le dernier système du monde. Le plan de §7bis.2 a été suivi point par point ;
+ce qui suit est ce que **l'exécution** a appris, et qui n'était pas dans le plan.
+
+### 7quater.1 Trois corrections au pseudo-code, trouvées en l'écrivant
+
+`docs/systems/02` §10.2 avait été écrit la veille, depuis une lecture rapide.
+Relu ligne à ligne *pour être porté*, il s'est révélé juste dans les grandes
+lignes et faux sur trois points. **Le premier change le sens de la passe.**
+
+> **Le sol humide est la rive, pas le lit.** L'écriture du type 3 est gardée par
+> « le bloc qui se trouve là n'est pas de l'eau » — garde qui échoue précisément
+> quand il y en a. Le sol humide n'apparaît donc que sur les colonnes de la porte
+> **où l'eau ne monte pas** : l'anneau autour de chaque mare.
+>
+> C'est beaucoup mieux, et ça ferme quand même la question ouverte depuis le
+> jalon 1.7 : `FAMILIES_SURFACE` fait pousser des **roseaux** sur cette matière,
+> et un roseau se tient sur la rive. La lecture précédente les aurait plantés
+> sous l'eau.
+
+Les deux autres sont plus petites mais se voient :
+
+- **le lit remonte au-dessus du palier dans le dernier quart.** Quand la rampe
+  `t` passe sous zéro — `frac > 0,75`, un quart des colonnes de la porte — la
+  source place le sol humide à `q + 5|t|` et commence son creusement au-dessus.
+  Sans ce terme, chaque bord de palier est une marche franche de cinq blocs ;
+- **la porte de la rampe est `t > 0,2`, pas `t >= 0,4`.** L'écart vient de la
+  **troncature entière** : `bas = (int)(q - 5t + 2) <= q` équivaut à
+  `2 - 5t < 1`. Cela fait 60 % du palier au lieu de 45 % — et la mesure d'après
+  portage donne 58,4 % des colonnes de la porte, ce qui accorde les deux.
+
+*La leçon, et elle vaut au-delà des lacs : un pseudo-code écrit depuis un nom se
+relit avant d'être porté.* C'est la même famille de défaut que les douze noms
+trompeurs, déplacée d'un cran — non plus le nom d'une fonction, mais le résumé
+qu'on en a fait.
+
+### 7quater.2 Le creusement s'exprime en abaissement de colonne
+
+C'est **la** décision d'architecture du portage, et elle n'était pas dans le
+plan. La source construit sa colonne puis la creuse ; ce projet la déduit d'un
+champ de hauteurs. Simuler le creusement aurait demandé une passe séparée sur le
+bloc généré, et l'aurait rendue invisible aux quatre autres consommateurs.
+
+`CWTerrainField.column_profile(hauteur, chenal, mer)` rend donc
+`(sol, eau_bas, eau_haut)`, où `sol` est **la colonne déjà tranchée**, et
+`pond_span` isole l'arithmétique de la rampe — pure, sans bruit ni sites, testée
+seule sur un palier entier échantillonné au centième.
+
+> **Le piège annoncé au point 5 du plan tombe tout seul.** Les deux chemins
+> rapides de `_generate_block` s'appuient sur `patch.lowest` et `patch.highest` ;
+> un creusement les invalide. En rangeant le sol *après* profil dans
+> `patch.heights` et en prenant le minimum ensuite, il n'y a rien à corriger.
+> `highest`, lui, doit prendre la **surface libre** — le dessus de l'eau —, sinon
+> le chemin rapide du haut rend de l'air à la place d'une mare.
+
+### 7quater.3 Ce que le reste du projet a dû apprendre
+
+- **`_sample` rend un `Vector4`** : le champ de chenaux sort avec l'altitude et
+  le climat. Il était **déjà calculé** par `_height_from`, qui s'en sert pour
+  éteindre le détail dans les vallées — donc zéro échantillon de bruit de plus.
+  `sample_column` et `sample_column_raw` gardent leur `Vector3` et les
+  trente-cinq consommateurs n'ont pas bougé ; qui a besoin du chenal appelle
+  `sample_column_full` ;
+- **`sample_column_raw` ne voit pas les étangs, et pour une raison plus forte que
+  l'échelle** : la couche d'éléments de tuile lit cette altitude pour figer celle
+  d'un élément. Un étang qui s'y creuserait déplacerait l'élément, qui
+  déplacerait le terrain, qui déplacerait l'étang ;
+- **les deux dispersions savent nager.** Elles refusent une colonne d'eau et se
+  posent sur le sol *après* creusement. Sans le premier test, chaque mare se
+  couvre d'herbe flottante ; sans le second, la flore de rive flotte de quelques
+  blocs. Et un arbre est de la **matière** depuis le jalon 1.11 : un tronc posé
+  dans une mare y resterait, rien ne le retirant ensuite ;
+- **l'ATH annonçait « sol 117 » au bord d'une mare dont le fond est à 111.**
+  C'est l'appelant qu'on oublie — il n'est dans aucun test —, et c'est
+  l'instrument qui sert à viser les captures. Il montre désormais le sol creusé
+  et le niveau d'eau.
+
+> **Un test a attrapé le changement de contrat tout seul**, et c'est le genre de
+> chose qui justifie la suite : `flora_test` a sorti **145 plantes
+> « flottantes »** qui ne l'étaient pas. Il comparait la position de la plante au
+> sol *d'avant* creusement. La règle vérifiée est désormais celle du monde
+> généré, et une vérification jumelle a été ajoutée — aucune plante dans l'eau.
+
+### 7quater.4 Ce que ça rend, mesuré
+
+`tools/biome_stats.gd` porte désormais le relevé, et c'est le garde-fou du seuil
+de 0,02 comme il l'est de ceux de `CWBiome` :
+
+| | part des terres |
+|---|---|
+| colonnes dans la porte | **3,25 %** |
+| dont en **eau** | **1,90 %** (58,4 % de la porte) |
+| dont en **rive** | 1,35 % |
+| creusement moyen dans la porte | 2,78 blocs |
+
+Profondeur : 1 à 4 blocs, **un quart chacun** — la signature de la rampe
+triangulaire, et un plafond que la suite verrouille.
+
+**Coût : sous le bruit de mesure.** Médiane de cinq passes, **76,4 µs par colonne
+contre 75,7 sans les lacs**, soit +0,9 % quand la dispersion d'une passe à
+l'autre est de ±6 %. Le chiffre de 73,8 µs cité la veille venait d'une passe
+unique — c'est exactement ce que §7ter.4 met en garde de ne pas faire, et c'est
+ce dépôt qui s'y est repris.
+
+`tools/find_pond.gd` a été ajouté pour viser une capture : il rend des
+coordonnées `--ici` sur **la graine 2024**, celle de la démo, ce qui est
+l'invariant n° 37.
+
+### 7quater.5 Les deux choses laissées ouvertes
+
+- **la rive n'est humide qu'en Jungles.** `FAMILIES_SURFACE[SWAMP]` appelle le
+  rôle ROSEAU et le seul modèle du lot est `jungles/roseau` : poser du sol humide
+  dans les cinq autres biomes rendrait un anneau **nu** autour de chaque mare.
+  *Une matière qui ne porte rien est un trou dans le monde* — payé trois fois
+  déjà (les franges d'humidité, les bandes d'altitude, la falaise), et on ne le
+  repaiera pas pour un anneau de deux blocs. La table lue est
+  `FAMILIES_SURFACE_BIOME` : le jour où chaque biome aura son roseau, elle
+  grandira et la rive suivra sans qu'on retouche au code. **C'est un besoin
+  d'assets, pas de code** ;
+- **deux termes du champ de chenaux ne sont pas portés** (`docs/systems/02`
+  §10.2.1) : des bosses par type de cellule de région, qui **élèvent** le champ
+  et donc **interdisent** l'eau près d'un bourg. Les porter déplacerait le lit
+  des vallées existantes, donc c'est un travail à faire d'un bloc, avec une
+  capture avant et après.
 
 ## 8. Assets voxels
 

@@ -419,14 +419,25 @@ func _build_cell(cx: int, cz: int) -> Array:
 		# Le biome et la matiere exacte du point, tous deux verifies : une
 		# cellule a cheval sur une plage, une ligne de neige ou une frontiere de
 		# climat ne doit pas y semer sa prairie.
-		var c: Vector3 = _field.sample_column(x, z)
+		var c: Vector4 = _field.sample_column_full(x, z)
 		var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
 		var surface: int = CWPalette.surface_of(biome, c.x - float(sea),
 				c.y, c.z, x, z)
+		# L'etang du jalon 1.14. Deux choses en dependent, et la seconde ne se
+		# voit qu'en jeu : le **sol** sur lequel la plante se pose, qui est
+		# creuse dans une mare, et le fait qu'une mare **ne se garnit pas**.
+		# Sans ce test, chaque mare du monde se couvre d'herbe flottante — le
+		# niveau de la mer ne dit plus rien ici, une mare etant au-dessus de
+		# lui.
+		var prof: Vector3i = CWTerrainField.column_profile(c.x, c.w, sea)
+		if prof.y <= prof.z:
+			continue
 		# Sous l'eau, seul le fond marin se garnit : le reste de la flore
 		# n'aurait pas de sens et se verrait de loin a travers l'eau.
 		if c.x < float(sea) and surface != CWPalette.GRAVEL:
 			continue
+		surface = CWVoxelGenerator.pond_surface(surface, biome, prof,
+				CWTerrainField.pond_gate(c.x, c.w, sea))
 		# Scorie, coulee de lave, neige hors Snowlands : rien n'y pousse. C'est
 		# le filtre qui remplace l'ancienne table par matiere — voir
 		# `CWDecorRules.decor_allowed`.
@@ -446,7 +457,10 @@ func _build_cell(cx: int, cz: int) -> Array:
 		if choices.is_empty():
 			continue
 
-		var ground: int = floori(c.x) + 1
+		# Le sol est celui **d'apres** creusement (jalon 1.14) : sur la rive
+		# d'une mare, la colonne a ete tranchee de quelques blocs, et une plante
+		# posee a la hauteur brute du champ y flotterait.
+		var ground: int = prof.x + 1
 		if not _supported(x, z, ground):
 			continue
 

@@ -893,10 +893,19 @@ func _update_hud() -> void:
 	var p := camera.position
 	var wx: int = params.world_origin.x + roundi(p.x)
 	var wz: int = params.world_origin.y + roundi(p.z)
-	var c: Vector3 = generator.field().sample_column(wx, wz)
-	var biome: int = CWBiome.at(c.x, c.y, c.z, params.sea_level)
-	var surface: int = CWPalette.surface_of(biome, c.x - float(params.sea_level),
+	var sea: int = params.sea_level
+	var c4: Vector4 = generator.field().sample_column_full(wx, wz)
+	var c := Vector3(c4.x, c4.y, c4.z)
+	var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
+	var surface: int = CWPalette.surface_of(biome, c.x - float(sea),
 			c.y, c.z, wx, wz)
+	# Le sol annonce est celui **d'apres** creusement (jalon 1.14). Sans ceci,
+	# l'ATH annonce « sol 117 » au bord d'une mare dont le fond est a 111 :
+	# c'est l'instrument qui sert a viser les captures, il doit dire ce que le
+	# monde genere contient et non ce que le champ rendait avant l'etang.
+	var prof: Vector3i = CWTerrainField.column_profile(c.x, c4.w, sea)
+	surface = CWVoxelGenerator.pond_surface(surface, biome, prof,
+			CWTerrainField.pond_gate(c.x, c4.w, sea))
 
 	var busy: String = ""
 	if _search_status != "":
@@ -910,7 +919,8 @@ func _update_hud() -> void:
 		region = "   " + world_map.names().at(wx, wz)
 
 	var lines: Array[String] = [
-		"%d, %d   y %d  (sol %d)%s" % [wx, wz, roundi(p.y), roundi(c.x), region],
+		"%d, %d   y %d  (sol %d%s)%s" % [wx, wz, roundi(p.y), prof.x,
+			"" if prof.y > prof.z else ", eau %d" % prof.z, region],
 		"%s / %s   T %.2f (%.0f C)  H %.0f %%   %d ips%s" % [
 			CWBiome.name_of(biome), CWPalette.name_of(surface),
 			c.y, CWBiome.celsius(c.y), c.z * 100.0,
@@ -932,8 +942,9 @@ func _update_hud() -> void:
 			lines.append("element type %d%s   rayon %d   h %d   poids %.2f" % [
 				feat.type, "*" if feat.affects_height() else "",
 				roundi(feat.radius), roundi(feat.height), w])
-		lines.append("chenal %.3f   vue %d blocs%s   %d fils" % [
-			generator.field().channel_field(wx, wz),
+		lines.append("chenal %.4f%s   vue %d blocs%s   %d fils" % [
+			c4.w,
+			"  (etang)" if CWTerrainField.pond_gate(c.x, c4.w, sea) else "",
 			lod_view_distance if use_lod else view_distance,
 			("   LOD x%d" % lod_count) if use_lod else "",
 			_voxel_engine.get_thread_count() if _voxel_engine != null else 0])

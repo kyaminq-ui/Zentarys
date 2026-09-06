@@ -648,6 +648,14 @@ static func water_index(depth_below_sea: float) -> int:
 	return WATER_DEEP if depth_below_sea > 8.0 else WATER
 
 
+## Vrai pour les deux nuances d'eau. Les distinguer est une affaire de rendu ;
+## tout ce qui demande « est-ce mouille » — la dispersion, la regle de bloc —
+## veut les deux, et ecrire le couple a la main est la maniere de n'en garder
+## qu'une le jour ou une troisieme apparait.
+static func is_water(index: int) -> bool:
+	return index == WATER or index == WATER_DEEP
+
+
 ## Nom lisible d'un index de palette, pour les outils et l'ATH.
 static func name_of(index: int) -> String:
 	match index:
