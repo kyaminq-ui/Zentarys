@@ -42,17 +42,21 @@ blocs, une berge un bloc au-dessus de la surface, et rien dans les déserts.
 
 **Le relief a trois couches de plus**, posées par-dessus le champ d'altitude et
 jamais dedans — aucune n'est dans la source, et les trois en-têtes le disent.
-Les **massifs** : des masses de roche arrondies et irrégulières, cœur de pierre
-nue et frange enherbée, hautes d'une trentaine de blocs — et **qu'on peut
-gravir**, ce qui est un contrat mesuré et non une intention : jamais plus de deux
-blocs de marche d'une colonne à la suivante. Leurs **grottes** : des galeries
-brisées de soixante à quatre-vingts blocs, à bouche évasée sous un porche de
-roche, dont le plancher est l'altitude du sol à leur entrée — on n'a donc jamais
-à creuser pour y entrer. Et les **chemins**, qui relient les jalons d'une zone,
-se raccordent à ceux des voisines par des portes de frontière, se creusent
-toujours d'un bloc, percent les massifs en tunnels proportionnels à la masse
-traversée, et franchissent les rivières sur un **ouvrage dessiné à six voxels
-par bloc**.
+Les **massifs** : des masses de roche **délibérément déformées** — un contour
+plié par une déformation du domaine, une ellipse allongée, des lobes qui en font
+des objets à bras, un profil qui donne aux uns un dôme et aux autres un dessus
+plat sur des flancs qui tombent, et des **gradins** sur un massif sur deux. Cœur
+de pierre nue, frange enherbée, une quarantaine de blocs de haut. Ils ne
+s'escaladent pas partout, et c'est voulu : le contrat d'escalade qui les
+gouvernait a été retiré parce qu'il était ce qui les rendait ronds. Leurs
+**grottes** : des galeries brisées et traversantes de cent à cent cinquante
+blocs, à bouches évasées sous un porche de roche, dont le plancher est l'altitude
+du sol à leur entrée — on n'a donc jamais à creuser pour y entrer. Et les
+**chemins**, qui relient les jalons d'une zone, se raccordent à ceux des voisines
+par des portes de frontière, se creusent d'un bloc **sur toute leur largeur**,
+percent les massifs en tunnels proportionnels à la masse traversée, et
+franchissent les rivières sur une **levée** qui comble le lit plutôt que de
+l'enjamber.
 
 La **falaise** revient avec eux — c'est le premier système que ce dépôt retire
 puis rétablit —, et avec elle le **dégradé adouci** entre deux matières de

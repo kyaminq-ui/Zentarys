@@ -53,11 +53,15 @@ se cartographie, se boise et **porte ses lacs** :
 
 - **1.15**, les **massifs**, leurs **grottes**, et la falaise qui revient — une
   seconde nappe de matière posée par-dessus le champ d'altitude. **Fait le
-  2026-09-07**, et sa forme refaite le lendemain : les mesas à chapeau plat sont
-  devenues des masses arrondies qu'on peut gravir ;
-- **1.16**, les **chemins** et leurs **ponts** — le réseau qui relie les jalons
+  2026-09-07**, et sa forme refaite **deux fois** : les mesas à chapeau plat sont
+  devenues des masses arrondies qu'on peut gravir (2026-09-08), puis des masses
+  **délibérément infranchissables** — allongées, déformées, à gradins — le
+  2026-09-09, le contrat d'escalade ayant été retiré pour les obtenir ;
+- **1.16**, les **chemins** et leurs **levées** — le réseau qui relie les jalons
   d'une zone, posé en dernier, qui tranche la colonne, perce les surplombs et
-  jette un tablier sur les rivières. **Fait le 2026-09-07**.
+  **comble** les rivières. **Fait le 2026-09-07** ; le tablier de bois et son lot
+  d'ouvrages ont été retirés le 2026-09-09, *les ponts étant trop compliqués à
+  intégrer*.
 
 **Le jalon 1 a été clos le 2026-09-06 et rouvert le lendemain**, pour trois
 systèmes demandés en regardant le jeu d'origine à côté du nôtre. Ils ont ceci de
@@ -102,8 +106,8 @@ finition listée en dette technique, et les questions d'analyse pendantes de
 | 1.11 | **Arbres et grande végétation** | voie des entités, `docs/systems/02` §5.2 | ✅ | assets, dispersion, montage, et **le tronc écrit dans le terrain** ; reste la pose des filons, qui appartient à 2.6 |
 | 1.12 | **Les six biomes** | climat de 1.3 + biomes de l'alpha 2013 | ✅ | couche `CWBiome` au-dessus des matières, Lava Lands et ses coulées, **42 modèles de flore et 24 d'arbres regénérés** (la flore a été refaite le soir même : 38 modèles, à 4 voxels par bloc et 6 pour les petits props) |
 | 1.13 | **La falaise** | `terrain_surfaceColor_blend` @005c56e0, 5ᵉ branche | ✅ | portée puis **retirée** le 2026-09-06, **rétablie le 2026-09-07** une fois le relief taillé par 1.15, et cette fois **tramée** : 2,6 % des terres |
-| 1.15 | **Massifs, grottes, falaise** | — (création de ce projet) | ✅ | masses arrondies et **escaladables**, cœur de roche et frange enherbée, galeries brisées à bouche évasée sous leur porche ; **1,4 % des terres sous un massif** |
-| 1.16 | **Chemins et ponts** | — (création de ce projet) | ✅ | arbre couvrant par zone, portes de frontière partagées, tracé relaxé, chaussée **toujours en contrebas**, tunnels proportionnels à la masse, et un **lot d'ouvrages à 6 voxels par bloc** sur les tabliers |
+| 1.15 | **Massifs, grottes, falaise** | — (création de ce projet) | ✅ | masses **allongées, déformées et à gradins**, cœur de roche et frange enherbée, galeries brisées à bouche évasée sous leur porche ; **1,5 % des terres sous un massif** |
+| 1.16 | **Chemins et levées** | — (création de ce projet) | ✅ | arbre couvrant par zone, portes de frontière partagées, tracé relaxé, chaussée **creusée sur toute sa largeur**, tunnels proportionnels à la masse, et une **levée** qui comble la rivière au lieu de l'enjamber |
 | 1.14 | **Les lacs** | `WorldInfo_generateBiomeContent` @005e4850, seconde passe | ✅ | porte = chenaux à 0,02 ; niveau quantifié au pas de 5, rampe triangulaire, berges creusées. **1,90 % des terres en eau, 1,35 % en rive**, profondeur 1 à 4 blocs ; coût sous le bruit de mesure |
 
 ### 1.6 — Éléments de tuile (fait)
@@ -1389,6 +1393,13 @@ deux morceaux :
 
 #### La forme, refaite le lendemain : un massif, pas une mesa
 
+> ⚠️ **Cette section décrit la forme du 2026-09-08, qui a été remplacée le
+> 2026-09-09.** Elle est gardée parce que sa dernière ligne est celle qui a
+> décidé de la suivante : *le contrat d'escalade est ce qui rendait la masse
+> ronde*. La forme actuelle — déformation du domaine, ellipse tournée, lobes
+> angulaires, exposant de profil et gradins, sans aucun contrat de pente — est
+> en **`nextsteps.md` §7nonies.3**, avec ses mesures.
+
 La première version était un **chapeau plat sur un socle étroit** — une mesa au
 sens propre, sa paroi verticale et son porte-à-faux. Elle a tenu une journée.
 L'objection ne se discute pas : *le joueur doit pouvoir y monter*, et un chapeau
@@ -1450,10 +1461,10 @@ Mesuré sur 36 zones éloignées, graine 1337 :
 | dans une grotte | 0,182 % |
 | roche de pente (la falaise) | **2,59 %** |
 
-Rayon médian **73 blocs**, hauteur médiane **32 blocs**. Le porte-à-faux, lui,
-est tombé à zéro et c'est voulu : depuis la refonte du 2026-09-08 une masse
-rejoint le sol tangentiellement, et le seul endroit où de la roche surplombe
-encore du vide est le **porche** d'une grotte.
+Rayon médian **73 blocs**, hauteur médiane **32 blocs** — passée à **43** après
+la refonte du 2026-09-09, qui a retiré le plafond que le contrat d'escalade
+imposait. Le porte-à-faux, lui, est tombé à zéro et c'est voulu : le seul endroit
+où de la roche surplombe encore du vide est le **porche** d'une grotte.
 
 #### Les grottes : accessibles par construction, pas par réglage
 
@@ -1666,28 +1677,32 @@ jamais moins que six blocs, et **jamais au point de laisser moins de huit blocs
 de toit**. Sans la seconde, le chemin ne perce plus le massif — il le coupe en
 deux et laisse une tranchée à ciel ouvert là où on attendait une arche.
 
-#### Les ponts, et le lot d'ouvrages
+#### Les franchissements : d'un pont à une levée
 
-Sur l'eau, pas de tranchée : un **tablier** de bois deux blocs au-dessus de la
-surface libre. Le terrain et l'eau restent ce qu'ils sont et passent dessous.
-C'est la seule manière honnête de traverser une rivière — la combler ferait un
-barrage, et un barrage retient une eau que ce monde ne simule pas.
+**Il n'y a plus de pont depuis le 2026-09-09**, et ce qui suit décrit ce qui
+reste. La demande était directe — *les ponts sont trop compliqués à intégrer,
+remplacer par remplir le gap par le chemin* — et elle a retiré un système
+entier : le nœud de rendu `CWBridgeRenderer`, la travée à six voxels par bloc et
+son script Blender, le tablier de bois, le garde-corps, et la condition « y
+a-t-il un ouvrage ici » qu'il fallait porter jusqu'au générateur et jusqu'aux
+deux dispersions.
 
-Mais un tablier de matière est fait de blocs d'un mètre, et un ouvrage d'art fait
-de blocs d'un mètre est une planche posée sur l'eau. Le pont suit donc le
-**partage du jalon 1.11**, celui du tronc et du houppier :
+Ce qui reste tient en une phrase : **là où le chemin rencontre l'eau, il la
+comble.** Le remblai qui montait déjà à l'approche — la rampe d'accès du pont,
+fabriquée par le lissage du profil — ne redescend plus. C'est une **levée**, deux
+blocs au-dessus de la surface libre, et elle se termine par une rampe qui
+descend rejoindre le sol d'au plus un bloc tous les deux.
 
-- le **tablier** reste de la matière, un bloc d'épaisseur : c'est le sol sur
-  lequel on marchera, et qu'on pourra abattre ;
-- l'**ouvrage** — platelage, longerons, garde-corps, poteaux et leurs chapeaux —
-  est un modèle à **six voxels par bloc**, la grille la plus fine du projet,
-  instancié par `CWBridgeRenderer` le long du franchissement.
+> **Une levée est un barrage, et c'est dit en clair.** Ce monde ne simule pas
+> l'écoulement, donc rien ne monte derrière elle ; mais une rivière coupée reste
+> une rivière coupée. C'était l'argument qui avait fait choisir le pont le
+> 2026-09-07 — *« la combler ferait un barrage »* — et il est écarté
+> délibérément : un pont qui ne s'intègre pas coûte plus cher au paysage qu'une
+> rivière coupée.
 
-> **Le lacet est libre, et c'est le seul endroit du projet où on l'accepte.** La
-> flore et les arbres se posent au quart de tour, parce que leurs voxels doivent
-> rester alignés sur la grille du monde. Un pont suit une courbe : une travée
-> alignée au quart de tour le plus proche serait de travers une fois sur deux. À
-> six voxels par bloc, un platelage de biais se lit comme un platelage de biais.
+Le **relevé des franchissements** reste, et il ne sert plus à la même chose : il
+disait *où poser du bois*, il dit maintenant *où le chemin remblaie au lieu de
+creuser*. Détail complet et mesures en `nextsteps.md` §7nonies.2.
 
 Et une erreur de conception que seule la capture pouvait montrer :
 
@@ -1817,10 +1832,9 @@ sans valeur tant que les jalons 2 et 3 ne sont pas là.
 | Repérage d'un surplomb, d'un canyon, d'un chemin | ✅ | `tools/find_mesa.gd`, `tools/find_canyon.gd`, `tools/find_path.gd` : trois points de vue prêts à passer à `--ici` / `--vers` |
 | Viser une capture | ✅ | `--vers x z` oriente la caméra, `--altitude n` la lève. Sans les deux, une capture d'un objet posé à cent blocs est une capture de ce qui se trouvait dans l'autre sens |
 | Isoler une couche au chargement | ✅ | `--sans-surplombs`, `--sans-chemins`, `--sans-falaise`, comme `tile_features` avant elles |
-| Lot d'ouvrages (`assets/models/structures/`) | ✅ | `tools/blender/generer_ponts.py` : la travée de pont, à **6 voxels par bloc**, seul lot du projet à cette maille avec les petits props de flore |
-| Rendu des ouvrages | ✅ | `src/worldgen/cw_bridge_renderer.gd` : une instance multiple par franchissement, **lacet libre** |
+| Lot d'ouvrages (`assets/models/structures/`) | ➖ | **retiré le 2026-09-09** avec les ponts : la travée, son script Blender et son nœud de rendu. Les seuls modèles à 6 voxels par bloc sont désormais les petits props de flore |
 | Souder les massifs au terrain (talus) | ⬜ | le pied d'un massif rencontre l'herbe sans transition ; un éboulis lui donnerait son assise |
-| Piles de pont | ⬜ | sur une rivière de six blocs ça ne se voit pas ; sur un bras de mer, ça se verra |
+| Piles de pont | ➖ | sans objet : il n'y a plus de pont, mais une **levée** |
 | Collision des surplombs et des chemins | ✅ | gratuite : les deux sont de la **matière** dans les données du monde, comme le tronc depuis 1.11 |
 | Cache disque des dalles de carte | ⬜ | 43 ms la dalle, recalculée à chaque session ; l'original la compresse en base |
 | Inventaire des modèles `.vox` | ✅ | `tools/inspect_model.gd` : plages de palette, échelle par lot, et **compte de morceaux** |
@@ -2047,6 +2061,7 @@ de le résoudre.
 
 | Date | Fait |
 |---|---|
+| 2026-09-09 | **Les six points de la veille, puis trois demandes d'une seconde session de jeu.** (1) **L'assiette d'un objet.** Un modele etait pose sur la hauteur de sa colonne d'ancrage alors que son empreinte fait plusieurs blocs : des que le terrain descendait sous un bord, ce bord flottait. On sonde les **quatre coins** — vingt-cinq colonnes etaient hors de prix, la dispersion etant le second poste du chargement —, on ecarte le candidat au-dela de deux blocs d'ecart, et sinon on pose sur le **minimum** : de la matiere enfouie ne se voit pas, un vide sous un caillou se voit de loin. 392 plantes sur 2 403 sont concernees ; les arbres le paient toutes, leur tronc etant ecrit dans le terrain depuis 1.11. (2) **La chaussee n'etait creusee qu'au bord.** Mesure de la coupe transversale, du milieu vers l'exterieur : -0,26 -0,27 -0,26 -0,27 -0,25 -0,25 -0,32 -0,43 -0,67 -0,94 -1,00 — l'**inverse** d'une tranchee, une levre au contour et rien au centre, et 35,3 % des colonnes de chaussee en remblai. La cause etait un **ordre**, pas une borne manquante : on interpolait vers le profil puis on rabattait, et l'echappatoire ajoutee le matin meme pour la rampe d'un pont supprimait le rabattement une colonne sur trois. On calcule desormais l'altitude de la chaussee **d'abord**, et l'accotement interpole vers elle : -1,26 au centre, **100 %** des colonnes creusees. (3) **Les ponts sont retires**, *trop compliques a integrer* : partent le noeud de rendu, la travee a six voxels par bloc, son script Blender, le tablier, le garde-corps et l'option `--sans-ponts`. A la place, une **levee** — le remblai qui montait deja ne redescend plus. C'est un barrage, et c'est assume : ce monde ne simule pas l'ecoulement, et un pont qui ne s'integre pas coute plus cher au paysage qu'une riviere coupee. Le releve des franchissements reste et change d'office ; il porte maintenant deux **rampes** qui descendent jusqu'a rencontrer le sol, sans quoi la culee ressautait de 5 blocs. Et parce qu'un releve suit l'axe du trace et ne voit pas toutes les mares, `shaped_top` prend la surface libre de **sa** colonne : *le releve donne la rampe, la colonne donne le plancher*. Resultat sur 63 franchissements : marche maximale a la culee **1 bloc**, aucune culee qui ressaute, **aucune** colonne noyee sur 3 643. (4) **Les massifs cessent d'etre des domes**, et la parenthese de la demande — *ne plus tenir compte de l'escalade du personnage* — etait la condition. Le contrat d'escalade ne bornait pas un reglage, il bornait tout : la hauteur plafonnait a 0,54 du rayon pour lui, l'amplitude des bruits etait **rabattue** sur 24 massifs sur 99, et le profil etait au carre pour rejoindre le sol tangentiellement — ce qui *est* la definition d'un dome. Cinq leviers le remplacent, tires par massif : **deformation du domaine** (on deplace le point avant de le mesurer, ce qui plie le contour au lieu de le faire onduler), **ellipse tournee**, **lobes angulaires**, **exposant de profil** qui descend a 0,35 pour un dessus plat et des flancs qui tombent, et des **gradins** de trois a neuf blocs sur un massif sur deux. L'amplitude d'un lobe ne se lit pas comme un rayon — elle s'ajoute a `1 - u²`, donc 0,34 ne deplacait le contour que de 16 % et les silhouettes restaient des patates ; a 0,80 le golfe est a -55 %. Le rejet rapide teste desormais **l'ellipse** et non son cercle circonscrit, qui vaut `stretch²` fois son aire : la couche coute **29,7 us/colonne contre 32,6**, donc la forme est plus riche et ne coute pas plus cher. Trois regressions que seule cette forme pouvait reveler : les sondages radiaux du contour partaient de `1,15 x rayon` quand le contour va maintenant a `2,3 x rayon`, donc ils commencaient **dans** la masse et aucune galerie n'etait plus posee ; le seuil d'une galerie pouvait tomber **dans un golfe** entre deux bras, ou elle s'ouvrait sur un couloir ferme ; et la condition de debouche se testait en flottants contre `h0 + 0,5` alors que le plancher d'une galerie vaut `plancher(h0) + 1` — un terrain a `h0 + 0,45` passait et bouchait la sortie. Graine 1337 : hauteur mediane **32 -> 43 blocs**, rapport du contour **2,34**, 21 massifs sur 74 a dessus plat, 36 a gradins. **409 verifications, 0 echec.** |
 | 2026-09-08 | **Seconde passe sur les trois couches, sur six reproches faits en jeu.** (1) **Plusieurs teintes par matiere**, et c'est ce qui manquait au degrade : deux couleurs ne font pas un fondu au bloc pres, elles font un damier. Depuis le jalon 1.9, un voxel porte son **type** dans un canal et sa **couleur** dans l'autre, et le second est une couleur libre — rien n'oblige deux blocs d'herbe a etre de la meme teinte. Une prairie prend donc trois tons, et une frontiere cinq marches de fondu, pendant que le type, lui, bascule d'un coup. Le facteur de fondu est tire du **meme bruit** que le type, sans quoi le damier et le degrade se dephasent. Consequence sur un contrat ancien : la couleur d'un voxel n'est plus *exactement* celle de son type, et la verification demande desormais qu'elle en reste une **nuance plausible**. (2) **Les surplombs deviennent des massifs.** Le chapeau sur socle a tenu une journee : *le joueur doit pouvoir y monter*, et un chapeau qui deborde de son socle est fait pour qu'on ne le puisse pas. La forme est un dome deforme par deux bruits qui retombe a zero sur son contour. Trois choses la rendent gravissable, et les trois ont ete trouvees en mesurant : la hauteur se compte **depuis le sol de sa colonne** — la mesurer depuis le centre laissait une marche de **douze blocs** sur tout le contour —, le profil est **au carre**, ce qui annule la pente au raccord, et les frequences des deux bruits sont **relatives au rayon**, faute de quoi une grosse masse prend dix lobes et une petite un demi. Contrat mesure, pas suppose : vingt-quatre rayons balayes, **deux blocs** de marche maximum, et deux est le minimum atteignable. Et parce qu'un massif tout vert est une colline et non un relief, sa matiere se decide sur son **epaisseur** : herbe sur la frange, roche nue au coeur. (3) **Les grottes** : galeries de 55 a 130 % du rayon contre un tiers — **67 blocs** pour la plus courte —, axe **brise** de deux a quatre coudes, bouche **evasee** et **porche** de roche au-dessus. Deux defauts d'acces attrapes par la meme verification : partir de la premiere colonne epaisse emmurait le tube derriere le flanc, et *sortir de la masse ne suffit pas a voir le ciel* — un massif au pied d'un versant a des cotes ou le terrain remonte, donc la direction se **choisit** parmi huit. (4) **Les chemins** sont **toujours creuses d'un bloc** — c'est ce qui leur donne leur berge et leur ombre — et leur demi-chaussee passe de 3 a 4,5 blocs. (5) **Le degagement d'un tunnel est proportionnel a la masse traversee**, 55 %, avec un **toit d'au moins huit blocs** : sans lui, le chemin ne perce plus le massif, il le coupe en deux. (6) **Le lot d'ouvrages**, a **six voxels par bloc** : le tablier reste de la matiere — c'est le sol sur lequel on marchera — et l'ouvrage (platelage, longerons, garde-corps, poteaux) devient un modele instancie, avec un **lacet libre**, seul endroit du projet ou la grille d'un modele n'est pas alignee sur celle du monde. Une erreur de conception en chemin : *le profil d'un chemin ne voit pas les rivieres*, il pose un jalon tous les 32 blocs quand une riviere en fait six de large, et le premier releve n'a trouve aucun des ponts qu'on voyait en jeu. On raffine la ou le champ de chenaux dit qu'il peut y avoir de l'eau, soit moins d'un segment sur dix. **377 verifications, 0 echec.** Cout : 24,1 s les trois couches eteintes, **28,5 s** allumees. |
 | 2026-09-07 | **Trois couches par-dessus le champ : les surplombs, leurs grottes, les chemins et leurs ponts — et la falaise qui revient.** Aucune n'est dans la source, les trois en-tetes le disent, et le jalon 1 a donc ete rouvert le lendemain de sa cloture. (1) **Les surplombs.** Une seconde nappe de matiere posee au-dessus du champ d'altitude, jamais dedans : un chapeau plat sur un disque deforme, dont le bord est une paroi verticale de 8 a 31 blocs, et un socle qui s'arrete avant lui. Jusqu'a **64 blocs de vide** sous un chapeau ; 2,04 % des terres sous un chapeau, 0,40 % en porte-a-faux. Trois formes — butte une fois sur deux, surplomb une sur trois, champignon une sur six —, parce qu'un seul profil rendait vingt champignons identiques. Ou ils sont : un bruit tres basse frequence donne au monde des **pays de canyons** et, entre eux, des buttes isolees. (2) **Les grottes**, et leur garantie est geometrique : l'entree est prise **sous le chapeau**, la ou il n'y a deja pas de matiere, et le plancher du tube est l'altitude du sol a cette entree — on entre de plain-pied dans un trou qui donne dehors. Une sur six traverse le socle : c'est l'arche. La verification le constate **sur le monde genere**, pas sur la regle. (3) **La falaise revient**, et c'est le premier systeme que ce depot retire puis retablit. Les deux raisons de son echec sont levees : la roche n'est plus seule — c'est la matiere des parois qui la dominent — et **la frontiere est tramee**. Reglage refait en capture : *a seuil bas, la roche de pente dessine des courbes de niveau*, parce que la pente d'un champ lisse est un champ lisse dont les valeurs fortes suivent les lignes de niveau ; `CLIFF_SLOPE_LO` passe de 0,22 a 0,34 et la roche tombe a 2,6 % des terres. (4) **Le degrade adouci**, demande explicitement : un **tramage** a deux frequences, et c'est la seconde qui travaille — 88,2 % d'accord entre colonnes voisines a mi-transition, donc des plaques et non du poivre-et-sel. **Quatre** frontieres l'emploient, dont la plus grande du monde : celle entre deux biomes, ou l'on ne trame pas deux matieres mais ou l'on **brouille le climat avant de le comparer aux seuils** — un desert et une prairie s'interpenetrent desormais sur une trentaine de blocs, et le biome *nomme*, lui, ne bouge pas. (5) **Les chemins.** Arbre couvrant sur les jalons d'une zone, quatre **portes** de frontiere dont la position est une fonction pure de la frontiere — donc identique des deux cotes sans qu'aucune zone ne lise l'autre —, trace relaxe en six passes qui contourne le relief. Le chemin est pose **en dernier** : il tranche la colonne, efface six blocs au-dessus (d'ou les **tunnels** dans les socles de surplomb) et jette un **tablier de bois** sur l'eau plutot que de la combler. La seule erreur de conception du jalon, vue en capture : *chercher un itineraire et epouser un sol ne se font pas a la meme echelle* — un jalon tous les 192 blocs faisait de l'altitude une corde, et le terrain bombait de seize blocs au-dessus d'elle. Deux mailles, 256 et 32, plus un bornage repris colonne par colonne. (6) **Ce que les deux dispersions ont du apprendre** : rien ne pousse sur la chaussee, l'accotement suit le terrain remodele, et ce qui pousse au-dessus d'un surplomb pousse **sur son chapeau**. (7) **Cout : +13 % de chargement** (22,2 a 25,1 s a 384 blocs de vue), dont 1,8 s pour la seule falaise — sa pente demande une colonne de plus sur chaque axe de l'empreinte. Trois bascules `overhangs` / `road_network` / `cliff_slope` isolent les trois couches, comme `tile_features` avant elles. `sample_column` n'a pas bouge. **377 verifications, 0 echec**, dont une suite nouvelle, `tests/relief_test.gd`. Vu en jeu sur une mesa, une entree de grotte, un chemin, un pont et un tunnel. |
 | 2026-09-06 (soir, 4) | **Cinq corrections vues en jeu : le marais, les provinces climatiques, et trois sur l'eau.** (1) **Le marais n'est plus une matiere de biome.** C'etait la derniere frange d'humidite, au-dessus de 0,92 en Jungles, et elle avait survecu aux deux retraits du matin parce qu'elle *portait* quelque chose — le roseau pousse sur ce bloc et sur aucun autre. Ce qui l'a emporte est autre chose : *une Jungles annoncee « jungle » sur un sol de marais dit deux choses a la fois*, exactement comme l'herbe seche de Greenlands. **Le marais n'a pas disparu du monde** — il est devenu la matiere de **rive** des cours d'eau, ou un roseau se tient : il passe de 6,5 % du monde a 0,1 %, et d'une frange de climat a un lieu. (2) **Les provinces climatiques**, et c'est une creation de ce projet : la source tire le climat d'une zone independamment de ses voisines et prend un extreme une fois sur deux, d'ou *une Snowlands contre un desert*. Un bruit basse frequence sur la grille de zones decide desormais quel extreme et **a quel point** — au coeur d'une province l'extreme est celui de la source, au bord il glisse vers le tempere. La seconde moitie est celle qui compte : ne prendre que le signe aurait laisse une couture franche entre deux provinces, c'est-a-dire le meme defaut plus rare. **Le relief est identique au bloc pres** — `base_height` sort d'un bruit et tous les tirages du LCG sont conserves, `rng.coin()` etant toujours appele et sa valeur ignoree ; l'ocean rend 12 108 colonnes avant comme apres. Mesure : Deserts de **1,2 a 13,9 % des terres**, Snowlands de 35,8 a 13,9, Greenlands de 49,5 a 57,7 ; le **coin froid-sec du climat passe de 17,98 % a 0,00 %**, et les paires neige/desert a 4 096 unites de 6 a **0**. `biome_stats` porte la mesure de voisinage, a 4 096 unites et non a 256 — a 256 deux sondages tombent dans le meme climat et la mesure rendait zero avant comme apres. (3) **L'eau descend d'un bloc sous la rive.** A ras bord elle ne se lisait pas comme de l'eau mais comme une matiere bleue posee a plat. (4) **Les rivieres sont continues, et finissent en lacs.** Le decoupage venait de la rampe triangulaire, qui ne laissait passer l'eau que sur 60 % d'un palier : elle garde le **fond** et perd la **presence**. Et le seuil du chenal n'est plus constant — 0,02 en altitude, **0,055 au ras de la mer** : un reseau de chenaux ne dit pas ou est un bassin, mais il dit l'altitude, et *une riviere qui s'elargit en descendant est ce qu'on voit d'un bassin*. Fenetre de 64 blocs autour d'un point bas : **27 % d'eau**. (5) **Ni Deserts ni Lava Lands n'ont d'eau de surface**, ce qui n'est pas dans la source — elle n'a pas de biomes — mais se defend seul. **Consequence a laquelle il a fallu repondre** : l'eau partout dans la porte faisait disparaitre la rive, donc le sol humide, donc le roseau. La rive redevient la **bande exterieure du lit** (`POND_WATER_FRAC`), continue le long du cours d'eau la ou celle de la source apparaissait par plaques. Eau 2,77 % des terres, rive 0,58 %. **346 verifications, 0 echec**, cout inchange (mediane de cinq passes, 76,1 us). Vu en jeu sur une riviere de Greenlands et sur un desert. |
