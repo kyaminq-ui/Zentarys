@@ -13,17 +13,40 @@ invariants, les pièges, les décisions ouvertes.
 
 ---
 
-## 0. La prochaine session — **cinq demandes, 2026-09-10 au soir**
+## 0. Ce qui reste — **au 2026-09-11 au soir**
 
-> **Les n° 1 à 4 sont faites (2026-09-11). La n° 5 est écrite et prête à
-> compiler, mais elle ne compile pas sur cette machine : le SDK Windows n'y est
-> pas installé. Voir §5 pour la commande qui manque.**
-> Le programme précédent — les quatre demandes du 2026-09-09 — est entièrement
-> traité ; ce qu'il a rendu est plus bas, et le récit est dans le journal de
-> `docs/ROADMAP.md`.
+Le programme des cinq demandes du 2026-09-10 est traité ; le compte rendu de
+chacune est plus bas, dans son ordre d'origine. **Ce qui n'est pas fermé tient
+en six lignes**, et aucune n'est bloquante :
+
+| ce qui reste | où | pourquoi ça n'est pas fait |
+|---|---|---|
+| **compiler la GDExtension** | §5 | le SDK Windows n'est pas installé sur cette machine. Une commande, et c'est une modification de la machine, pas du projet |
+| **la collision des cactus** | §2 | ils sont à 4 voxels par bloc : inestampables. Ils veulent une **forme de physique**, et c'est le jalon 3.1 |
+| **la saccade au chargement** | §4 | affaire de latence, pas de débit. Aucune mesure ne la voit ; elle se juge manette en main |
+| **les quatre fichiers à mille lignes** | plus bas | la démo est rangée, le générateur pas encore |
+| **la falaise vaut-elle 12 % du chargement ?** | plus bas | ça se tranche à l'œil, pas au banc |
+| **2.6, l'apparition** | plus bas | la porte du jalon 2. Elle n'attend rien |
+
+Et deux choses que la session a ouvertes en passant, sans les fermer :
+
+* **la roche nue est passée de 0,3 % à 2,8 % du monde** — effet du niveau de la
+  mer qui descend de soixante blocs, les règles de surface étant exprimées en
+  altitude *au-dessus de la mer*. Vu en capture, ça lit comme la calotte d'un
+  volcan et c'est gardé ; le remède, s'il en faut un, est `CWPalette.ROCK_MIN`
+  et non les seuils de biome (§3) ;
+* **les cinq modèles d'arbre entiers ont perdu leur gigue de taille** — deux
+  pins, un sapin, l'arbre épineux et le rocher géant sortent tous à la même
+  taille depuis qu'ils sont de la matière. La variété devra venir de variantes
+  de modèles (§2).
+
+---
+
+## 0ter. Le programme des cinq demandes, et ce qu'il a rendu
 
 L'ordre ci-dessous est celui d'exécution, et il est celui qui a été demandé : le
-C++ vient en dernier et **seulement si le maillage ne suffit pas**.
+C++ venait en dernier et **seulement si le maillage ne suffisait pas**. Il ne
+suffisait pas — c'est la mesure de la n° 4 qui l'a dit.
 
 ---
 
@@ -371,7 +394,9 @@ native\build.bat template_release
   n° 5 demande `(2 × distance / 16)²` entrées ; à 1 024 blocs de vue on est
   **exactement** au plafond de 16 384. Au-delà, le cache s'auto-évince en boucle
   et le chargement s'effondre **sans rien signaler**. À relever avant d'augmenter
-  la distance, ce qui est l'objectif affiché ;
+  la distance, ce qui est l'objectif affiché — et le prix est maintenant chiffré
+  et non plus estimé : **6,4 Ko l'entrée**, donc 105 Mo au plafond actuel et
+  autant par doublement (§4, `CWVoxelGenerator.PATCH_BYTES`) ;
 - **2.6, l'apparition** — la porte du jalon 2. Elle n'attend rien.
 
 ---
