@@ -15,9 +15,24 @@ invariants, les pièges, les décisions ouvertes.
 
 ## 0. La prochaine session
 
-> **Programme du 2026-09-09 au soir, quatre demandes.** La première est faite, la
-> quatrième l'est à moitié. Ce qui reste est ci-dessous, dans l'ordre d'exécution
-> recommandé — qui n'est pas celui où elles ont été formulées.
+> **Le programme du 2026-09-09 au soir — quatre demandes — est traité.** Le
+> détail est ci-dessous ; ce qui reste ouvert tient en trois points, et le
+> premier est une décision qui n'appartient pas au code :
+>
+> 1. **le C++, à décider.** La mesure dit que la cible existe et qu'elle est
+>    unique — `CWValueNoise.sample`, la moitié du temps de génération. Elle dit
+>    aussi ce qu'on peut en attendre : **un facteur deux**, pas un facteur dix.
+>    En face, le dépôt gagne une chaîne de compilation et une bibliothèque par
+>    plate-forme, contre un moteur qui est un build personnalisé. *C'est le
+>    genre d'arbitrage qu'on ne prend pas seul* ;
+> 2. **les quatre fichiers de `worldgen` à mille lignes.** La démo est rangée —
+>    1 147 → 962 —, le générateur pas encore ;
+> 3. **la falaise vaut-elle 12 % du chargement ?** Elle en coûte autant, et
+>    depuis le retrait des massifs elle n'a plus de paroi à raconter. C'est une
+>    question qui se tranche à l'œil, pas au banc.
+>
+> Et les deux portes d'avant, inchangées : la **collision** objet par objet, et
+> **2.6, l'apparition**, qui ouvre le jalon 2.
 
 ### Ce qui a été fait le 2026-09-10
 
@@ -51,7 +66,7 @@ d'authoring dans `docs/ASSETS.md`, et `CLAUDE.md` existe.
 
 ---
 
-### 1. Ce qui reste du n° 4 — le code
+### 1. Le n° 4 — le rangement du code, à moitié fait
 
 *Correction des potentiels bugs et erreurs, nettoyage du projet, le rendre plus
 modulaire et facile à maintenir.*
