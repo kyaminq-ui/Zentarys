@@ -380,9 +380,7 @@ func _build_cell(cx: int, cz: int) -> Array:
 		var prof: Vector3i = CWTerrainField.column_profile(
 				col.x, col.w, sea, biome_c)
 		var surface: int = CWPalette.surface_of(
-				CWBiome.at_dithered(col.x, col.y, col.z, sea, x, z,
-						CWBiome.fringe_amplitude(_field.climate_gradient(x, z))),
-				col.x - float(sea), col.y, col.z, x, z)
+				_field.fringe_biome(x, z, col.x), col.x - float(sea), x, z)
 		# Un arbre les pieds dans l'eau n'existe pas ici : le sol humide est
 		# une matiere a part, au-dessus du niveau de la mer.
 		if col.x < float(sea):
@@ -409,7 +407,7 @@ func _build_cell(cx: int, cz: int) -> Array:
 					CWPathNetwork.causeway_at(road_zone, float(x),
 							float(z)),
 					CWTerrainField.free_water(prof, sea))
-		surface = CWVoxelGenerator.pond_surface(surface, biome_c, prof,
+		surface = CWVoxelGenerator.pond_surface(surface, prof,
 				CWTerrainField.pond_gate(col.x, col.w, sea, biome_c))
 		# La matiere exacte du point est verifiee, comme pour la flore : le
 		# biome dit ou l'on est, la matiere dit si ca porte quelque chose. Un

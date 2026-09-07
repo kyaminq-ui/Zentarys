@@ -221,40 +221,33 @@ const RANGE_BUILD_END: int = 239
 const RANGE_FX_BEGIN: int = 240
 const RANGE_FX_END: int = 255
 
-## Altitude au-dessus du niveau de la mer a partir de laquelle une colonne est
-## consideree comme un sommet. Depend du climat : il neige plus bas au froid.
-##
-## **Ces trois constantes ne servent plus qu'a Lava Lands depuis le 2026-09-06.**
-## Elles decidaient les deux bandes d'altitude — roche nue, puis neige de sommet
-## — qui traversaient tous les biomes ; ces bandes sont retirees, parce qu'elles
-## ne portaient aucun decor et rendaient un plateau nu au sommet de chaque relief
-## (voir la note de `surface_of`). Lava Lands s'en sert encore pour separer sa
-## croute de scorie de la roche de ses hauteurs, ce qui est une regle de volcan
-## et non une regle d'altitude — d'ou le nom local `lava_rock`.
-##
-## **La falaise a ete portee le 2026-09-06 et retiree le lendemain**, et il faut
-## savoir pourquoi avant de la reecrire : la regle de la source est juste, la
-## pente etait mesuree et non devinee, les tests passaient — et le rendu en jeu
-## ne valait pas la peine. Une paroi grise sur un flanc vert lit comme une
-## tache, pas comme une falaise, parce que ce monde n'a pas de parois : son plus
-## grand denivele d'un bloc au suivant est de 0,65 bloc, et de la roche posee
-## sur un flanc a vingt-sept degres ne ressemble pas a de la roche. Le detail de
-## la mesure est en `nextsteps.md`, Sec. 7ter.4 ; ce qu'elle dit est qu'une
-## falaise de ce monde devra d'abord etre **taillee dans le relief** avant
-## d'etre peinte, et que la peindre seule ne suffit pas.
-const SNOW_LINE_BASE: float = 40.0
-const SNOW_LINE_SPAN: float = 360.0
-## Epaisseur de roche nue juste sous la ligne de neige.
-const ROCK_BAND: float = 55.0
-## Altitude sous laquelle il n'y a jamais de roche nue, quelle que soit la
-## ligne de neige. Sans ce plancher, un biome froid — ou la ligne de neige
-## tombe a 80 blocs — se couvrait de roche des la vingtieme marche : une
-## Snowlands y etait un anneau de caillou gris entre la plage et la neige.
-## Mesure a l'appui : la roche occupait 14,7 % du monde avant ce plancher, et
-## la toundra 3 colonnes sur 49 152.
-const ROCK_MIN: float = 90.0
-## Hauteur de la plage au-dessus du niveau de la mer.
-const BEACH_BAND: float = 3.0
+# -- Les bandes d'altitude sont toutes tombees --------------------------------
+#
+# Il y en a eu quatre, et il n'en reste aucune. La roche nue et la neige de
+# sommet sont parties le 2026-09-06 parce qu'elles ne **portaient** rien : voir
+# la note de `surface_shaded`. La bande de roche des hauteurs de Lava Lands et
+# la plage sont parties le 2026-09-12, et c'est la meme regle poussee jusqu'au
+# bout — *un biome, une matiere*, sans exception d'altitude.
+#
+# **La bande de roche de Lava Lands est celle qui a rendu la decision facile.**
+# Elle etait exprimee en altitude *au-dessus de la mer* ; quand le niveau de la
+# mer est descendu de soixante blocs le 2026-09-11, elle a triple d'elle-meme,
+# de 0,3 % a 2,8 % du monde. Une regle qui change de taille parce qu'une autre
+# couche a bouge n'est pas une regle de volcan, c'est un effet de bord.
+#
+# **La plage est partie avec elle, et c'etait une decision, pas une deduction.**
+# Le fichier plaidait pour elle — *une matiere qui vaut la peine est celle qui
+# nomme un endroit* —, et le rivage en est un. Ce qui l'a emporte est qu'une
+# plage de sable dans une Greenlands, une Snowlands et une Jungles fait dire
+# trois fois la meme chose a trois pays differents : le rivage devient le seul
+# endroit du monde ou les biomes se ressemblent. Depuis, une Snowlands se
+# termine dans l'eau en neige, une Jungles en herbe de jungle, et c'est le
+# rivage qui dit de quel pays on part.
+#
+# Ne reste, hors la matiere de plaine, que **la falaise** : elle est une regle
+# de *pente* et non d'altitude, et c'est la seule qui survit a la question
+# « qu'est-ce que cette bande ajoute que le biome ne dise deja ». Voir
+# `CLIFF_SLOPE_LO`.
 
 # -- Le degrade adouci entre deux matieres de surface -------------------------
 #
@@ -288,10 +281,6 @@ const BLEND_OFFSET_Z: float = 87431.0
 const BLEND_OFFSET2_X: float = 12907.0
 const BLEND_OFFSET2_Z: float = 43391.0
 
-## Largeur de la transition plage <-> matiere de plaine, en blocs d'altitude.
-## Centree sur `BEACH_BAND` : la plage pure s'arrete un demi-largeur plus bas,
-## la plaine pure commence un demi-largeur plus haut.
-const BEACH_BLEND: float = 5.0
 
 # -- Plusieurs teintes par matiere --------------------------------------------
 #
@@ -830,14 +819,13 @@ static func lava_flow(x: int, z: int) -> bool:
 ## cette confusion qui faisait de la roche d'altitude et du fond marin des
 ## « biomes » a part entiere.
 ##
-## Il ne reste **qu'une bande d'altitude** avant la matiere de plaine : la
-## plage. La roche nue et la neige de sommet sont tombees le 2026-09-06 (voir
-## la note plus bas), et Lava Lands refuse la plage — il n'y a pas de rivage
-## dans un volcan.
-##
-static func surface_of(biome: int, above: float, temperature: float,
-		humidity: float, x: int, z: int, slope: float = 0.0) -> int:
-	return surface_shaded(biome, above, temperature, humidity, x, z, slope).x
+## **Il ne reste aucune bande d'altitude** depuis le 2026-09-12 : un biome rend
+## sa matiere du bord de l'eau au sommet. `above` ne sert donc plus qu'a Lava
+## Lands, dont les cuvettes se remplissent de magma — et c'est une regle de
+## volcan, pas d'altitude.
+static func surface_of(biome: int, above: float, x: int, z: int,
+		slope: float = 0.0) -> int:
+	return surface_shaded(biome, above, x, z, slope).x
 
 
 ## La matiere de surface **et sa teinte** : `Vector2i(type, couleur brute)`.
@@ -845,86 +833,69 @@ static func surface_of(biome: int, above: float, temperature: float,
 ## C'est la fonction complete ; `surface_of` n'en garde que la matiere, pour les
 ## trente consommateurs qui raisonnent en blocs et se moquent de la couleur. Le
 ## generateur, lui, prend les deux : c'est ce qui permet a une prairie d'avoir
-## trois verts et a une plage de fondre en cinq marches. Voir `SHADE_STEPS`.
-static func surface_shaded(biome: int, above: float, temperature: float,
-		humidity: float, x: int, z: int, slope: float = 0.0) -> Vector2i:
+## trois verts et a une falaise de fondre en cinq marches. Voir `SHADE_STEPS`.
+static func surface_shaded(biome: int, above: float, x: int, z: int,
+		slope: float = 0.0) -> Vector2i:
 	if biome == CWBiome.OCEANS:
-		# Fond marin : sable pres du rivage, gravier en profondeur. La
-		# transition se fait sur douze blocs de fond, ce qui est large : c'est
-		# la seule qu'on voit a travers l'eau.
-		var tf: float = clampf((-above - 8.0) / 8.0, 0.0, 1.0)
-		return blended_shaded(SAND, GRAVEL, tf, x, z)
+		# **Du gravier, sur tout le fond.** Il y avait un haut-fond de sable
+		# fondu en gravier sur douze blocs de profondeur, et c'etait la seule
+		# transition de matiere qu'on voyait *a travers l'eau*. Elle est partie
+		# le 2026-09-12 avec la plage, et pour la meme raison : elle mettait du
+		# sable de desert au pied d'une Snowlands.
+		return Vector2i(GRAVEL, toned(raw_of(GRAVEL), x, z))
 
 	if biome == CWBiome.LAVALANDS:
+		# Les deux matieres du volcan, et il n'y en a plus de troisieme : la
+		# roche des hauteurs est partie le 2026-09-12 (voir la note des bandes
+		# d'altitude). Ce qui decide n'est jamais l'altitude seule — c'est la
+		# cuvette, ou la coulee.
 		if above < MAGMA_LEVEL or lava_flow(x, z):
 			return Vector2i(MAGMA, toned(raw_of(MAGMA), x, z))
-		var lava_rock: float = SNOW_LINE_BASE + temperature * SNOW_LINE_SPAN
-		var seuil: float = maxf(lava_rock - ROCK_BAND, ROCK_MIN)
-		return blended_shaded(SCORIA, STONE,
-				clampf((above - seuil) / 24.0 + 0.5, 0.0, 1.0), x, z)
+		return Vector2i(SCORIA, toned(raw_of(SCORIA), x, z))
 
 	var plain: int = _plain_of(biome)
 
-	if above <= BEACH_BAND + BEACH_BLEND * 0.5:
-		# Le rivage d'une Snowlands est gele, pas sableux. C'est la **seule**
-		# bande d'altitude qui reste (voir ci-dessous), et elle reste parce
-		# qu'un rivage est un lieu et non une nuance : on y aborde, on y pose
-		# un village, et le sable y dit quelque chose que le biome ne dit pas.
-		#
-		# **Elle ne se termine plus par un trait.** Le haut de plage se trame
-		# avec la matiere de plaine sur `BEACH_BLEND` blocs d'altitude : des
-		# langues de sable remontent dans l'herbe, des ilots d'herbe descendent
-		# dans le sable, et le rivage cesse d'etre une courbe de niveau.
-		var beach: int = SNOW if biome == CWBiome.SNOWLANDS else SAND
-		var tb: float = (above - (BEACH_BAND - BEACH_BLEND * 0.5)) / BEACH_BLEND
-		return blended_shaded(beach, plain, tb, x, z)
-
 	# La falaise : de la roche sur les flancs raides, tramee de bas en haut.
-	# Voir `CLIFF_SLOPE_LO`. Une pente nulle sort ici sans echantillonner.
+	# C'est la **seule** matiere qui ne soit pas celle du biome, et la seule
+	# regle de surface qui ne regarde pas l'altitude. Une pente nulle sort ici
+	# sans echantillonner.
 	if slope > CLIFF_SLOPE_LO:
 		var tc: float = (slope - CLIFF_SLOPE_LO) / (CLIFF_SLOPE_HI - CLIFF_SLOPE_LO)
 		return blended_shaded(plain, STONE, tc, x, z)
 
 	# -- Un biome, une matiere. C'est tout ----------------------------------
 	#
-	# Deux retraits, le meme jour, et c'est la meme erreur prise par deux bouts.
+	# Trois retraits, en trois fois, et c'est chaque fois la meme erreur prise
+	# par un bout different.
 	#
 	# **Les franges d'humidite** — l'herbe seche de Greenlands, la toundra de
-	# Snowlands — etaient un reste du systeme d'avant le jalon 1.12, ou « biome »
-	# voulait dire « matiere de bloc » et ou il en fallait neuf pour dire six.
-	# Depuis que `CWBiome` classe le climat, une seconde matiere de plaine ne dit
-	# rien que le biome ne dise deja ; en jeu elle disait meme le contraire, une
-	# prairie annoncee « Greenlands » avec un sol kaki de steppe.
+	# Snowlands, le marais de Jungles — etaient un reste du systeme d'avant le
+	# jalon 1.12, ou « biome » voulait dire « matiere de bloc » et ou il en
+	# fallait neuf pour dire six. Depuis que `CWBiome` classe le climat, une
+	# seconde matiere de plaine ne dit rien que le biome ne dise deja ; en jeu
+	# elle disait meme le contraire, une prairie annoncee « Greenlands » avec
+	# un sol kaki de steppe.
 	#
-	# **Les bandes d'altitude** — roche nue au-dessus d'un seuil, neige de sommet
-	# au-dessus d'un autre — sont tombees ensuite, et pour une raison qui n'est
-	# pas la meme : elles ne se contredisaient pas, elles ne **portaient rien**.
+	# **Les bandes d'altitude** — roche nue, neige de sommet, roche des hauteurs
+	# de Lava Lands — sont tombees ensuite, et pour une raison qui n'est pas la
+	# meme : elles ne se contredisaient pas, elles ne **portaient rien**.
 	# `CWDecorRules.decor_allowed` refuse le decor sur la roche et sur la neige
 	# hors Snowlands, si bien que chaque relief un peu haut d'une Greenlands
 	# rendait une calotte nue, sans une plante, sans un arbre — un plateau gris
 	# ou l'on marchait sans rien rencontrer. Une matiere qui ne porte rien n'est
 	# pas un sous-biome, c'est un trou dans le monde.
 	#
-	# Ce qui les rendait defendables etait un raisonnement de vraisemblance :
-	# une montagne a de la roche et de la neige. Il tenait tant qu'on regardait
-	# une carte de hauteurs ; il ne tient plus des qu'on marche dessus.
+	# **La plage et le haut-fond** sont partis le 2026-09-12, et ceux-la se
+	# defendaient : ils nommaient un endroit. Ce qui les a emportes est qu'ils
+	# le nommaient **de la meme facon dans trois pays** — voir la note des
+	# bandes d'altitude.
 	#
-	# **La derniere frange d'humidite est tombee le 2026-09-06 au soir** : le
-	# marais etait une seconde matiere de Jungles, au-dessus de 0,92 d'humidite,
-	# et il avait survecu aux deux retraits du matin parce qu'il **portait**
-	# quelque chose — le roseau pousse sur ce bloc et sur aucun autre. Ce qui l'a
-	# emporte est autre chose : *une Jungles annoncee « jungle » avec un sol de
-	# marais dit deux choses a la fois*, exactement comme l'herbe seche de
-	# Greenlands. Un biome, une matiere de plaine, sans exception.
+	# Ce qui les rendait tous defendables etait un raisonnement de
+	# vraisemblance : une montagne a de la roche, un rivage a du sable. Il tient
+	# tant qu'on regarde une carte ; il ne tient plus des qu'on marche dessus.
 	#
-	# **Le marais n'a pas disparu du monde pour autant** : il est devenu la
-	# matiere de **rive** des plans d'eau (jalon 1.14), ce qui est l'endroit ou
-	# un roseau se tient. Il est passe d'une frange de climat a un lieu, et c'est
-	# la meme lecon qu'a la plage — une matiere qui vaut la peine est celle qui
-	# nomme un endroit, pas celle qui nuance un gradient.
-	#
-	# Restent donc : la matiere du biome, la plage, et le cas de Lava Lands qui
-	# a sa propre regle plus haut — la sienne decrit un volcan, pas une altitude.
+	# Restent donc : la matiere du biome, la falaise qui est une pente, et le
+	# cas de Lava Lands qui a sa propre regle plus haut.
 	return Vector2i(plain, toned(raw_of(plain), x, z))
 
 
@@ -947,8 +918,7 @@ static func _plain_of(biome: int) -> int:
 static func surface_index(height: float, temperature: float, humidity: float,
 		sea_level: int, x: int, z: int, slope: float = 0.0) -> int:
 	var biome: int = CWBiome.at(height, temperature, humidity, sea_level)
-	return surface_of(biome, height - float(sea_level), temperature, humidity,
-			x, z, slope)
+	return surface_of(biome, height - float(sea_level), x, z, slope)
 
 
 ## Bloc juste sous la surface (quelques blocs d'epaisseur).

@@ -499,9 +499,7 @@ func _build_cell(cx: int, cz: int) -> Array:
 		var c: Vector4 = _field.sample_column_full(x, z)
 		var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
 		var surface: int = CWPalette.surface_of(
-				CWBiome.at_dithered(c.x, c.y, c.z, sea, x, z,
-						CWBiome.fringe_amplitude(_field.climate_gradient(x, z))),
-				c.x - float(sea), c.y, c.z, x, z)
+				_field.fringe_biome(x, z, c.x), c.x - float(sea), x, z)
 		# L'etang du jalon 1.14. Deux choses en dependent, et la seconde ne se
 		# voit qu'en jeu : le **sol** sur lequel la plante se pose, qui est
 		# creuse dans une mare, et le fait qu'une mare **ne se garnit pas**.
@@ -531,7 +529,7 @@ func _build_cell(cx: int, cz: int) -> Array:
 		# n'aurait pas de sens et se verrait de loin a travers l'eau.
 		if c.x < float(sea) and surface != CWPalette.GRAVEL:
 			continue
-		surface = CWVoxelGenerator.pond_surface(surface, biome, prof,
+		surface = CWVoxelGenerator.pond_surface(surface, prof,
 				CWTerrainField.pond_gate(c.x, c.w, sea, biome))
 		# Scorie, coulee de lave, neige hors Snowlands : rien n'y pousse. C'est
 		# le filtre qui remplace l'ancienne table par matiere — voir
@@ -542,7 +540,7 @@ func _build_cell(cx: int, cz: int) -> Array:
 		# Le role d'abord, le modele ensuite. Les deux cretes de selection sont
 		# regionales : sur une centaine de blocs c'est le meme role qui domine,
 		# et c'est de la que vient la composition d'une prairie.
-		var role: int = CWDecorRules.role_at(biome, surface, x, z)
+		var role: int = CWDecorRules.role_at(biome, x, z)
 		if role == CWDecorRules.Role.AUCUN:
 			continue
 		var rarity: int = CWDecorRules.rarity_of(role)

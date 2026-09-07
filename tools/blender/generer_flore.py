@@ -399,21 +399,6 @@ def fleur_ame(g, rng):
     fb.corolle(g, sommet, 1.5, 162, coeur=163)
 
 
-def roseau(g, rng):
-    """Quatre tiges droites : le roseau du sol humide, plus de deux blocs.
-
-    Ses brins sont **droits** — c'est ce qui le separe d'une touffe d'herbe a
-    cette resolution, ou la courbe est le seul trait qui reste.
-    """
-    a0 = rng.uniform(0.0, math.tau)
-    for i in range(4):
-        a = a0 + math.tau * i / 4 + rng.uniform(-0.5, 0.5)
-        r = rng.uniform(0.0, 1.0)
-        fb.brin(g, rng, math.cos(a) * r, math.sin(a) * r,
-                13.5 * rng.uniform(0.8, 1.0), 138, 143, azim=a, courbe=0.6,
-                epais_bas=True)
-
-
 def champignon_jungle(g, rng):
     """Un champignon de sous-bois : un stipe et un chapeau."""
     fb.colonne_pleine(g, rng, 3.0, 0.6, 166, 168)
@@ -539,7 +524,6 @@ LOT = [
     ("jungles", "lierre", 3003, lierre_jungle, GROS),
     ("jungles", "fleur_coeur", 3005, fleur_coeur_jungle, FIN),
     ("jungles", "fleur_ame", 4004, fleur_ame, FIN),
-    ("jungles", "roseau", 4001, roseau, FIN),
     ("jungles", "champignon", 3006, champignon_jungle, GROS),
 
     ("lavalands", "fire_shrub", 6101, fire_shrub, GROS),

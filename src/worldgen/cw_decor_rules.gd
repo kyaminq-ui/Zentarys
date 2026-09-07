@@ -33,16 +33,17 @@ extends RefCounted
 ##
 ## L'original choisit sur son **type de bloc de surface** (0 air, 2 eau, 3 sol
 ## humide, 4 et 9 sol vegetalise, 10 neige, 12 sol de region, 6 roche), puis
-## affine par des seuils de climat *dans la regle*. `CWPalette.surface_index`,
-## lui, a deja mange le climat : la jungle et le marais y sont des surfaces, pas
-## des branches. La forme de la regle est donc portee telle quelle — deux
-## cretes, une famille puis une variante, une rarete entiere — et ce sont ses
-## *feuilles* qui sont reattribuees a nos neuf surfaces. Le detail de la
-## correspondance, branche par branche, est dans `docs/systems/02`, §8.6.
+## affine par des seuils de climat *dans la regle*. Ce projet a separe les deux
+## depuis le jalon 1.12 : le climat est mange par `CWBiome`, et c'est lui qui
+## indexe la table. La forme de la regle est portee telle quelle — deux cretes,
+## une famille puis une variante, une rarete entiere — et ce sont ses *feuilles*
+## qui sont reattribuees a nos six biomes. Le detail de la correspondance,
+## branche par branche, est dans `docs/systems/02`, §8.6.
 ##
-## Trois roles de la source n'ont pas de modele ici et sont donc absents :
-## le nenuphar (types 31/32 de l'original, sur l'eau), et les deux decors de mur
-## (lierre et rosier, types 41-43) qui sont du jalon 4.3.
+## Quatre roles de la source n'ont pas de modele ici et sont donc absents : le
+## nenuphar (types 31/32, sur l'eau), les deux decors de mur (lierre et rosier,
+## types 41-43) qui sont du jalon 4.3, et le **roseau** (type 22), retire le
+## 2026-09-12 avec le sol humide qui le portait.
 
 ## Les roles du decor. Un role est une *fonction* dans le paysage, pas un
 ## modele : chaque surface donne sa propre liste de modeles pour chaque role
@@ -62,8 +63,6 @@ enum Role {
 	SOUS_BOIS,
 	## Le rare : cactus, champignon. Type 27/28, tirage a 1 sur 100.
 	RARE,
-	## Roseau de rive. Type 22 : lacet libre, un peu plus grand.
-	ROSEAU,
 	## Algue de fond marin. Type 5.
 	ALGUE,
 	## Corail de fond marin. Type 6.
@@ -100,8 +99,8 @@ const SELECT_B_BIAS: float = 0.5
 ## est le tirage *par colonne*, celui que ce projet a remplace le 2026-09-05 par
 ## un budget de candidats par cellule (`CWScatter`, « pourquoi la rarete entiere
 ## n'est pas portee telle quelle »). Le reappliquer ici le compterait deux fois
-## et viderait le paysage des sept huitiemes de sa flore. Le roseau, a 1 sur 8
-## dans la source, tombe donc dans ce cas : sa rarete est deja payee.
+## et viderait le paysage des sept huitiemes de sa flore. Les roles a 1 sur 8
+## dans la source tombent donc tous dans ce cas : leur rarete est deja payee.
 const RARITY_RARE: int = 100
 
 ## Multiplicateur de taille par role, rapporte a l'echelle d'auteur.
@@ -109,9 +108,8 @@ const RARITY_RARE: int = 100
 ## La source ecrit ses echelles en dur : **0,075** est la taille de reference —
 ## et c'est exactement `3/40`, le rapport voxel/bloc de ce projet, ce qui veut
 ## dire que nos modeles sont dessines a la taille nominale du decor d'origine.
-## Les ecarts sont donc lisibles en clair : le roseau et le nenuphar sont a
-## 0,09, soit **1,2x** ; le caillou a 0,1-0,12, soit **1,33x a 1,6x** ; le
-## sous-bois humide a 0,05-0,10, soit **0,67x a 1,33x**.
+## Les ecarts sont donc lisibles en clair : le caillou est a 0,1-0,12, soit
+## **1,33x a 1,6x** ; le sous-bois humide a 0,05-0,10, soit **0,67x a 1,33x**.
 ##
 ## Ces rapports multiplient la gigue d'instance de `CWScatter`, ils ne la
 ## remplacent pas : la source ne tire une gigue que sur le decor immerge, mais
@@ -123,7 +121,6 @@ const SCALE_RATIO: Dictionary = {
 	Role.CAILLOU: 1.45,
 	Role.SOUS_BOIS: 0.85,
 	Role.RARE: 1.0,
-	Role.ROSEAU: 1.2,
 	Role.ALGUE: 1.0,
 	Role.CORAIL: 1.33,
 	Role.FOND: 1.33,
@@ -137,13 +134,13 @@ const SCALE_RATIO_MAX: float = 1.45
 
 ## Roles dont le lacet est libre plutot que par quarts de tour. La source a les
 ## deux regimes : `(rand()%4) * 90` pour ce qui pose au sol, `rand() * 360/32767`
-## pour le roseau, le nenuphar et le decor de sous-bois humide.
+## pour le decor de sous-bois humide — et pour le roseau et le nenuphar, que ce
+## projet ne porte pas.
 ##
 ## `CWVoxelModel` ne precalcule que quatre quarts de tour ; le lacet libre est
 ## donc note ici mais pas encore rendu. Il attend une rotation continue du
 ## maillage — sans effet sur la selection, qui est ce que ce fichier decide.
 const FREE_YAW: Dictionary = {
-	Role.ROSEAU: true,
 	Role.SOUS_BOIS: true,
 }
 
@@ -168,20 +165,17 @@ static func decor_allowed(biome: int, surface: int) -> bool:
 			return true
 
 
-## Role a poser dans `biome`, sur la matiere `surface`, au point (x, z), ou
-## `Role.AUCUN`.
+## Role a poser dans `biome`, au point (x, z), ou `Role.AUCUN`.
 ##
 ## Deterministe et sans etat : deux appels au meme point rendent le meme role,
 ## quel que soit ce qui a ete visite avant. Les tirages entiers de rarete, eux,
 ## restent a l'appelant — c'est lui qui tient le flux du LCG de sa cellule.
 ##
-## La matiere n'intervient que par les deux exceptions de `FAMILIES_SURFACE` :
-## c'est le **biome** qui decide de la composition, et c'est tout l'objet du
-## jalon 1.12.
-static func role_at(biome: int, surface: int, x: int, z: int) -> int:
-	var families: Array = FAMILIES_SURFACE.get(surface, EMPTY)
-	if families.is_empty():
-		families = FAMILIES.get(biome, EMPTY)
+## **La matiere n'entre plus du tout** : c'est le biome qui decide de la
+## composition, et c'est tout l'objet du jalon 1.12. Ce qu'une matiere peut
+## encore faire est *interdire* le decor, et c'est `decor_allowed` qui le dit.
+static func role_at(biome: int, x: int, z: int) -> int:
+	var families: Array = FAMILIES.get(biome, EMPTY)
 	if families.is_empty():
 		return Role.AUCUN
 	# Premiere crete : la famille. Le test est celui de la source, sur le signe.
@@ -219,7 +213,6 @@ static func name_of(role: int) -> String:
 		Role.CAILLOU: return "caillou"
 		Role.SOUS_BOIS: return "sous-bois"
 		Role.RARE: return "rare"
-		Role.ROSEAU: return "roseau"
 		Role.ALGUE: return "algue"
 		Role.CORAIL: return "corail"
 		Role.FOND: return "fond"
@@ -277,32 +270,25 @@ const FAMILIES: Dictionary = {
 	CWBiome.OCEANS: [[Role.FOND], [Role.ALGUE, Role.CORAIL]],
 }
 
-## Les deux exceptions ou c'est la **matiere** qui decide, et non le biome.
-## Consultees avant `FAMILIES`.
-##
-## Le sol humide est la seule branche de la source qui soit attachee a un type
-## de bloc et non a un climat (`reed` sur le type 3), et elle est gardee telle
-## quelle : un bord de riviere de jungle porte des roseaux, pas des lianes.
-##
-## **Elle est la seule qui reste.** L'herbe seche avait la sienne ; la matiere
-## est retiree depuis le 2026-09-06 (`CWPalette`, note des deux entrees
-## retirees), et l'exception avec elle. C'est le bon sens de l'exception : une
-## matiere merite sa propre composition quand elle porte quelque chose que le
-## biome ne porte pas — le roseau —, pas quand elle n'est qu'une nuance du sol.
-const FAMILIES_SURFACE: Dictionary = {
-	CWPalette.SWAMP: [[Role.ROSEAU, Role.RARE], [Role.COUVERT, Role.FLEUR]],
-}
-
-## Le biome qui produit chacune de ces matieres. Ce n'est pas de la
-## documentation : c'est ce qui permet a `tests/decor_test.gd` de verifier que
-## les roles d'une exception ont bien un modele **dans le biome ou l'exception
-## peut se produire**.
-##
-## Sans cette table, le trou serait exactement celui de l'invariant n° 22, en
-## plus discret encore : le sol humide choisirait un roseau, `CWModelLibrary`
-## irait le chercher dans Jungles, ne le trouverait pas, et la rive serait nue
-## sans qu'aucune densite ne bouge. C'est `CWPalette.surface_of` qui decide qui
-## produit quoi, et les deux tables doivent rester d'accord.
-const FAMILIES_SURFACE_BIOME: Dictionary = {
-	CWPalette.SWAMP: CWBiome.JUNGLES,
-}
+# -- Il n'y a plus d'exception par matiere ------------------------------------
+#
+# Il y en a eu deux, et les deux sont tombees. `FAMILIES_SURFACE` attachait une
+# composition a un *type de bloc* plutot qu'a un biome : l'herbe seche a eu la
+# sienne jusqu'au 2026-09-06, le sol humide jusqu'au 2026-09-12.
+#
+# Le sol humide etait le cas fort, et c'est ce qui rend son retrait
+# instructif. Il **portait** quelque chose que le biome ne portait pas — le
+# roseau pousse sur ce bloc et sur aucun autre —, et c'est ce qui l'avait sauve
+# des deux retraits precedents. Ce qui l'a emporte est que la demande d'un
+# biome, une matiere ne souffre pas d'exception d'anneau : la rive d'une mare
+# de Jungles est de l'herbe de jungle, comme le reste du pays, et le roseau est
+# parti avec sa matiere plutot que de survivre en orphelin sur un sol qui
+# n'existait plus qu'a cause de lui.
+#
+# **Ce que ce retrait emporte de mecanisme, et pourquoi c'est voulu.**
+# `role_at` ne consulte plus qu'une table, indexee par biome, et sa matiere
+# n'entre plus que par `decor_allowed`. Le jour ou une matiere meritera de
+# nouveau sa propre composition, il faudra reecrire les deux tables **et** le
+# garde-fou de `tests/decor_test.gd` qui verifiait que leurs roles ont un
+# modele dans le biome qui produit la matiere : c'est l'invariant n. 22, et
+# c'est ce que ce retrait rend inutile plutot qu'il ne le casse.

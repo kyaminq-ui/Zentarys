@@ -534,7 +534,7 @@ func _test_two_channels() -> void:
 				# **Le reste du terrain ne porte plus la couleur *exacte* de son
 				# type, et c'est delibere depuis le 2026-09-07.** Un bloc de
 				# surface prend une **nuance** : trois tons pour une prairie,
-				# cinq marches de fondu au bord d'une plage. Ce qui reste
+				# cinq marches de fondu au pied d'une falaise. Ce qui reste
 				# verifiable est le voisinage — une teinte doit rester
 				# reconnaissable comme celle de sa matiere ou de sa voisine —, et
 				# la borne ci-dessous est large expres : c'est la capture qui

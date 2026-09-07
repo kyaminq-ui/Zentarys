@@ -100,7 +100,7 @@ func _initialize() -> void:
 				var c := Vector3(c4.x, c4.y, c4.z)
 				var biome: int = CWBiome.at(c.x, c.y, c.z, p.sea_level)
 				var surface: int = CWPalette.surface_of(biome,
-						c.x - float(p.sea_level), c.y, c.z, x, z)
+						c.x - float(p.sea_level), x, z)
 				if CWTerrainField.pond_gate(c.x, c4.w, p.sea_level, biome):
 					porte += 1
 					var prof: Vector3i = CWTerrainField.column_profile(
@@ -109,7 +109,7 @@ func _initialize() -> void:
 					if prof.y <= prof.z:
 						eau += 1
 						prof_hist[clampi(prof.z - prof.y + 1, 0, 7)] += 1
-					surface = CWVoxelGenerator.pond_surface(surface, biome, prof,
+					surface = CWVoxelGenerator.pond_surface(surface, prof,
 							true)
 				grille[ix * per_zone + iz] = biome
 				biome_count[biome] = int(biome_count.get(biome, 0)) + 1
@@ -251,14 +251,14 @@ func _initialize() -> void:
 # matiere dans le biome voisin. C'est exactement le nombre que le reproche
 # designait : « de l'herbe se retrouve dans le desert ».
 #
-# Le contrat est `CWBiome.FRINGE_BLOCKS`. Une incursion qui le depasse largement
+# Le contrat est `CWTerrainField.FRINGE_BLOCKS`. Une incursion qui le depasse largement
 # est le defaut ; une frange tombee a zero partout est la sur-correction — la
 # mesure doit distinguer les deux, donc elle rend aussi la part de colonnes en
 # frange et le compte de frontieres traversees.
 
 ## Combien de frontieres on veut mesurer, et sur quelle demi-largeur.
 ##
-## `MI_LARGEUR` doit valoir plusieurs fois `CWBiome.FRINGE_BLOCKS`, sans quoi la
+## `MI_LARGEUR` doit valoir plusieurs fois `CWTerrainField.FRINGE_BLOCKS`, sans quoi la
 ## mesure ne pourrait pas voir une frange qui deborde son contrat — elle
 ## rapporterait le maximum de sa propre fenetre.
 const FRONTIERES: int = 24
@@ -321,8 +321,8 @@ func _ecotone(field: CWTerrainField, p: CWWorldParams) -> void:
 	print("")
 	print("L'ecotone, mesure a la maille du bloc sur %d frontieres de climat (%.0f ms)"
 			% [trouvees, ms])
-	print("  contrat CWBiome.FRINGE_BLOCKS : %.0f blocs, fenetre de mesure +-%d"
-			% [CWBiome.FRINGE_BLOCKS, MI_LARGEUR])
+	print("  contrat CWTerrainField.FRINGE_BLOCKS : %.0f blocs, fenetre de mesure +-%d"
+			% [CWTerrainField.FRINGE_BLOCKS, MI_LARGEUR])
 	print("  colonnes en frange     : %8d   %6.2f %% des colonnes mesurees"
 			% [franges, 100.0 * float(franges) / maxf(1.0, float(colonnes))])
 	if franges == 0:
@@ -331,7 +331,7 @@ func _ecotone(field: CWTerrainField, p: CWWorldParams) -> void:
 	print("  incursion moyenne      : %8.1f blocs"
 			% (float(prof_sum) / float(franges)))
 	print("  incursion maximale     : %8d blocs   (contrat : %.0f)"
-			% [prof_max, CWBiome.FRINGE_BLOCKS])
+			% [prof_max, CWTerrainField.FRINGE_BLOCKS])
 	print("  profondeur d'incursion, par tranches de 16 blocs :")
 	for d in 8:
 		if hist[d] == 0:
@@ -374,8 +374,7 @@ func _mesure_frange(field: CWTerrainField, p: CWWorldParams, cx: int, cz: int,
 		var z: int = cz + (j - MI_LARGEUR) / 3
 		var c: Vector3 = field.sample_column(x, z)
 		nomme[j] = CWBiome.at(c.x, c.y, c.z, p.sea_level)
-		trame[j] = CWBiome.at_dithered(c.x, c.y, c.z, p.sea_level, x, z,
-				CWBiome.fringe_amplitude(field.climate_gradient(x, z)))
+		trame[j] = field.fringe_biome(x, z, c.x)
 
 	var bords: PackedInt32Array = PackedInt32Array()
 	for j in range(1, n):

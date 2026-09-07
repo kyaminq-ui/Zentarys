@@ -879,14 +879,19 @@ func _update_hud() -> void:
 	var c4: Vector4 = generator.field().sample_column_full(wx, wz)
 	var c := Vector3(c4.x, c4.y, c4.z)
 	var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
-	var surface: int = CWPalette.surface_of(biome, c.x - float(sea),
-			c.y, c.z, wx, wz)
+	var surface: int = CWPalette.surface_of(biome, c.x - float(sea), wx, wz)
+	# **Le climat affiche n'est pas celui qui classe.** Depuis le 2026-09-12, le
+	# biome se decide au site de region, et `sample_column` rend donc le climat
+	# *du site* — constant sur toute la region, ce qui ferait un instrument
+	# muet. Le melange, lui, varie continument ; il ne decide plus rien, et
+	# c'est exactement ce qu'on veut d'une aiguille.
+	var climat: Vector2 = generator.field().climate_blend(wx, wz)
 	# Le sol annonce est celui **d'apres** creusement (jalon 1.14). Sans ceci,
 	# l'ATH annonce « sol 117 » au bord d'une mare dont le fond est a 111 :
 	# c'est l'instrument qui sert a viser les captures, il doit dire ce que le
 	# monde genere contient et non ce que le champ rendait avant l'etang.
 	var prof: Vector3i = CWTerrainField.column_profile(c.x, c4.w, sea, biome)
-	surface = CWVoxelGenerator.pond_surface(surface, biome, prof,
+	surface = CWVoxelGenerator.pond_surface(surface, prof,
 			CWTerrainField.pond_gate(c.x, c4.w, sea, biome))
 
 	var busy: String = ""
@@ -905,7 +910,7 @@ func _update_hud() -> void:
 			"" if prof.y > prof.z else ", eau %d" % prof.z, region],
 		"%s / %s   T %.2f (%.0f C)  H %.0f %%   %s%s   %d ips%s" % [
 			CWBiome.name_of(biome), CWPalette.name_of(surface),
-			c.y, CWBiome.celsius(c.y), c.z * 100.0,
+			climat.x, CWBiome.celsius(climat.x), climat.y * 100.0,
 			daylight.horloge(), " (fige)" if daylight.paused else "",
 			Engine.get_frames_per_second(), busy],
 	]
@@ -956,8 +961,8 @@ func _update_hud() -> void:
 		lines.append("Clic gauche : creuser · clic droit : poser")
 		lines.append("Page haut/bas : distance de vue · M : carte du monde")
 		lines.append("F2 : figer l'heure · F3/F4 : reculer / avancer d'une heure")
-		lines.append("1 herbe · 2 herbe seche · 3 jungle · 4 marais · 5 sable")
-		lines.append("6 neige · 7 toundra · 8 roche · 9 fond marin")
+		lines.append("1 Greenlands · 2 Snowlands · 3 Deserts · 4 Jungles")
+		lines.append("5 Lava Lands · 6 Oceans : se teleporter au biome")
 	else:
 		lines.append("F1 details")
 	hud.text = "\n".join(lines)

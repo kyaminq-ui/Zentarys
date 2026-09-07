@@ -76,35 +76,12 @@ func _test_tables() -> void:
 	_ok("chaque role atteignable a un modele dans son biome", orphans.is_empty(),
 			str(orphans))
 
-	# Les deux exceptions par matiere : leurs roles doivent avoir un modele dans
-	# le biome qui produit la matiere. C'est le meme trou que ci-dessus, deplace
-	# d'un cran — et il serait plus discret encore, une rive de jungle nue ne se
-	# voyant que de pres.
-	var orphans_surface: Array = []
-	for surface in CWDecorRules.FAMILIES_SURFACE:
-		var biome: int = int(CWDecorRules.FAMILIES_SURFACE_BIOME.get(surface, -1))
-		_ok("la matiere %s declare son biome" % CWPalette.name_of(surface),
-				biome >= 0)
-		for role in _reachable_roles(CWDecorRules.FAMILIES_SURFACE[surface]):
-			var models: Array = CWModelLibrary.ROLES.get(biome, {}).get(role, [])
-			if models.is_empty():
-				orphans_surface.append("%s/%s" % [CWPalette.name_of(surface),
-						CWDecorRules.name_of(role)])
-	_ok("chaque exception de matiere trouve ses modeles",
-			orphans_surface.is_empty(), str(orphans_surface))
-
 	# Et l'inverse : un modele range sous un role que les cretes n'atteignent
-	# pas ne sortira jamais. Les roles d'une exception comptent comme
-	# atteignables dans le biome qui la produit.
+	# pas ne sortira jamais. Depuis le 2026-09-12 il n'y a plus qu'une table par
+	# biome : ce qui n'y est pas atteignable ne l'est nulle part.
 	var unreachable: Array = []
 	for biome in CWModelLibrary.ROLES:
 		var reachable: Array = _reachable_roles(CWDecorRules.FAMILIES.get(biome, []))
-		for surface in CWDecorRules.FAMILIES_SURFACE:
-			if int(CWDecorRules.FAMILIES_SURFACE_BIOME.get(surface, -1)) != biome:
-				continue
-			for role in _reachable_roles(CWDecorRules.FAMILIES_SURFACE[surface]):
-				if not reachable.has(role):
-					reachable.append(role)
 		for role in CWModelLibrary.ROLES[biome]:
 			if not reachable.has(role):
 				for path in CWModelLibrary.ROLES[biome][role]:
@@ -143,18 +120,16 @@ func _test_tables() -> void:
 func _test_selection() -> void:
 	print("[decor : la selection]")
 
-	# Purete : la regle ne lit que le biome, la matiere et le point. Elle est
+	# Purete : la regle ne lit que le biome et le point. Elle est
 	# appelee depuis huit fils a la fois, sans verrou, et un etat cache la
 	# rendrait dependante de l'ordre de visite — le monde ne se regenererait
 	# plus a l'identique, et rien ne le signalerait.
 	var stable: bool = true
 	for i in 200:
 		var x: int = 8397830 + i * 37
-		var a: int = CWDecorRules.role_at(CWBiome.GREENLANDS, CWPalette.GRASS,
-				x, 8399776)
-		CWDecorRules.role_at(CWBiome.JUNGLES, CWPalette.SWAMP, x + 11, 12345)
-		var b: int = CWDecorRules.role_at(CWBiome.GREENLANDS, CWPalette.GRASS,
-				x, 8399776)
+		var a: int = CWDecorRules.role_at(CWBiome.GREENLANDS, x, 8399776)
+		CWDecorRules.role_at(CWBiome.JUNGLES, x + 11, 12345)
+		var b: int = CWDecorRules.role_at(CWBiome.GREENLANDS, x, 8399776)
 		if a != b:
 			stable = false
 			break
@@ -162,34 +137,15 @@ func _test_selection() -> void:
 
 	# Un biome sans table ne doit pas se rabattre sur un autre.
 	_ok("un biome inconnu ne recoit rien",
-			CWDecorRules.role_at(999, CWPalette.GRASS, 8397830, 8399776)
+			CWDecorRules.role_at(999, 8397830, 8399776)
 					== CWDecorRules.Role.AUCUN)
-
-	# L'exception de matiere passe **avant** le biome : sur le sol humide d'une
-	# jungle, c'est la table du sol humide qui parle, et elle est la seule a
-	# porter le roseau. Verifie en cherchant le roseau, qu'aucune table de biome
-	# ne peut rendre.
-	var reed_seen: bool = false
-	var reed_elsewhere: bool = false
-	for i in 400:
-		var x: int = 1000 + i * 911
-		var z: int = 2000 + i * 613
-		if CWDecorRules.role_at(CWBiome.JUNGLES, CWPalette.SWAMP, x, z) \
-				== CWDecorRules.Role.ROSEAU:
-			reed_seen = true
-		if CWDecorRules.role_at(CWBiome.JUNGLES, CWPalette.GRASS_JUNGLE, x, z) \
-				== CWDecorRules.Role.ROSEAU:
-			reed_elsewhere = true
-	_ok("le sol humide porte le roseau", reed_seen)
-	_ok("le roseau ne sort pas ailleurs qu'au sol humide", not reed_elsewhere)
 
 	# La regle ne doit jamais sortir un role hors de la table qui l'a decide.
 	var strays: Array = []
 	for biome in CWDecorRules.FAMILIES:
 		var reachable: Array = _reachable_roles(CWDecorRules.FAMILIES[biome])
 		for i in 500:
-			# Une matiere neutre : celle du biome, sans exception attachee.
-			var role: int = CWDecorRules.role_at(biome, CWPalette.STONE,
+			var role: int = CWDecorRules.role_at(biome,
 					1000 + i * 911, 2000 + i * 613)
 			if not reachable.has(role):
 				strays.append("%s/%s" % [CWBiome.name_of(biome),
@@ -253,8 +209,7 @@ func _test_matiere() -> void:
 
 	# Les matieres de plaine passent, sans quoi le monde entier serait nu.
 	var plaines: Array = [CWPalette.GRASS, CWPalette.GRASS_JUNGLE,
-			CWPalette.SWAMP, CWPalette.SAND, CWPalette.GRAVEL,
-			CWPalette.SCORIA]
+			CWPalette.SAND, CWPalette.GRAVEL, CWPalette.SCORIA]
 	var refusees: Array = []
 	for surface in plaines:
 		if not CWDecorRules.decor_allowed(CWBiome.GREENLANDS, surface):
@@ -264,11 +219,12 @@ func _test_matiere() -> void:
 
 	# -- Ce qu'aucune surface ne doit rendre ---------------------------------
 	#
-	# `TUNDRA` garde son index — le liberer decalerait la reserve peinte dans
-	# les .vox — mais plus rien ne doit le produire. Sans ce balayage, remettre
-	# une frange d'humidite dans `surface_of` ne leverait rien : la couleur
-	# reviendrait en jeu, et le nom du sol contredirait de nouveau celui du
-	# biome. C'est la seule chose qui tienne le retrait.
+	# `TUNDRA` et `SWAMP` gardent leur index — les liberer decalerait la reserve
+	# peinte dans les .vox — mais plus rien ne doit les produire. Sans ce
+	# balayage, remettre une frange d'humidite dans `surface_of` ne leverait
+	# rien : la couleur reviendrait en jeu, et le nom du sol contredirait de
+	# nouveau celui du biome. C'est la seule chose qui tienne le retrait, et
+	# c'est ce qui tient aussi celui du marais (2026-09-12).
 	#
 	# `WOOD` est l'autre index de cette liste, et pour la raison inverse : c'est
 	# l'ancien `GRASS_DRY`, recycle en type de bloc pour les troncs estampes du
@@ -293,8 +249,7 @@ func _test_matiere() -> void:
 		var h: float = float(i / 64) / 63.0
 		for biome in CWBiome.all():
 			for above in [-30.0, -4.0, 8.0, 40.0, 120.0, 260.0]:
-				var m: int = CWPalette.surface_of(biome, above, t, h,
-						i * 37, i * 91)
+				var m: int = CWPalette.surface_of(biome, above, i * 37, i * 91)
 				if m == CWPalette.WOOD or m == CWPalette.TUNDRA \
 						or m == CWPalette.LEAVES:
 					retirees[CWPalette.name_of(m)] = true
@@ -323,7 +278,7 @@ func _test_composition() -> void:
 	var counts: Dictionary = {}
 	var samples: int = 0
 	for i in 4000:
-		var role: int = CWDecorRules.role_at(CWBiome.GREENLANDS, CWPalette.GRASS,
+		var role: int = CWDecorRules.role_at(CWBiome.GREENLANDS,
 				8397830 + i * 53, 8399776 + i * 29)
 		counts[role] = int(counts.get(role, 0)) + 1
 		samples += 1

@@ -196,135 +196,82 @@ static func at(height: float, temperature: float, humidity: float,
 	return GREENLANDS
 
 
+## Le biome d'une colonne, connaissant le **site de region** dont elle releve.
+##
+## -- Pourquoi le site, et non le climat de la colonne ------------------------
+##
+## `at` est une fonction pure d'un climat, et le climat d'une colonne etait
+## jusqu'au 2026-09-12 un **melange** des sites voisins. Ce melange a une forme
+## tres particuliere, mesuree et ecrite dans `CWTerrainField` : c'est un
+## **plateau parfaitement plat** au coeur de chaque region — le melange n'y
+## retient qu'un site —, coupe de transitions **etroites**, larges de deux cents
+## blocs a peine.
+##
+## Un biome faisait donc deja la taille d'une region sur l'immense majorite du
+## monde. Ce qui n'allait pas etait le bord : deux cents blocs pour passer d'un
+## climat a l'autre, et jusqu'a **quatre seuils traverses** en chemin. Entre une
+## region froide et une region chaude, on rencontrait une Snowlands, puis
+## quarante blocs de Greenlands, puis quarante de Deserts, puis une Lava Lands —
+## quatre pays en deux cents pas. C'est la demande du 2026-09-11 au soir : *un
+## biome doit faire une taille minimum, pour eviter des transitions trop
+## rapides.*
+##
+## **La seule route qui garantisse est de classer au site.** Un biome devient
+## alors une cellule du diagramme de Voronoi des sites — 16 384 unites de cote
+## par construction, et il n'y a plus rien a regler pour que ce soit vrai. Les
+## bandes intermediaires ne se resserrent pas : elles n'existent plus.
+##
+## **Ce que ca ne casse pas, et il fallait le verifier.** Le voisinage reste
+## credible parce que ce qui l'assurait n'etait pas le melange mais les
+## **provinces climatiques** de `CWRegionSiteGrid`, qui adoucissent un climat
+## extreme vers le tempere au bord de sa province : deux coeurs opposes ne
+## peuvent pas se toucher, il y a une region tempere entre eux. Cette regle est
+## au niveau du site, donc elle survit telle quelle. `tools/biome_stats.gd`
+## compte les paires « neige contre desert ou lave » ; c'est le garde-fou.
+##
+## **Ce que ca coute.** Le climat *melange* ne decide plus rien. Il reste rendu
+## par `CWTerrainField.climate_blend`, elargi le meme jour, pour l'ATH et pour
+## les outils : c'est une lecture d'instrument, plus une regle.
+static func of_site(site: CWRegionSite, height: float, sea_level: int) -> int:
+	if site == null:
+		# Uniquement au bord du monde, ou la fenetre de sites est vide.
+		return OCEANS if height - float(sea_level) < OCEAN_DEPTH else GREENLANDS
+	return at(height, site.temperature, site.humidity, sea_level)
+
+
 # -- La frontiere entre deux biomes, tramee -----------------------------------
 #
-# `at` compare un climat continu a des seuils : sa frontiere est donc une
-# **courbe de niveau du champ de climat**, et le sol y change de couleur sur un
-# trait. C'est le meme defaut que le haut de plage et la roche de pente avant le
-# 2026-09-07, et c'est celui qui se voit le plus : un desert qui rencontre une
-# prairie est la plus grande frontiere de matiere du monde.
+# Classer au site donne une frontiere de Voronoi, c'est-a-dire **un trait** : le
+# sol change de matiere d'une colonne a la suivante, sur une droite. C'est le
+# meme defaut que le haut de plage et la roche de pente avant le 2026-09-07, et
+# c'est celui qui se voit le plus — un desert qui rencontre une prairie est la
+# plus grande frontiere de matiere du monde.
 #
-# On brouille donc le climat d'un bruit **avant** de le comparer aux seuils. La
-# frontiere devient une bande d'une trentaine de blocs ou les deux matieres
-# s'interpenetrent — un ecotone —, et elle suit les memes plaques que les autres
-# transitions du projet.
+# **On brouille donc le point, et non plus le climat.** La matiere du sol prend
+# le biome du site le plus proche d'un point **deplace d'une trentaine de blocs
+# par un bruit**, la ou le biome nomme prend celui du point vrai. La frontiere
+# devient une bande ou les deux matieres s'interpenetrent — un ecotone —, et
+# elle suit les memes plaques que les autres transitions du projet.
 #
-# **Deux precautions.**
+# -- Pourquoi c'est plus simple que ce que ca remplace ------------------------
 #
-#   * *le biome tramé ne sert qu'a la matiere du sol.* Le biome **nommé** — celui
-#     qui choisit ce qui pousse, ce qui apparait, ce que l'ATH affiche et ce que
-#     la carte teinte — reste celui de `at`, sans quoi une prairie ferait pousser
-#     un cactus tous les vingt blocs le long de son desert. En frange, une touffe
-#     d'herbe se tient donc sur une plaque de sable : c'est exactement ce qu'on
-#     voit au bord d'un desert ;
-#   * *la sortie rapide n'est pas une optimisation cosmetique.* Loin de toute
-#     frontiere — la quasi-totalite du monde — le tramage ne peut rien changer,
-#     et la fonction sort avant d'echantillonner quoi que ce soit. Sans elle, ce
-#     seraient quatre bruits par colonne sur tout le monde.
-
-## Amplitude **maximale** du brouillage, en unites de climat. Comparees aux
-## seuils : a 0,07 sur la temperature, la frange fait environ un dixieme de la
-## largeur d'une bande climatique.
-##
-## C'est un plafond, pas la valeur employee : voir `fringe_amplitude`.
-const DITHER_T: float = 0.07
-const DITHER_H: float = 0.09
-
-## -- La frange se borne en blocs, pas en unites de climat ---------------------
-##
-## Une amplitude en unites de climat ne dit rien de la largeur de la frange **en
-## blocs** : celle-ci vaut l'amplitude divisee par la pente locale du champ de
-## climat, et cette pente n'est pas la meme partout. La ou le climat varie
-## lentement, 0,07 unite represente des centaines de blocs, et l'herbe traverse
-## tout le desert. La ou il est **plat** — au centre d'une region, ou le melange
-## de sites ne retient plus qu'un seul site —, elle represente une distance
-## infinie : le brouillage ne deplace plus une frontiere, il tire a pile ou face
-## sur chaque colonne d'un pays entier. C'est ce qui mettait du sable au milieu
-## des Lava Lands, dont le seuil `LAVA_T` ne se rencontre justement qu'au coeur
-## d'une region.
-##
-## D'ou la regle : **l'amplitude est celle qui rend une frange de `FRINGE_BLOCKS`
-## blocs, plafonnee par `DITHER_*`.** La ou le climat est plat, elle tombe a
-## zero d'elle-meme — la ou il n'y a pas de frontiere, il n'y a pas de frange.
-##
-## Le gradient vient de `CWTerrainField.climate_gradient`, memoise par cellule
-## de 512 : c'est une grandeur d'echelle regionale, elle ne change pas d'une
-## colonne a la suivante.
-
-## Largeur visee de l'ecotone, en blocs. C'est le nombre que la note de
-## `at_dithered` annoncait — « une trentaine de blocs » — et qui n'etait vrai
-## que la ou la pente du climat valait par hasard ce qu'il fallait.
-const FRINGE_BLOCKS: float = 32.0
-
-
-## L'amplitude de brouillage a employer, connaissant le gradient local du champ
-## de climat (`CWTerrainField.climate_gradient`, en unites par bloc).
-static func fringe_amplitude(gradient: Vector2) -> Vector2:
-	return Vector2(
-			minf(DITHER_T, gradient.x * FRINGE_BLOCKS),
-			minf(DITHER_H, gradient.y * FRINGE_BLOCKS))
-
-## Les deux frequences du tramage. Plus lentes que celles de `CWPalette` : une
-## frange de biome se compte en dizaines de blocs, pas en unites — a la maille
-## du bloc, elle se lirait comme du bruit et non comme une frontiere.
-const DITHER_FREQ_FINE: float = 0.10
-const DITHER_FREQ_LARGE: float = 0.02
-const DITHER_WEIGHT_LARGE: float = 0.55
-const DITHER_OFFSET_X: float = 30011.0
-const DITHER_OFFSET_Z: float = 61403.0
-
-
-## Le biome qui decide de la **matiere du sol** : meme regle que `at`, seuils
-## trames. Voir les deux notes ci-dessus.
-##
-## `amplitude` est ce que rend `fringe_amplitude` : l'amplitude bornee en blocs,
-## et non les constantes `DITHER_*`. Un appelant qui passerait celles-ci
-## retrouverait le defaut du 2026-09-08.
-static func at_dithered(height: float, temperature: float, humidity: float,
-		sea_level: int, x: int, z: int, amplitude: Vector2) -> int:
-	if not _near_edge(temperature, humidity, amplitude):
-		return at(height, temperature, humidity, sea_level)
-	# Deux champs decorreles pour le prix d'un jeu de constantes : le second lit
-	# le meme bruit avec les coordonnees echangees et decalees, ce qui suffit a
-	# rendre les deux independants sans introduire une seconde graine a tenir.
-	var nt: float = _blotch(x, z)
-	var nh: float = _blotch(z + 7919, x + 3271)
-	return at(height, temperature + nt * amplitude.x,
-			humidity + nh * amplitude.y, sea_level)
-
-
-## Vrai si le climat de la colonne est assez pres d'un seuil pour que le
-## brouillage puisse changer sa reponse.
-##
-## La comparaison se fait contre l'amplitude **effective**, donc la bande se
-## resserre exactement comme la frange : sur un climat plat, `amplitude` est
-## nulle, aucun seuil n'est « proche », et la fonction sort sans echantillonner
-## un seul bruit. La sortie rapide devient ainsi le cas general et non plus
-## seulement le cas lointain.
-static func _near_edge(t: float, h: float, amplitude: Vector2) -> bool:
-	if amplitude.x > 0.0 and (absf(t - SNOW_T) < amplitude.x
-			or absf(t - JUNGLE_T) < amplitude.x
-			or absf(t - DESERT_T) < amplitude.x
-			or absf(t - LAVA_T) < amplitude.x):
-		return true
-	if amplitude.y <= 0.0:
-		return false
-	return absf(h - HUMID_H) < amplitude.y
-
-
-## Bruit a deux frequences, dans [-1, 1]. Meme construction que
-## `CWPalette.blend_threshold` — c'est la seconde frequence qui fait les
-## plaques — a une echelle trois fois plus grande.
-static func _blotch(x: int, z: int) -> float:
-	var fine: float = CWValueNoise.sample(
-			float(x) * DITHER_FREQ_FINE + DITHER_OFFSET_X,
-			float(z) * DITHER_FREQ_FINE + DITHER_OFFSET_Z)
-	var large: float = CWValueNoise.sample(
-			float(x) * DITHER_FREQ_LARGE + DITHER_OFFSET_Z,
-			float(z) * DITHER_FREQ_LARGE + DITHER_OFFSET_X)
-	return clampf(fine * (1.0 - DITHER_WEIGHT_LARGE)
-			+ large * DITHER_WEIGHT_LARGE, -1.0, 1.0)
-
+# Le brouillage precedent portait sur le **climat**, et il avait un defaut de
+# fond : une amplitude en unites de climat ne dit rien de la largeur de la
+# frange **en blocs**, celle-ci valant l'amplitude divisee par la pente locale
+# du champ. Sur un plateau — la moitie du monde — la pente est nulle, et un
+# brouillage y tirait a pile ou face sur chaque colonne d'un pays entier. Il a
+# fallu mesurer le gradient du champ de climat, le memoiser par cellule de 16,
+# en deduire une amplitude bornee, et sortir tot la ou elle tombait a zero :
+# trois mecanismes, tous retires le 2026-09-12.
+#
+# **Un deplacement se compte en blocs par construction.** Il n'a ni pente a
+# diviser, ni plateau a redouter : sur un plateau, deplacer le point de trente
+# blocs ne change pas de site, donc ne change rien, et c'est vrai sans qu'on ait
+# rien a tester. La regle est devenue ce qu'elle aurait du etre depuis le
+# debut — *une frontiere dans l'espace se brouille dans l'espace*.
+#
+# La mise en oeuvre est dans `CWTerrainField.fringe_point` : c'est la que vit la
+# deformation du domaine, et l'ecotone en est une seconde, plus fine.
 
 ## Nom lisible, pour l'ATH, la carte et les outils.
 static func name_of(biome: int) -> String:

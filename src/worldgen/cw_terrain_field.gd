@@ -57,10 +57,40 @@ const WARP_SEED_Z: float = 23421.0
 ## sites (World_sampleTerrainGradient @004d5a80).
 const EDGE_WARP_AMPLITUDE: float = 500.0
 
-## Echelles de poids des deux melanges. Elles different d'un facteur dix, et
-## c'est deliberé dans l'original : le climat change plus vite que le relief.
-const CLIMATE_WEIGHT_SCALE: float = 5e-07
+## Echelle de poids du melange d'altitude. C'est l'ossature du relief, et elle
+## ne bouge pas : elle porte l'identite de tous les mondes deja engendres.
 const HEIGHT_WEIGHT_SCALE: float = 5e-08
+
+## Echelle de poids du melange **climatique**.
+##
+## -- Ce qu'elle decidait, et ce qu'elle decide encore ------------------------
+##
+## L'original en avait une, dix fois plus grande que celle du relief, et le
+## commentaire disait pourquoi : *le climat change plus vite que le relief*. A
+## 5e-07, un site cesse de compter des qu'il est ~60 unites plus loin que le
+## plus proche — autrement dit le melange est un plateau par region, coupe de
+## transitions de deux cents blocs. C'est cette forme qui faisait traverser
+## quatre biomes en deux cents pas (`CWBiome.of_site`).
+##
+## **Depuis le 2026-09-12, ce melange ne classe plus rien.** Le biome se decide
+## au site ; ce qui reste ici est une **lecture d'instrument** — la temperature
+## et l'humidite affichees par l'ATH, et celles que les outils tracent. Elle est
+## elargie a 2e-08 pour que cette lecture soit un degrade sur ~1 500 blocs
+## plutot qu'un palier coupe d'une falaise : un chiffre qui saute de dix degres
+## en dix pas ne se lit pas.
+##
+## Elle n'entre plus dans aucune decision du monde. Le jour ou elle y
+## reviendrait, il faudrait relancer `tools/biome_balance.gd` — ce qui n'est
+## plus le cas aujourd'hui.
+const CLIMATE_WEIGHT_SCALE: float = 2e-08
+
+## L'echelle du melange « marais », restee celle de la source.
+##
+## Elle valait `CLIMATE_WEIGHT_SCALE` tant que celle-ci etait celle du binaire.
+## Les separer est ce qui evite qu'un elargissement decide pour l'ATH ne
+## deplace, en silence, un terme du champ de chenaux — desactive par defaut,
+## donc invisible a toute mesure jusqu'au jour ou quelqu'un l'active.
+const SWAMP_WEIGHT_SCALE: float = 5e-07
 
 const _NEIGHBOURS: Array[Vector2i] = [
 	Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)
@@ -90,12 +120,6 @@ var _p: CWWorldParams
 var _sites: CWRegionSiteGrid
 var _features: CWTileFeatureGrid
 var _paths: CWPathNetwork
-
-## Cache du gradient de climat, une entree par cellule de `CLIMATE_GRAD_CELL`.
-## Voir `climate_gradient` pour la raison d'etre de cette maille.
-var _cgrad: Dictionary = {}
-var _cgrad_mutex: Mutex = Mutex.new()
-
 
 func _init(world_params: CWWorldParams, site_grid: CWRegionSiteGrid = null) -> void:
 	_p = world_params
@@ -334,9 +358,14 @@ func _sample(x: int, z: int, zx0: int, zz0: int, win: Array,
 		if s.base_height > 0:
 			land_sum += wh
 
-	var climate: Vector2 = _climate_from(win, wp, best_d2)
-	var temperature: float = climate.x
-	var humidity: float = climate.y
+	# **Le climat rendu est celui du site, pas le melange.** C'est lui qui
+	# classe le biome depuis le 2026-09-12 (`CWBiome.of_site`), et le rendre ici
+	# est gratuit : le site le plus proche vient d'etre trouve par la passe 1.
+	# Le melange, lui, demandait une **seconde passe sur les neuf sites** pour
+	# un resultat qui ne decide plus rien ; il est rendu par `climate_blend`, a
+	# la demande, pour l'ATH et les outils.
+	var temperature: float = best.temperature
+	var humidity: float = best.humidity
 	var base_height: float = (base_sum / hw_sum) if hw_sum > 0.0 else 0.0
 	var land_ratio: float = (land_sum / hw_sum) if hw_sum > 0.0 else 1.0
 
@@ -353,17 +382,132 @@ func _sample(x: int, z: int, zx0: int, zz0: int, win: Array,
 	return Vector4(height, temperature, humidity, chan)
 
 
-## Site de region le plus proche du point deforme, ou null au bord du monde.
+# -- L'ecotone : la frontiere de biome, tramee --------------------------------
+#
+# Le biome se decide au site le plus proche depuis le 2026-09-12, donc sa
+# frontiere est une arete de Voronoi : **un trait**. Ce qui la brouille est un
+# second deplacement du point, plus fin que celui du domaine, et applique
+# **seulement** a la recherche du site qui decide la *matiere* du sol. Le biome
+# nomme — celui qui choisit ce qui pousse, ce que l'ATH affiche et ce que la
+# carte teinte — prend le point vrai : sans quoi une prairie ferait pousser un
+# cactus tous les vingt blocs le long de son desert.
+#
+# Le raisonnement complet est en tete de `CWBiome`, section « la frontiere entre
+# deux biomes, tramee ». Ce qui suit n'en est que la mise en oeuvre.
+
+## Largeur visee de l'ecotone, en blocs. C'est le deplacement maximal du point,
+## donc la profondeur maximale d'une langue de matiere dans le biome voisin.
 ##
-## Tracabilite : World_findNearestEntityInRegion (server/world/World.cpp) est
-## exactement cette recherche — meme fenetre 3 x 3, meme deformation par
-## World_terrainOffset2D. Le placement des elements de tuile s'en sert pour
-## verifier qu'une tuile releve bien de sa propre zone.
-func nearest_site(x: int, z: int) -> CWRegionSite:
-	var zx0: int = CWWorldParams.zone_of(x - ZONE_SIZE)
-	var zz0: int = CWWorldParams.zone_of(z - ZONE_SIZE)
-	var win: Array = _sites.get_window(zx0, zz0)
+## Contrairement a l'amplitude de climat qu'elle remplace, **elle est une
+## distance** : elle ne depend d'aucune pente locale, et elle vaut la meme chose
+## au coeur d'une region qu'a sa frontiere. C'est tout l'interet du changement.
+const FRINGE_BLOCKS: float = 32.0
+
+## Les deux frequences du tramage : une crete fine pour la dentelure, une lente
+## pour les plaques. C'est la construction de `CWPalette.blend_threshold`, et la
+## fine y a **la meme valeur** — 0,34, soit trois blocs de longueur d'onde.
+##
+## -- Pourquoi elle est trois fois plus rapide qu'avant le 2026-09-12 ---------
+##
+## Le tramage precedent brouillait le **climat**, et il ne pouvait pas se
+## permettre une frequence de bloc : au coeur d'une region, ou le champ de
+## climat est plat, une crete fine ne deplace pas une frontiere, elle tire a
+## pile ou face sur chaque colonne d'un pays entier. Il fallait donc un bruit
+## lent (0,10) et tout un appareil de bornage par le gradient.
+##
+## **Un deplacement de point n'a pas ce danger** : loin d'une arete de Voronoi,
+## deplacer le point de trente blocs ne change pas de site, quelle que soit la
+## frequence du deplacement. On peut donc reprendre la frequence qui fait un
+## vrai tramage ailleurs dans le depot, et la frange interpenetre au lieu de se
+## contenter d'onduler. Mesure : 4,4 % des colonnes d'une fenetre de frontiere
+## contre 3,4 % avant, incursion moyenne 13 blocs contre 8
+## (`tools/biome_stats.gd`).
+const FRINGE_FREQ_FINE: float = 0.34
+const FRINGE_FREQ_LARGE: float = 0.02
+const FRINGE_WEIGHT_LARGE: float = 0.55
+const FRINGE_OFFSET_X: float = 30011.0
+const FRINGE_OFFSET_Z: float = 61403.0
+
+
+## Le point deforme **et brouille** : celui qui decide la matiere du sol.
+##
+## Deux champs decorreles pour le prix d'un jeu de constantes : le second lit le
+## meme bruit avec les coordonnees echangees et decalees, ce qui suffit a rendre
+## les deux independants sans introduire une seconde graine a tenir.
+##
+## `fringe_biome_in` recopie ces deux lignes plutot que d'appeler ici, parce
+## qu'il a deja la deformation du domaine sous la main quand il en arrive la —
+## et parce que dans la quasi-totalite des cas il n'en arrive pas la. Cette
+## fonction reste le point unique de la *definition*, et les tests la mesurent.
+func fringe_point(x: int, z: int) -> Vector2:
+	return warped_point(x, z) + Vector2(
+			_blotch(x, z), _blotch(z + 7919, x + 3271)) * FRINGE_BLOCKS
+
+
+## Bruit a deux frequences, dans [-1, 1].
+static func _blotch(x: int, z: int) -> float:
+	var fine: float = CWValueNoise.sample(
+			float(x) * FRINGE_FREQ_FINE + FRINGE_OFFSET_X,
+			float(z) * FRINGE_FREQ_FINE + FRINGE_OFFSET_Z)
+	var large: float = CWValueNoise.sample(
+			float(x) * FRINGE_FREQ_LARGE + FRINGE_OFFSET_Z,
+			float(z) * FRINGE_FREQ_LARGE + FRINGE_OFFSET_X)
+	return clampf(fine * (1.0 - FRINGE_WEIGHT_LARGE)
+			+ large * FRINGE_WEIGHT_LARGE, -1.0, 1.0)
+
+
+## Le biome qui decide la **matiere du sol** en (x, z), pour une colonne dont on
+## connait deja l'altitude et la fenetre de sites.
+##
+## La fenetre est passee par l'appelant parce que le chemin de generation la
+## tient deja pour tout un bloc : la redemander ici serait une prise de mutex
+## par colonne, et c'est exactement ce que `sample_patch` existe pour eviter.
+##
+## -- La sortie rapide n'est pas une coquetterie -------------------------------
+##
+## Cette fonction est sur le chemin de generation, une fois par colonne. Sans la
+## sortie ci-dessous elle couterait **six echantillons de bruit** — deux pour la
+## deformation du domaine, quatre pour le brouillage — et deux passes sur neuf
+## sites, sur toutes les colonnes du monde alors que la frange n'en concerne
+## que quelques pour cent.
+##
+## Le test est exact, et c'est ce qui le rend defendable : un deplacement d'au
+## plus `FRINGE_BLOCKS` ne peut changer la reponse que si le **deuxieme** site
+## le plus proche est a moins de deux fois cette distance de devenir le premier.
+## Loin d'une arete de Voronoi — l'immense majorite du monde — on paie une
+## deformation, une passe sur neuf sites et deux racines, et rien de plus.
+func fringe_biome_in(win: Array, x: int, z: int, height: float) -> int:
 	var wp: Vector2 = warped_point(x, z)
+	var best: CWRegionSite = null
+	var best_d2: float = INF
+	var next_d2: float = INF
+	for s: CWRegionSite in win:
+		if s == null:
+			continue
+		var dx: float = float(s.x) - wp.x
+		var dz: float = float(s.z) - wp.y
+		var d2: float = dx * dx + dz * dz
+		if d2 < best_d2:
+			next_d2 = best_d2
+			best_d2 = d2
+			best = s
+		elif d2 < next_d2:
+			next_d2 = d2
+	if is_inf(next_d2) or sqrt(next_d2) - sqrt(best_d2) > FRINGE_BLOCKS * 2.0:
+		return CWBiome.of_site(best, height, _p.sea_level)
+	return CWBiome.of_site(_nearest_in(win, wp + Vector2(
+			_blotch(x, z), _blotch(z + 7919, x + 3271)) * FRINGE_BLOCKS),
+			height, _p.sea_level)
+
+
+## Idem, sans fenetre sous la main : chemin froid, une colonne par appel.
+func fringe_biome(x: int, z: int, height: float) -> int:
+	return fringe_biome_in(_window_of(x, z), x, z, height)
+
+
+## Le site le plus proche d'un point deja deforme, dans une fenetre chargee.
+## Point unique de la recherche ; `nearest_site` et l'ecotone passent par ici.
+static func _nearest_in(win: Array, wp: Vector2) -> CWRegionSite:
 	var best: CWRegionSite = null
 	var best_d2: float = INF
 	for s: CWRegionSite in win:
@@ -376,6 +520,16 @@ func nearest_site(x: int, z: int) -> CWRegionSite:
 			best_d2 = d2
 			best = s
 	return best
+
+
+## Site de region le plus proche du point deforme, ou null au bord du monde.
+##
+## Tracabilite : World_findNearestEntityInRegion (server/world/World.cpp) est
+## exactement cette recherche — meme fenetre 3 x 3, meme deformation par
+## World_terrainOffset2D. Le placement des elements de tuile s'en sert pour
+## verifier qu'une tuile releve bien de sa propre zone.
+func nearest_site(x: int, z: int) -> CWRegionSite:
+	return _nearest_in(_window_of(x, z), warped_point(x, z))
 
 
 ## Element de la tuile contenant (x, z), ou null.
@@ -396,15 +550,24 @@ func climate_at(x: int, z: int) -> Vector2:
 	return Vector2(c.y, c.z)
 
 
-## Le climat **sans le champ d'altitude** : la moitie du melange de sites qui
-## rend temperature et humidite, et rien d'autre.
+## Le climat **melange** : la moyenne ponderee par distance des sites voisins.
 ##
-## `climate_at` passe par `sample_column`, donc paie les quinze evaluations de
-## bruit de `_height_from`, le champ de chenaux et la couche d'elements — pour
-## deux nombres qui n'en dependent d'aucune facon. Le climat, lui, ne demande
-## que la deformation du domaine (deux echantillons) et deux passes sur neuf
-## sites. C'est un ordre de grandeur moins cher, et c'est ce qui rend le
-## gradient ci-dessous abordable.
+## -- Ce que ce nombre est devenu ---------------------------------------------
+##
+## Il classait le biome jusqu'au 2026-09-12. Il ne classe plus rien : c'est le
+## site qui classe (`CWBiome.of_site`), et le chemin de generation rend
+## desormais le climat *du site* — ce qui lui a fait economiser une passe sur
+## neuf sites par colonne.
+##
+## Ce qui reste ici est une **lecture d'instrument** : la temperature et
+## l'humidite que l'ATH affiche, et que les outils tracent. Un chiffre qui
+## saute d'un palier a l'autre en dix pas ne se lit pas ; le melange, elargi le
+## meme jour (`CLIMATE_WEIGHT_SCALE`), en fait un degre sur ~1 500 blocs.
+##
+## Il ne passe pas par `sample_column`, et c'est ce qui le rend abordable a
+## chaque image : celui-la paierait les quinze evaluations de bruit du champ
+## d'altitude, le champ de chenaux et la couche d'elements pour deux nombres qui
+## n'en dependent d'aucune facon.
 func climate_blend(x: int, z: int) -> Vector2:
 	var zx0: int = CWWorldParams.zone_of(x - ZONE_SIZE)
 	var zz0: int = CWWorldParams.zone_of(z - ZONE_SIZE)
@@ -423,9 +586,9 @@ func climate_blend(x: int, z: int) -> Vector2:
 
 
 ## Le melange climatique, une fois la fenetre et la distance au site le plus
-## proche connues. **Point unique de la formule** : `_sample` et
-## `climate_blend` passent tous deux par ici, comme les deux consommateurs de
-## `slope_from`.
+## proche connues. Un seul appelant depuis le 2026-09-12 — `climate_blend` —,
+## et la fonction reste separee parce que c'est elle qui porte la formule : la
+## garder nommee est ce qui permet de la comparer a celle de la source.
 static func _climate_from(win: Array, wp: Vector2, best_d2: float) -> Vector2:
 	var cw_sum: float = 0.0
 	var t_sum: float = 0.0
@@ -443,97 +606,6 @@ static func _climate_from(win: Array, wp: Vector2, best_d2: float) -> Vector2:
 	if cw_sum <= 0.0:
 		return Vector2(0.5, 0.5)
 	return Vector2(t_sum / cw_sum, h_sum / cw_sum)
-
-
-# -- Le gradient du climat ----------------------------------------------------
-#
-# **A quoi il sert.** L'ecotone de `CWBiome.at_dithered` brouille le climat d'une
-# amplitude fixe — 0,07 en temperature — avant de le comparer aux seuils. Une
-# amplitude en *unites de climat* ne dit rien de la largeur de la frange **en
-# blocs** : celle-ci vaut l'amplitude divisee par la pente du champ, et cette
-# pente n'est pas la meme partout.
-#
-# Elle est meme nulle sur de grandes surfaces, et c'est structurel. Le poids
-# d'un site est `1 - min(1, (d2 - d2min) * 5e-7)` : il tombe a zero des que le
-# site est plus loin que ~1 400 unites de plus que le plus proche. Au **centre
-# d'une region**, tous les autres sites sont hors de cette portee, le melange ne
-# retient qu'un seul site, et le climat y est litteralement **constant**. Un
-# brouillage de 0,07 sur un champ plat ne deplace pas une frontiere : il tire a
-# pile ou face sur chaque colonne d'un pays entier. C'est ce qui mettait du
-# sable au milieu des Lava Lands — dont le seuil, `LAVA_T = 0,985`, ne se
-# rencontre justement qu'au coeur d'une region.
-#
-# La regle qui en decoule tient en une phrase : **la ou le climat est plat, il
-# n'y a pas de frontiere, donc il ne doit pas y avoir de frange.**
-
-## Cote de la maille du cache, et portee de la difference centree, en unites
-## monde.
-##
-## -- Pourquoi la maille est fine, et la portee large -------------------------
-##
-## Le premier essai prenait une maille de 512 et lisait le gradient **au coin**
-## de la cellule. Il rendait zero sur une frontiere dont le gradient reel valait
-## 0,0026 par bloc, et l'ecotone disparaissait au lieu de se borner. La raison
-## est dans la forme du champ, et elle n'etait pas celle qu'on supposait : le
-## climat n'est pas une pente douce a l'echelle de la region, c'est un
-## **plateau parfaitement plat** — le melange ne retient qu'un site, son gradient
-## est exactement nul — coupe de transitions **etroites**, larges de deux cents
-## blocs a peine. Une maille plus large que la transition la manque entierement.
-##
-## D'ou une maille de 16 blocs. Et d'ou, aussi, une **portee de mesure quatre
-## fois plus grande que la maille** : deux cellules voisines mesurent alors sur
-## des fenetres qui se recouvrent aux trois quarts, donc leurs gradients ne
-## peuvent pas differer d'un saut. C'est ce recouvrement qui empeche l'amplitude
-## de l'ecotone de changer par marches — une marche d'amplitude dessinerait une
-## droite dans la frange, et c'est exactement l'artefact en courbe de niveau que
-## tout le reste du projet evite.
-##
-## La portee ne peut pas non plus etre d'un bloc : le champ varie de l'ordre de
-## 1e-3 par unite, et une difference sur un bloc se perdrait dans le bruit du
-## flottant. A 64, elle vaut ~0,17 unite de climat sur une transition.
-const CLIMATE_GRAD_CELL: int = 16
-const CLIMATE_GRAD_SHIFT: int = 4
-const CLIMATE_GRAD_STEP: int = 64
-
-
-## Le gradient du champ de climat au point (x, z), en **unites de climat par
-## bloc**, composante par composante : `Vector2(|dT/dl|, |dH/dl|)`.
-##
-## Difference **centree** sur `CLIMATE_GRAD_STEP`, prise sur les deux axes et
-## maximisee — c'est la meme convention que `slope_from` pour l'altitude, et
-## pour la meme raison : ce qui interesse l'appelant est la pente la plus raide,
-## celle qui donne la frange la plus etroite. Centree, et non avant comme celle
-## de l'altitude, parce qu'aucun invariant ne compare ici deux chemins de calcul
-## au pochoir pres — et parce qu'une difference avant decalerait la frange d'une
-## demi-portee vers l'amont.
-##
-## Memoise au centre d'une cellule de `CLIMATE_GRAD_CELL` : quatre melanges
-## climatiques pour 256 colonnes, et le melange climatique seul coute un ordre
-## de grandeur de moins qu'une colonne.
-func climate_gradient(x: int, z: int) -> Vector2:
-	var cx: int = x >> CLIMATE_GRAD_SHIFT
-	var cz: int = z >> CLIMATE_GRAD_SHIFT
-	var key: int = (cx << 24) ^ cz
-	_cgrad_mutex.lock()
-	var hit: Variant = _cgrad.get(key)
-	_cgrad_mutex.unlock()
-	if hit != null:
-		return hit
-
-	var half: int = CLIMATE_GRAD_CELL >> 1
-	var x0: int = (cx << CLIMATE_GRAD_SHIFT) + half
-	var z0: int = (cz << CLIMATE_GRAD_SHIFT) + half
-	var r: int = CLIMATE_GRAD_STEP >> 1
-	var dx: Vector2 = climate_blend(x0 + r, z0) - climate_blend(x0 - r, z0)
-	var dz: Vector2 = climate_blend(x0, z0 + r) - climate_blend(x0, z0 - r)
-	var step: float = float(CLIMATE_GRAD_STEP)
-	var g := Vector2(maxf(absf(dx.x), absf(dz.x)) / step,
-			maxf(absf(dx.y), absf(dz.y)) / step)
-
-	_cgrad_mutex.lock()
-	_cgrad[key] = g
-	_cgrad_mutex.unlock()
-	return g
 
 
 # -- Champ d'altitude ---------------------------------------------------------
@@ -737,11 +809,12 @@ func _apply_feature(h: float, feature: CWTileFeature, weight: float,
 #   * **le sol humide n'est pas le lit de l'etang, c'est sa rive.** La source
 #     ecrit le type 3 a la hauteur `lit`, sous la garde « le bloc qui s'y trouve
 #     n'est pas de l'eau » — garde qui echoue precisement quand il y a de l'eau.
-#     Le sol humide n'apparait donc que sur les colonnes de la porte **ou l'eau
-#     ne monte pas**, c'est-a-dire l'anneau autour de chaque mare. C'est
-#     beaucoup mieux ainsi : `CWDecorRules.FAMILIES_SURFACE` fait pousser des
-#     **roseaux** sur cette matiere, et un roseau se tient sur la rive, pas au
-#     fond ;
+#     Le sol humide n'apparaissait donc que sur les colonnes de la porte **ou
+#     l'eau ne monte pas**, c'est-a-dire l'anneau autour de chaque mare. La
+#     **rive est restee, la matiere est partie** le 2026-09-12 : elle etait une
+#     seconde matiere de Jungles, et un biome n'en a qu'une. Ce qu'elle
+#     dessinait — une berge seche entre l'eau et le terrain — est de la
+#     geometrie, et cette geometrie ne dependait pas d'elle ;
 #   * **le lit remonte au-dessus du palier dans le dernier quart.** Quand `t`
 #     devient negatif — `frac > 0,75`, un quart des colonnes de la porte — la
 #     source place le sol humide a `q + 5|t|` et non a `q`. C'est ce qui evite
@@ -789,10 +862,11 @@ const POND_DEPTH_MIN: int = 1
 ##
 ## Depuis que la rampe ne decide plus de la presence de l'eau (voir
 ## `POND_DEPTH_MIN`), toute la porte serait mouillee et il n'y aurait plus de
-## rive du tout — donc plus de sol humide, donc plus de roseau, le seul modele
-## de la flore qui pousse sur cette matiere. La rive redevient ce qu'elle est
-## dans le paysage : **la bande exterieure du lit**, celle ou le chenal est
-## encore sous le seuil mais deja trop haut pour porter de l'eau.
+## rive du tout : l'eau toucherait le terrain plein sur un trait, a la maniere
+## d'une flaque posee dessus. La rive redevient ce qu'elle est dans le
+## paysage — **la bande exterieure du lit**, celle ou le chenal est encore sous
+## le seuil mais deja trop haut pour porter de l'eau —, et c'est elle qui donne
+## a une mare une berge plutot qu'un bord.
 ##
 ## Elle a l'avantage d'etre continue le long du cours d'eau, la ou celle de la
 ## source apparaissait par plaques entre deux mares.
@@ -1110,7 +1184,7 @@ func _swamp_from(win: Array, wp: Vector2, best_d2: float) -> float:
 		var dx: float = float(s.x) - wp.x
 		var dz: float = float(s.z) - wp.y
 		var d2: float = dx * dx + dz * dz
-		var w: float = 1.0 - minf(1.0, (d2 - best_d2) * CLIMATE_WEIGHT_SCALE)
+		var w: float = 1.0 - minf(1.0, (d2 - best_d2) * SWAMP_WEIGHT_SCALE)
 		w_sum += w
 		if s.wet:
 			v_sum += w

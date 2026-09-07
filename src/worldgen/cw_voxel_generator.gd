@@ -336,11 +336,9 @@ func generated_voxel(x: int, y: int, z: int) -> int:
 	var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
 	var prof: Vector3i = CWTerrainField.column_profile(c.x, c.w, sea, biome)
 	var slope: float = f.slope_at(wx, wz) if p.cliff_slope else 0.0
-	var surface: int = CWPalette.surface_of(
-			CWBiome.at_dithered(c.x, c.y, c.z, sea, wx, wz,
-					CWBiome.fringe_amplitude(f.climate_gradient(wx, wz))),
-			c.x - float(sea), c.y, c.z, wx, wz, slope)
-	surface = pond_surface(surface, biome, prof,
+	var surface: int = CWPalette.surface_of(f.fringe_biome(wx, wz, c.x),
+			c.x - float(sea), wx, wz, slope)
+	surface = pond_surface(surface, prof,
 			CWTerrainField.pond_gate(c.x, c.w, sea, biome))
 	var zone: CWPathNetwork.Zone = f.paths().empty_zone()
 	if p.road_network:
@@ -381,40 +379,29 @@ func generated_voxel(x: int, y: int, z: int) -> int:
 
 ## Matiere de surface d'une colonne, une fois l'etang pris en compte.
 ##
-## Deux cas viennent de la source, et le troisieme est une reserve de ce projet.
-##
 ## **Le lit d'une mare garde la matiere de dessous, pas celle de dessus.** La
 ## source ne repeint pas le fond : elle ecrase d'eau des blocs qui etaient de la
 ## couche meuble, et c'est cette couche qu'on voit a travers l'eau. Rendre
 ## l'herbe du dessus mettrait une prairie verte au fond de chaque mare.
 ##
-## **Une colonne de la porte sans eau porte du sol humide** — c'est la **rive**,
-## et non le lit. Le pseudo-code de `docs/systems/02` disait le contraire ; la
-## relecture de la source a montre que l'ecriture du type 3 est gardee par « le
-## bloc qui s'y trouve n'est pas de l'eau », garde qui echoue precisement quand
-## il y en a. Le sol humide est donc l'anneau autour de chaque mare, ce qui est
-## beaucoup mieux : `CWDecorRules.FAMILIES_SURFACE` y fait pousser des roseaux,
-## et un roseau se tient sur la rive.
+## C'est la seule matiere de ce depot qui ne soit ni celle d'un biome ni celle
+## d'une falaise, et elle survit a la regle « un biome, une matiere » pour une
+## raison qui n'est pas une exception : **ce n'est pas une matiere de surface**.
+## C'est le sous-sol, vu en coupe parce que l'eau a creuse — exactement ce qu'on
+## voit en creusant soi-meme, et `subsurface_index` est le point unique qui le
+## dit dans les deux cas.
 ##
-## > **Et la rive n'est humide que dans le biome qui sait la garnir.** C'est une
-## > reserve assumee, pas un oubli. `FAMILIES_SURFACE[SWAMP]` appelle le role
-## > ROSEAU, et le seul modele de roseau du lot est `jungles/roseau` : poser du
-## > sol humide dans les cinq autres biomes rendrait un anneau **nu** autour de
-## > chaque mare. C'est exactement le defaut qui a fait retirer les franges
-## > d'humidite, puis les bandes d'altitude, puis la falaise — *une matiere qui
-## > ne porte rien est un trou dans le monde*, et on ne le repaiera pas une
-## > quatrieme fois pour un anneau de deux blocs. La table lue est
-## > `FAMILIES_SURFACE_BIOME`, qui declare deja quel biome garnit quelle
-## > matiere : le jour ou chaque biome aura son roseau, elle grandira et la rive
-## > suivra sans qu'on retouche a ceci.
-static func pond_surface(surface: int, biome: int, prof: Vector3i,
-		in_gate: bool) -> int:
+## **La rive, elle, garde la matiere de son biome depuis le 2026-09-12.** Elle
+## portait du sol humide, qui etait la seconde matiere de Jungles et le seul sol
+## ou poussait le roseau ; les deux sont partis ensemble (`CWDecorRules`, note
+## des exceptions par matiere). Ce que la rive dessine est de la geometrie — une
+## berge seche entre l'eau et le terrain —, et la geometrie ne dependait pas de
+## la couleur.
+static func pond_surface(surface: int, prof: Vector3i, in_gate: bool) -> int:
 	if not in_gate:
 		return surface
 	if prof.y <= prof.z:
 		return CWPalette.subsurface_index(surface)
-	if int(CWDecorRules.FAMILIES_SURFACE_BIOME.get(CWPalette.SWAMP, -1)) == biome:
-		return CWPalette.SWAMP
 	return surface
 
 
@@ -720,13 +707,15 @@ func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,
 	var raw: PackedFloat32Array = f.sample_patch(ox, oz, rx, size.z + ring,
 			stride)
 	var step_f: float = float(stride)
-	# L'amplitude de l'ecotone, prise une fois par cellule de climat traversee
-	# et non une fois par colonne : le gradient du champ de climat est une
-	# grandeur regionale, et sa lecture prend un verrou. Meme economie que celle
-	# de la fenetre de massifs juste au-dessus.
-	var amp := Vector2.ZERO
-	var last_gcx: int = 0x7FFFFFFF
-	var last_gcz: int = 0x7FFFFFFF
+	# La fenetre de sites de l'ecotone, prise une fois par zone traversee et non
+	# une fois par colonne : les 256 colonnes d'un bloc de 16 tombent presque
+	# toujours dans la meme zone de 16384 unites, et le cache de fenetres est
+	# protege par mutex. C'est la meme economie que celle de `sample_patch`,
+	# refaite ici parce que la recherche de site tramee est le seul consommateur
+	# de la fenetre qui ne passe pas par lui.
+	var win: Array = []
+	var last_zx: int = 0x7FFFFFFF
+	var last_zz: int = 0x7FFFFFFF
 	for i in n:
 		# Meme parcours que `sample_patch` : iz a l'exterieur, ix a l'interieur.
 		# La regle de surface a besoin des coordonnees monde depuis le jalon
@@ -736,6 +725,12 @@ func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,
 		var ix: int = i - iz * size.x
 		var cx: int = ox + ix * stride
 		var cz: int = oz + iz * stride
+		var zx: int = CWWorldParams.zone_of(cx - CWWorldParams.ZONE_SIZE)
+		var zz: int = CWWorldParams.zone_of(cz - CWWorldParams.ZONE_SIZE)
+		if zx != last_zx or zz != last_zz:
+			win = f.sites().get_window(zx, zz)
+			last_zx = zx
+			last_zz = zz
 		var j: int = (iz * rx + ix) * 4
 		var h: float = raw[j]
 		var chan: float = raw[j + 3]
@@ -785,19 +780,13 @@ func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,
 			patch.roads[i * 2] = shape.y
 			patch.roads[i * 2 + 1] = shape.z
 
-		# La matiere du sol prend le biome **trame** ; tout le reste — l'eau, le
-		# decor, le nom affiche — garde celui de `CWBiome.at`. Voir l'en-tete de
-		# `at_dithered`.
-		var gcx: int = cx >> CWTerrainField.CLIMATE_GRAD_SHIFT
-		var gcz: int = cz >> CWTerrainField.CLIMATE_GRAD_SHIFT
-		if gcx != last_gcx or gcz != last_gcz:
-			amp = CWBiome.fringe_amplitude(f.climate_gradient(cx, cz))
-			last_gcx = gcx
-			last_gcz = gcz
+		# La matiere du sol prend le biome **trame** — celui du site le plus
+		# proche d'un point brouille de trente blocs ; tout le reste — l'eau, le
+		# decor, le nom affiche — garde celui du point vrai. Voir l'en-tete de
+		# `CWTerrainField.fringe_point`.
 		var ss: Vector2i = CWPalette.surface_shaded(
-				CWBiome.at_dithered(h, raw[j + 1], raw[j + 2], sea, cx, cz, amp),
-				h - float(sea), raw[j + 1], raw[j + 2], cx, cz, slope)
-		var surf: int = pond_surface(ss.x, biome, prof,
+				f.fringe_biome_in(win, cx, cz, h), h - float(sea), cx, cz, slope)
+		var surf: int = pond_surface(ss.x, prof,
 				CWTerrainField.pond_gate(h, chan, sea, biome))
 		var col: int = ss.y if surf == ss.x else CWPalette.toned(
 				CWPalette.raw_of(surf), cx, cz)

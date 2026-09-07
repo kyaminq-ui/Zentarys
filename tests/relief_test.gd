@@ -28,6 +28,18 @@ func _ok(label: String, condition: bool, detail: String = "") -> void:
 	_runner._ok(label, condition, detail)
 
 
+## Le biome nomme a la fraction `t` du segment qui joint un site a son voisin.
+## Trois lignes, mais elles sont ecrites deux fois dans la mesure d'ecotone —
+## une passe grossiere puis une fine — et les garder ensemble est ce qui evite
+## que les deux se mettent a mesurer deux choses differentes.
+func _biome_le_long(f: CWTerrainField, site: CWRegionSite, axe: Vector2,
+		t: float, sea: int) -> int:
+	var q: Vector2 = Vector2(float(site.x), float(site.z)) + axe * t
+	var x: int = int(q.x)
+	var z: int = int(q.y)
+	return CWBiome.of_site(f.nearest_site(x, z), f.sample_column(x, z).x, sea)
+
+
 ## Un champ neuf sur la graine de la demo, ou tous les reperes de ce depot sont
 ## pris (invariant n. 37).
 func _champ() -> CWTerrainField:
@@ -434,109 +446,128 @@ func _test_tramage() -> void:
 	var raide: int = 0
 	for x in range(0, 120):
 		for z in range(0, 120):
-			if CWPalette.surface_of(CWBiome.GREENLANDS, 60.0, 0.5, 0.5,
+			if CWPalette.surface_of(CWBiome.GREENLANDS, 60.0,
 					x + 1000, z + 2000, 0.0) == CWPalette.STONE:
 				plate += 1
-			if CWPalette.surface_of(CWBiome.GREENLANDS, 60.0, 0.5, 0.5,
+			if CWPalette.surface_of(CWBiome.GREENLANDS, 60.0,
 					x + 1000, z + 2000, 0.9) == CWPalette.STONE:
 				raide += 1
 	_ok("une pente nulle ne porte jamais de roche", plate == 0, "%d" % plate)
 
-	# L'ecotone : la frontiere entre deux biomes. Loin d'un seuil, le brouillage
-	# du climat ne change rien et la fonction sort sans echantillonner ; **sur**
-	# le seuil, les deux biomes s'interpenetrent.
-	# L'amplitude est desormais un argument, borne en blocs par
-	# `CWBiome.fringe_amplitude` : ces deux mesures-ci veulent la frange la
-	# plus large possible, donc le plafond.
-	var plein := Vector2(CWBiome.DITHER_T, CWBiome.DITHER_H)
-	# **Le point temoin est du cote humide, et ce n'est pas indifferent.** Sur
-	# le versant sec, les trois seuils de temperature — Snowlands, Deserts, Lava
-	# Lands — se suivent de moins de 0,14, c'est-a-dire de moins de deux
-	# amplitudes de tramage : on n'y trouve plus un point qui soit loin de tous.
-	# Du cote humide il n'y en a que deux, et 0,36 est a 0,08 de l'un et 0,11 de
-	# l'autre. L'humidite, elle, est a 0,20 de sa frontiere, soit deux fois
-	# `DITHER_H` : le tramage ne peut pas faire passer la colonne du cote sec,
-	# donc les seuils du sec ne la concernent pas.
-	var loin: int = 0
-	for x in range(0, 60):
-		for z in range(0, 60):
-			if CWBiome.at_dithered(50.0, 0.36, 0.85, 0, x + 700, z + 800,
-					plein) \
-					!= CWBiome.GREENLANDS:
-				loin += 1
-	_ok("loin d'un seuil, le tramage de biome ne change rien", loin == 0,
-			"%d colonnes" % loin)
-
-	# **Pile sur la frontiere sec/humide, a temperature chaude** : c'est la plus
-	# grande frontiere de matiere du monde depuis le 2026-09-11, puisqu'une
-	# seule frontiere d'humidite le partage en deux. D'un cote la jungle, de
-	# l'autre les Lava Lands.
-	var secs: int = 0
-	var total: int = 0
-	for x in range(0, 120):
-		for z in range(0, 120):
-			total += 1
-			if CWBiome.at_dithered(50.0, 0.80, CWBiome.HUMID_H, 0,
-					x + 4000, z + 5000, plein) != CWBiome.JUNGLES:
-				secs += 1
-	var part_d: float = float(secs) / float(total)
-	_ok("sur la frontiere sec/humide, les deux biomes s'interpenetrent",
-			part_d > 0.2 and part_d < 0.8, "%.3f du cote sec" % part_d)
-	print("     ecotone : %.1f %% du cote sec exactement sur la frontiere"
-			% (part_d * 100.0))
-
-	# Et la meme chose sur une frontiere de **temperature**, celle qui separe la
-	# prairie du desert : le tramage doit brouiller les deux grandeurs, pas la
-	# seule humidite. Sans cette seconde verification, un tramage qui ne
-	# toucherait que `h` passerait la precedente sans rien dire.
-	var chauds: int = 0
-	total = 0
-	for x in range(0, 120):
-		for z in range(0, 120):
-			total += 1
-			if CWBiome.at_dithered(50.0, CWBiome.DESERT_T, 0.30, 0,
-					x + 1100, z + 2200, plein) == CWBiome.DESERTS:
-				chauds += 1
-	var part_t: float = float(chauds) / float(total)
-	_ok("sur la frontiere prairie/desert, les deux biomes s'interpenetrent",
-			part_t > 0.2 and part_t < 0.8, "%.3f de desert" % part_t)
-
-	# -- La frange se borne en blocs (2026-09-09) -----------------------------
+	# -- L'ecotone : la frontiere entre deux biomes (refait le 2026-09-12) ---
 	#
-	# Le defaut du 2026-09-08 : une amplitude en unites de climat represente une
-	# distance qui depend de la pente du champ, donc une frange de largeur
-	# inconnue — et infinie la ou le champ est plat. Ces quatre verifications
-	# tiennent la borne, et la premiere est la seule qui compte vraiment : **sur
-	# un climat plat, il n'y a pas de frontiere, donc pas de frange.**
-	var nul: Vector2 = CWBiome.fringe_amplitude(Vector2.ZERO)
-	_ok("climat plat : amplitude nulle", nul == Vector2.ZERO, "%v" % nul)
+	# Le biome se decide au **site de region** depuis ce jour-la, et la frange
+	# n'est plus un brouillage de climat mais un **deplacement du point** :
+	# la matiere du sol prend le biome du site le plus proche d'un point
+	# deplace d'au plus `FRINGE_BLOCKS`. Ce qui se verifie ici est donc une
+	# geometrie, et non plus une amplitude — c'est ce qui rend ces mesures
+	# beaucoup plus directes que celles qu'elles remplacent.
+	var f := _champ()
 
-	var fige: int = 0
-	for x in range(0, 60):
-		for z in range(0, 60):
-			# Pile sur le seuil d'humidite du desert, la ou le tramage a le plus
-			# de prise : a amplitude nulle il ne doit pourtant rien changer.
-			if CWBiome.at_dithered(50.0, 0.80, CWBiome.HUMID_H, 0,
-					x + 4000, z + 5000, Vector2.ZERO) \
-					!= CWBiome.at(50.0, 0.80, CWBiome.HUMID_H, 0):
-				fige += 1
-	_ok("climat plat : le tramage ne deplace plus rien", fige == 0,
-			"%d colonnes" % fige)
+	# 1. Le deplacement est borne, et il n'est pas nul. Les deux ensemble : une
+	#    frange figee passerait la premiere verification sans rien dire.
+	var pire_ecart: float = 0.0
+	var bouge: bool = false
+	for i in 400:
+		var x: int = 4_000_000 + i * 37
+		var z: int = 4_000_000 + i * 91
+		var d: Vector2 = f.fringe_point(x, z) - f.warped_point(x, z)
+		pire_ecart = maxf(pire_ecart, maxf(absf(d.x), absf(d.y)))
+		if d.length() > 4.0:
+			bouge = true
+	_ok("le deplacement de frange reste sous FRINGE_BLOCKS",
+			pire_ecart <= CWTerrainField.FRINGE_BLOCKS + 0.001,
+			"%.1f blocs pour %.0f" % [pire_ecart, CWTerrainField.FRINGE_BLOCKS])
+	_ok("le deplacement de frange n'est pas fige", bouge,
+			"ecart maximal %.1f blocs" % pire_ecart)
 
-	# Une pente moyenne : la frange doit mesurer FRINGE_BLOCKS blocs, donc
-	# l'amplitude vaut la pente multipliee par cette largeur — et non le
-	# plafond.
-	var douce: Vector2 = CWBiome.fringe_amplitude(Vector2(0.0005, 0.0005))
-	_ok("pente douce : l'amplitude est la largeur voulue, pas le plafond",
-			is_equal_approx(douce.x, 0.0005 * CWBiome.FRINGE_BLOCKS)
-					and douce.x < CWBiome.DITHER_T, "%v" % douce)
+	# 2. **Au coeur d'une region, la frange ne change rien.** C'est la propriete
+	#    que l'ancien mecanisme n'avait pas : sur un climat plat, brouiller le
+	#    climat tirait a pile ou face sur chaque colonne d'un pays entier. Un
+	#    deplacement de trente blocs, lui, ne change pas de site tant qu'on est
+	#    loin d'une arete — et « loin » se compte en blocs, sans pente a diviser.
+	var site: CWRegionSite = f.sites().get_site(60, 60)
+	var dedans: int = 0
+	for ix in 24:
+		for iz in 24:
+			var x: int = site.x + (ix - 12) * 24
+			var z: int = site.z + (iz - 12) * 24
+			var h: float = f.sample_column(x, z).x
+			if f.fringe_biome(x, z, h) != CWBiome.of_site(
+					f.nearest_site(x, z), h, f.params().sea_level):
+				dedans += 1
+	_ok("au coeur d'une region, la frange ne deplace rien", dedans == 0,
+			"%d colonnes sur 576" % dedans)
 
-	# Une pente forte : le plafond reprend la main, sans quoi une frontiere
-	# climatique abrupte se tramerait sur plus large que sa propre bande.
-	var raide_c: Vector2 = CWBiome.fringe_amplitude(Vector2(1.0, 1.0))
-	_ok("pente forte : le plafond tient",
-			raide_c == Vector2(CWBiome.DITHER_T, CWBiome.DITHER_H),
-			"%v" % raide_c)
+	# 3. **Sur une frontiere, les deux biomes s'interpenetrent, et pas plus
+	#    profond que le contrat.** Le transect va d'un site a son voisin : il
+	#    traverse donc l'arete de Voronoi qui les separe, et une seule. On le
+	#    parcourt une premiere fois grossierement pour trouver l'arete, puis a
+	#    la maille du bloc autour d'elle — une frange de trente blocs sur vingt
+	#    mille ne se voit pas autrement, et c'est bien le signe qu'elle est
+	#    etroite.
+	var voisin: CWRegionSite = f.sites().get_site(61, 60)
+	var sea: int = f.params().sea_level
+	var axe := Vector2(float(voisin.x - site.x), float(voisin.z - site.z))
+	var longueur: float = axe.length()
+	var pas_gros: int = 128
+	var bord_t: float = -1.0
+	var prev: int = -1
+	var sauts: int = 0
+	for k in pas_gros + 1:
+		var t: float = float(k) / float(pas_gros)
+		var here: int = _biome_le_long(f, site, axe, t, sea)
+		if prev >= 0 and here != prev:
+			sauts += 1
+			bord_t = t
+		prev = here
+	_ok("un transect d'un site a son voisin ne traverse qu'une frontiere",
+			sauts <= 1, "%d frontieres sur %.0f blocs" % [sauts, longueur])
+	print("     un site a son voisin : %.0f blocs, %d changement(s) de biome"
+			% [longueur, sauts])
+
+	if sauts == 1:
+		# La maille fine : 512 blocs de part et d'autre de l'arete, un point
+		# par bloc.
+		var n_f: int = 1024
+		var nomme := PackedInt32Array()
+		var trame := PackedInt32Array()
+		nomme.resize(n_f)
+		trame.resize(n_f)
+		var centre: Vector2 = Vector2(float(site.x), float(site.z)) + axe * bord_t
+		var u: Vector2 = axe / longueur
+		for k in n_f:
+			var q: Vector2 = centre + u * float(k - n_f / 2)
+			var x: int = int(q.x)
+			var z: int = int(q.y)
+			var h: float = f.sample_column(x, z).x
+			nomme[k] = CWBiome.of_site(f.nearest_site(x, z), h, sea)
+			trame[k] = f.fringe_biome(x, z, h)
+		var bords := PackedInt32Array()
+		for k in range(1, n_f):
+			if nomme[k] != nomme[k - 1]:
+				bords.append(k)
+		var desaccords: int = 0
+		var pire_incursion: int = 0
+		for k in n_f:
+			if trame[k] == nomme[k]:
+				continue
+			desaccords += 1
+			var d: int = n_f
+			for bord in bords:
+				d = mini(d, absi(k - bord))
+			pire_incursion = maxi(pire_incursion, d)
+		_ok("la frontiere de Voronoi porte une frange", desaccords > 0,
+				"%d colonnes sur %d" % [desaccords, n_f])
+		# La borne est prise large : le pas d'un bloc suit la droite du
+		# transect, qui coupe l'arete de biais. Ce qu'elle attrape est le retour
+		# du vrai defaut — une frange qui traverse un pays.
+		_ok("la frange ne s'enfonce pas plus loin que son contrat",
+				pire_incursion <= int(CWTerrainField.FRINGE_BLOCKS * 2.0),
+				"%d blocs pour un contrat de %.0f"
+						% [pire_incursion, CWTerrainField.FRINGE_BLOCKS])
+		print("     ecotone : %d colonnes de frange sur %d, incursion maximale %d blocs"
+				% [desaccords, n_f, pire_incursion])
 
 	_ok("une pente franche est entierement rocheuse",
 			raide == 120 * 120, "%d sur %d" % [raide, 120 * 120])

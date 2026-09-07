@@ -128,7 +128,6 @@ const ROLES: Dictionary = {
 		CWDecorRules.Role.FLEUR: ["jungles/fleur_coeur", "jungles/fleur_ame"],
 		CWDecorRules.Role.SOUS_BOIS: ["jungles/liane", "jungles/vrille",
 				"jungles/lierre", "jungles/fougere_geante"],
-		CWDecorRules.Role.ROSEAU: ["jungles/roseau"],
 		CWDecorRules.Role.RARE: ["jungles/champignon"],
 	},
 	CWBiome.LAVALANDS: {
@@ -170,7 +169,7 @@ const GRILLE_FINE: Array[String] = [
 	"greenlands/fleur_tournesol", "greenlands/fleur_coeur",
 	"greenlands/ginseng",
 	"snowlands/herbe_gelee", "snowlands/fleur_de_glace",
-	"jungles/fleur_coeur", "jungles/fleur_ame", "jungles/roseau",
+	"jungles/fleur_coeur", "jungles/fleur_ame",
 	"lavalands/herbe_de_lave", "lavalands/fleur_de_lave",
 ]
 

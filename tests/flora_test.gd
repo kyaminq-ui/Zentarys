@@ -555,7 +555,7 @@ func _test_two_frequencies(sc: CWScatter, cx0: int, cz0: int) -> void:
 	var roles_seen: Dictionary = {}
 	for step in 400:
 		var wx: int = (cx0 << CWScatter.CELL_SHIFT) + step * 137
-		roles_seen[CWDecorRules.role_at(CWBiome.GREENLANDS, CWPalette.GRASS, wx,
+		roles_seen[CWDecorRules.role_at(CWBiome.GREENLANDS, wx,
 				cz0 << CWScatter.CELL_SHIFT)] = true
 	_ok("les deux cretes donnent plus d'un role sur Greenlands",
 			roles_seen.size() >= 2,
@@ -564,10 +564,10 @@ func _test_two_frequencies(sc: CWScatter, cx0: int, cz0: int) -> void:
 	# rebondirait d'une colonne a l'autre serait un second tirage uniforme, pas
 	# une composition.
 	var flips: int = 0
-	var prev: int = CWDecorRules.role_at(CWBiome.GREENLANDS, CWPalette.GRASS,
+	var prev: int = CWDecorRules.role_at(CWBiome.GREENLANDS,
 			cx0 << CWScatter.CELL_SHIFT, cz0 << CWScatter.CELL_SHIFT)
 	for step in range(1, 60):
-		var here: int = CWDecorRules.role_at(CWBiome.GREENLANDS, CWPalette.GRASS,
+		var here: int = CWDecorRules.role_at(CWBiome.GREENLANDS,
 				(cx0 << CWScatter.CELL_SHIFT) + step, cz0 << CWScatter.CELL_SHIFT)
 		if here != prev:
 			flips += 1
