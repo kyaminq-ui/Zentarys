@@ -1,0 +1,43 @@
+#!/usr/bin/env python
+"""Construction de la GDExtension de Zentarys.
+
+    cd native
+    scons target=template_release
+
+-- Les trois reglages qui ne se devinent pas -----------------------------------
+
+* **`precision=double`.** Le moteur du depot est un build personnalise en double
+  precision. Une extension compilee en simple **charge quand meme** et rend des
+  valeurs fausses au bout d'un moment : la taille des types de base change, donc
+  les structures ne s'alignent plus. C'est l'erreur qui coute une journee, et
+  c'est pour ca qu'elle est en dur ici plutot qu'en argument ;
+* **`custom_api_file`.** Le moteur est un build maison ; on compile donc contre
+  **son** vidage d'API, pas contre celui qu'embarque godot-cpp. Le fichier est
+  produit par `--dump-extension-api`, et le Makefile ci-dessous le refait s'il
+  manque ;
+* **`/fp:precise`.** L'exactitude au bit pres est un invariant, pas une
+  preference (n. 1) : `CWNoiseNative` doit rendre les memes bits que
+  `CWValueNoise`. On interdit donc la contraction FMA et les reciproques
+  approchees. MSVC est deja en `/fp:precise` par defaut ; on l'ecrit quand meme,
+  parce qu'un defaut n'est pas une garantie.
+"""
+
+import os
+
+env = SConscript("godot-cpp/SConstruct")
+
+env.Append(CPPPATH=["src/"])
+
+if env["platform"] == "windows" and "msvc" in env.get("TOOLS", []):
+    env.Append(CCFLAGS=["/fp:precise"])
+else:
+    env.Append(CCFLAGS=["-ffp-contract=off"])
+
+sources = Glob("src/*.cpp")
+
+library = env.SharedLibrary(
+    "bin/libzentarys{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
+    source=sources,
+)
+
+Default(library)

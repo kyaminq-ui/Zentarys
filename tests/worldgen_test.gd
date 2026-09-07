@@ -94,6 +94,38 @@ func _test_value_noise() -> void:
 	_close("interpolation exacte aux noeuds",
 			CWValueNoise.sample(3.0, 4.0), CWValueNoise.lattice(3 + 4 * 57), 1e-12)
 
+	# -- Le corps natif, s'il est la ------------------------------------------
+	#
+	# La GDExtension (`native/`) refait ce calcul en C++, et elle n'est adoptee
+	# qu'apres avoir prouve qu'elle rend les **memes bits** — c'est
+	# `CWValueNoise._natif_accorde`, qui tourne au chargement de la classe.
+	# Ici on refait la preuve sur un balayage plus large, et surtout on **dit
+	# laquelle des deux tourne** : une suite qui passerait sans qu'on sache si
+	# elle a verifie le C++ ou seulement le GDScript ne vaudrait rien.
+	#
+	# Le depot tourne sans la bibliotheque, donc son absence n'est pas un echec.
+	# Ce qui serait un echec, c'est qu'elle soit la et qu'elle mente.
+	if not CWValueNoise.natif():
+		print("     bruit natif : absent, le GDScript fait le calcul"
+				+ " (voir native/README.md)")
+	else:
+		print("     bruit natif : ACTIF")
+		var ecarts: int = 0
+		var pire: float = 0.0
+		for i in 20000:
+			# Le domaine reellement echantillonne par le jeu : de grands
+			# decalages de graine, des frequences fines, et des coordonnees
+			# monde de l'ordre de huit millions.
+			var x: float = 8388608.0 * 0.5 + float(i) * 0.013 + 51239.0
+			var z: float = 8388608.0 * 0.5 - float(i) * 0.007 + 87431.0
+			var a2: float = CWValueNoise.sample(x, z)
+			var b2: float = CWValueNoise.sample_gd(x, z)
+			if a2 != b2:
+				ecarts += 1
+				pire = maxf(pire, absf(a2 - b2))
+		_ok("le bruit natif rend les memes bits que le GDScript, sur 20 000 points",
+				ecarts == 0, "%d ecart(s), pire %.3e" % [ecarts, pire])
+
 
 # -- 2. LCG de la CRT MSVC ----------------------------------------------------
 

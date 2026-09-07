@@ -1,0 +1,17 @@
+[configuration]
+
+entry_symbol = "zentarys_library_init"
+compatibility_minimum = "4.7"
+
+; La bibliotheque est **compilee en double precision**, comme le moteur du
+; depot. Godot choisit la ligne `.double` de lui-meme quand il tourne en double,
+; et refuserait la simple : c'est le garde-fou qui evite qu'une extension
+; compilee par erreur en simple se charge et rende des valeurs fausses.
+[libraries]
+
+windows.debug.x86_64.double = "res://native/bin/libzentarys.windows.template_debug.double.x86_64.dll"
+windows.release.x86_64.double = "res://native/bin/libzentarys.windows.template_release.double.x86_64.dll"
+linux.debug.x86_64.double = "res://native/bin/libzentarys.linux.template_debug.double.x86_64.so"
+linux.release.x86_64.double = "res://native/bin/libzentarys.linux.template_release.double.x86_64.so"
+macos.debug.double = "res://native/bin/libzentarys.macos.template_debug.double.framework"
+macos.release.double = "res://native/bin/libzentarys.macos.template_release.double.framework"

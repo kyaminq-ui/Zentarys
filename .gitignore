@@ -18,3 +18,20 @@ reference_*.png
 # Et les fichiers d'import que Godot genere pour elles : la capture est ignoree,
 # son `.import` ne l'etait pas, et il se serait retrouve au depot tout seul.
 reference_*.png.import
+
+# La GDExtension (`native/`). Le code source y est ; la dependance, le vidage
+# d'API et les objets compiles n'y sont pas, et pour la meme raison que le
+# binaire de l'editeur juste au-dessus : ils decrivent une machine, pas le
+# projet. `native/README.md` dit comment les refaire, et le monde est identique
+# sans eux — seulement plus lent a charger.
+native/godot-cpp/
+native/api/
+native/bin/
+# Le manifeste est **pose par la construction**, pas versionne : Godot lit tout
+# `.gdextension` qu'il trouve, et un manifeste sans bibliotheque fait une erreur
+# a chaque demarrage. Le modele versionne est `zentarys.gdextension.in`.
+native/zentarys.gdextension
+native/zentarys.gdextension.uid
+native/.sconsign.dblite
+native/src/*.obj
+native/src/*.o

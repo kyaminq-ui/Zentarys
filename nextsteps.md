@@ -15,8 +15,9 @@ invariants, les pièges, les décisions ouvertes.
 
 ## 0. La prochaine session — **cinq demandes, 2026-09-10 au soir**
 
-> **Les n° 1 à 4 sont faites (2026-09-11). La n° 5 — le C++ — ne l'est pas, et
-> la mesure de la n° 4 dit maintenant qu'elle reste le seul levier de débit.**
+> **Les n° 1 à 4 sont faites (2026-09-11). La n° 5 est écrite et prête à
+> compiler, mais elle ne compile pas sur cette machine : le SDK Windows n'y est
+> pas installé. Voir §5 pour la commande qui manque.**
 > Le programme précédent — les quatre demandes du 2026-09-09 — est entièrement
 > traité ; ce qu'il a rendu est plus bas, et le récit est dans le journal de
 > `docs/ROADMAP.md`.
@@ -293,35 +294,72 @@ calculé (`CWVoxelGenerator.PATCH_BYTES`) et affiché, pas estimé.
   et c'est maintenant le seul plafond chiffré du projet. Le lever coûte 105 Mo
   par doublement — ce qui, à côté des 347 Mo de données voxels, est acceptable.
 
-### 5. Le C++ — **seulement si le maillage ne suffit pas**
+### 5. Le C++ — **écrit et prêt, mais pas compilable sur cette machine**
 
 *Si vraiment les performances n'y sont pas, la prochaine tâche sera de passer en
 C++.*
 
-La cible est connue, unique et chiffrée : `CWValueNoise.sample`, 3,08 µs,
-une quinzaine par colonne, **la moitié du temps de génération**. L'attente est
-un **facteur deux** sur le chargement (42 s → ~22 s), pas un facteur dix.
+**La condition est remplie**, et c'est la mesure de la n° 4 qui la remplit : le
+maillage coûte 0,5 s sur un chargement de 27,5 s, donc il ne reste rien à
+gagner de ce côté. Le champ reste 83 % du temps, et le bruit la moitié du champ.
 
-Ce qu'il faut avoir en tête le jour venu :
+**Ce qui est fait, et qui est dans le dépôt :**
 
-* **GDExtension plutôt que module** : le moteur est un build personnalisé
-  (double précision, Voxel Tools 1.7 compilé dedans), donc une extension doit
-  être compilée contre *exactement* ce build. Un module obligerait à
-  reconstruire et redistribuer le binaire de 190 Mo ;
-* ⚠️ **l'exactitude au bit près est un invariant, pas une préférence.**
-  `CWValueNoise` émule de l'arithmétique 32 bits pour reproduire les motifs de la
-  source, et l'invariant n° 1 dit que toute dérive change **tous les mondes déjà
-  explorés**. En natif : pas de `rcpps`/`rsqrtps` approximés, pas de contraction
-  FMA, et l'ordre des opérations conservé ;
-* **la vectorisation vient après le portage, pas avec.** GDScript → C++ scalaire
-  vaut déjà l'essentiel (l'overhead par opération domine) ; SSE2 par-dessus vaut
-  2 à 4× de plus sur un poste devenu minoritaire. Le point favorable est que
-  `sample_patch` traite un pavé de 16 × 16 d'un coup : vectoriser **entre
-  colonnes** tombe juste ;
-* **et refaire la falaise des fils après.** Un champ deux fois plus rapide
-  déplace l'optimum du pool ; les deux réglages ne sont pas indépendants.
+* `native/` — une GDExtension complète : `CWNoiseNative`, son `SConstruct`, son
+  manifeste, son script de construction et son `README.md`. La route est la
+  **GDExtension** et non le module, pour la raison écrite ici depuis le début :
+  le moteur est un build personnalisé, et un module obligerait à reconstruire
+  et redistribuer les 190 Mo ;
+* **`CWValueNoise` a deux corps**, et il choisit. `sample` passe au natif quand
+  il est là, `sample_gd` reste la référence lisible et testée ;
+* ⚠️ **et il ne lui fait pas confiance parce qu'elle est là.** L'exactitude au
+  bit près est un invariant (n° 1) : une bibliothèque compilée ailleurs, par un
+  autre compilateur, avec une autre `libm`, peut différer d'un ulp sur le
+  cosinus sans que rien ne le signale — et le défaut ne se verrait que le jour
+  où deux machines compareraient deux captures du même endroit.
+  `_natif_accorde` la fait donc **passer un examen au chargement** et la refuse
+  si elle ne rend pas exactement les mêmes bits. La suite refait la preuve sur
+  20 000 points et **dit laquelle des deux tourne** ;
+* le manifeste `.gdextension` est **posé par la construction**, pas versionné :
+  Godot lit tout `.gdextension` qu'il trouve, et un manifeste sans bibliothèque
+  fait une erreur à chaque démarrage pour tout le monde. Sans construction, le
+  dépôt est silencieux et le monde identique — seulement plus lent.
 
----
+**Ce qui bloque, et ce n'est pas du code.** Cette machine a MSVC (14.44 et
+14.51) et SCons, mais **pas le SDK Windows** : `C:\Program Files (x86)\Windows
+Kits\10` n'a ni `Include` ni `Lib`, donc `cl.exe` ne trouve pas `stddef.h`. La
+compilation part, génère les liaisons de godot-cpp, et s'arrête là. Installer un
+SDK de plusieurs gigaoctets est une modification de la machine, pas du projet :
+elle n'a pas été faite.
+
+```
+# Le composant qui manque, par l'installateur de Visual Studio :
+#   Modifier -> Développement Desktop en C++ -> cocher « SDK Windows 11 »
+"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe" modify ^
+    --installPath "C:\Program Files\Microsoft Visual Studio\2022\Community" ^
+    --add Microsoft.VisualStudio.Component.Windows11SDK.22621 --passive
+# puis
+native\build.bat template_release
+```
+
+**Ce qu'il faudra vérifier le jour où elle compilera, dans cet ordre :**
+
+1. **la suite passe, et elle dit « bruit natif : ACTIF ».** Si elle dit
+   « absent » alors que la bibliothèque est là, c'est que l'examen l'a refusée —
+   et c'est un vrai défaut, pas un réglage ;
+2. **`tools/profile_worldgen.gd` chiffre le gain** : il mesure maintenant les
+   deux corps côte à côte et affiche le rapport, frontière d'appel comprise.
+   L'attente est un **facteur deux** sur le chargement (27,5 s → ~17 s), pas un
+   facteur dix ;
+3. ⚠️ **refaire la falaise des fils.** Un champ deux fois plus rapide déplace
+   l'optimum du pool ; les deux réglages ne sont pas indépendants. `-- --fils n`
+   refait la mesure ;
+4. **puis, seulement si ça ne suffit pas, porter `_height_from`.**
+   `CWNoiseNative.sample_octaves` est déjà là pour ça : il évalue N octaves en
+   **un seul passage de frontière**, ce qui est la moitié de l'enjeu — un appel
+   de méthode depuis GDScript coûte une fraction de microseconde et
+   `_height_from` en fait quinze par colonne. Il n'est encore appelé par
+   personne.
 
 ### Ce qui reste ouvert par ailleurs, et qui n'est dans aucune des cinq
 
@@ -876,7 +914,9 @@ porte*. `_generate_block` les pose du plus profond au plus superficiel,
 
 ```
 src/worldgen/
-  cw_value_noise.gd        bruit de valeur (Hugo Elias), arithmétique 32 bits émulée
+  cw_value_noise.gd        bruit de valeur (Hugo Elias), arithmétique 32 bits
+                           émulée — et le choix entre ses deux corps, GDScript
+                           et natif (2026-09-11)
   cw_rand.gd               LCG de la CRT MSVC
   cw_region_site.gd        structure d'un site de zone
   cw_region_site_grid.gd   grille 1024² paresseuse, caches sous mutex
@@ -937,6 +977,9 @@ tools/find_path.gd           une chaussée, une levée (1.16)
 tools/profile_worldgen.gd    le profil du chargement, poste par poste
 tools/profile_mesh.gd        ce que coute le maillage : sommets, tramage,
                              fusion gloutonne, memoire (2026-09-11)
+native/                      la GDExtension : le bruit de valeur en C++, sa
+                             chaine de construction et l'examen d'exactitude
+                             qui decide si on s'en sert (2026-09-11)
 tools/blender/               générateurs des lots de modèles
   flore_vox.py                 palette verbatim, écriture .vox, garde-fous
   flore_formes.py              brins, tiges, feuilles, corolles, cailloux

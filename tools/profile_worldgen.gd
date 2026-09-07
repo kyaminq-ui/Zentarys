@@ -151,6 +151,19 @@ func _poste_champ(n: int, seed_v: int) -> void:
 		CWValueNoise.sample(float(i) * 0.37, float(i) * 0.71))
 	_ligne("un echantillon de bruit (CWValueNoise.sample)", bruit)
 	_ligne("  x 15, l'ordre de ce que fait une colonne", bruit * 15.0, plein)
+	# Les deux corps cote a cote, quand la GDExtension est la. C'est le seul
+	# endroit du depot ou le portage se chiffre, et il doit rester **mesure** :
+	# l'attente annoncee etait un facteur deux sur le chargement, pas dix, et
+	# c'est le genre d'annonce qui derive si personne ne la refait.
+	if CWValueNoise.natif():
+		var gd: float = _mesure(n, func(i):
+			CWValueNoise.sample_gd(float(i) * 0.37, float(i) * 0.71))
+		_ligne("  le meme en GDScript (sample_gd)", gd)
+		print("     le natif va %.1f fois plus vite, frontiere comprise"
+				% (gd / maxf(bruit, 1e-9)))
+	else:
+		print("     bruit natif absent : c'est le GDScript qu'on mesure"
+				+ " (voir native/README.md)")
 	print("")
 
 
