@@ -13,17 +13,72 @@ invariants, les pièges, les décisions ouvertes.
 
 ---
 
-## 0. La prochaine session — **rien n'est demandé**
+## 0. La prochaine session — **le LOD natif, et rien d'autre**
+
+*Demandé le 2026-09-12 au soir : la prochaine session sera entièrement portée sur
+la configuration et l'intégration de `VoxelLodTerrain` au projet.*
 
 > Le programme précédent — les cinq demandes du 2026-09-11 au soir — est
 > entièrement traité. Son compte rendu est en §0ter ; le récit, mesures et
 > impasses comprises, est dans le journal de `docs/ROADMAP.md`.
 
-**Ce qui suit n'est pas un programme, c'est un état de dette.** Rien n'y est
-bloquant, rien n'y est urgent, et l'ordre n'engage personne. La seule chose qui
-compte au moment de reprendre est de savoir ce qui traîne, et pourquoi ça
-traîne — parce que la plupart de ces points ont une raison de ne pas être faits,
-et la redécouvrir coûte une demi-session.
+### Ce que le dépôt sait déjà, et qu'il ne faut pas redécouvrir
+
+⚠️ **Ça a déjà été essayé, et écarté.** Le 2026-09-03 : `VoxelLodTerrain`
+accepte `VoxelMesherCubes` sans se plaindre et construit bien la géométrie
+lointaine, mais **de larges dalles d'eau bleues apparaissent en pleine plaine
+dès le LOD 1**, à des altitudes où le terrain est de l'herbe. Le même point de
+vue en `VoxelTerrain` n'en montre aucune. La bascule est restée exposée pour
+cette session-ci : `TerrainDemo.use_lod`, avec `lod_view_distance` et
+`lod_count` à côté.
+
+**La cause n'a jamais été établie, et c'est le premier travail.** L'hypothèse
+écrite est que `CHANNEL_TYPE` porte un **index de palette**, valeur qui ne
+survit à aucune moyenne — 3 et 5 moyennés donnent 4, qui est une autre matière —,
+mais *il n'est pas démontré que la réduction se produise là*. Les deux
+questions à trancher avant toute décision :
+
+1. **où la réduction a lieu** — le générateur est-il appelé une fois par niveau
+   de LOD, ou le LOD 0 est-il sous-échantillonné ? Les deux se distinguent en
+   instrumentant `CWVoxelGenerator._generate_block` : `lod` est un argument, et
+   savoir s'il arrive non nul répond à la question en une exécution ;
+2. **si un canal séparé ou un mesher interpolant en espace couleur** règle le
+   problème. C'est là que le projet a un atout qu'il n'avait pas en septembre :
+   depuis le 2026-09-08, `CHANNEL_COLOR` porte une **couleur** et non un index
+   (invariant n° 45). Une couleur, elle, survit à une moyenne. Si le mailleur
+   peut travailler sur ce canal seul aux niveaux lointains, la dalle d'eau
+   disparaît par construction.
+
+**Trois choses qui vont mordre, et elles sont déjà écrites ailleurs :**
+
+* ⚠️ **la propriété n'a pas le même nom** : `bounds` sur `VoxelTerrain`,
+  `voxel_bounds` sur `VoxelLodTerrain`. Deux classes, deux noms (§5) ;
+* ⚠️ **le générateur doit répondre par niveau, et il ne le fait pas
+  aujourd'hui.** `sample_patch` prend un `step`, donc le sous-échantillonnage
+  est déjà possible — mais **l'écotone et la falaise ne sont pas
+  sous-échantillonnables sans réfléchir** : la pente se mesure par différence
+  avant sur la grille du monde (invariant n° 44), et un pochoir de LOD 2
+  rendrait une autre pente, donc d'autres falaises, donc un LOD qui ne
+  ressemble pas au LOD 0 ;
+* ⚠️ **le plafond du cache de colonnes borne toujours la vue à 1 024 blocs**
+  (invariant n° 5). C'est **exactement** le sujet : si le LOD sert à voir plus
+  loin, il faudra lever ce plafond, et le prix est chiffré — 6,4 Ko l'entrée,
+  105 Mo au plafond actuel, autant par doublement.
+
+**Et ce que Distant Horizons a appris à ce dépôt reste vrai** (annexe de
+`docs/ROADMAP.md`, « vue lointaine ») : son idée centrale n'est pas son moteur
+de rendu, c'est son *modèle de données* — ne pas stocker des voxels au loin mais
+un profil de colonne. Ce modèle est **déjà celui du générateur ici**. Si le LOD
+natif résiste une seconde fois, c'est la route de repli, et elle n'est pas un
+pis-aller.
+
+---
+
+### Ce qui traîne par ailleurs
+
+**Rien n'y est bloquant, rien n'y est urgent**, et l'ordre n'engage personne.
+La plupart de ces points ont une raison de ne pas être faits, et la redécouvrir
+coûte une demi-session.
 
 | ce qui traîne | où | pourquoi ça n'est pas fait |
 |---|---|---|
@@ -32,7 +87,7 @@ et la redécouvrir coûte une demi-session.
 | **la saccade au chargement** | §0ter, en fin | affaire de latence, pas de débit. Aucune mesure ne la voit ; elle se juge manette en main |
 | **la gigue de taille des cinq arbres entiers** | §0ter, en fin | perdue en passant en matière. La variété devra venir de variantes de modèles |
 | **les fichiers de `worldgen` à mille lignes** | ci-dessous | c'est la dette de découpe, et elle ne fait mal à personne aujourd'hui |
-| **le plafond du cache de colonnes** | invariant n° 5 | il borne la vue à 1 024 blocs, et il faudra le lever *avant* d'augmenter la distance |
+| **le plafond du cache de colonnes** | invariant n° 5 | il borne la vue à 1 024 blocs — et c'est le LOD qui va le rencontrer en premier |
 
 ---
 
