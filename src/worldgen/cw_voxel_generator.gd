@@ -39,9 +39,30 @@ extends VoxelGeneratorScript
 ## Ce plafond doit couvrir toute l'empreinte horizontale chargee, sinon le cache
 ## s'auto-evince en boucle et chaque bloc repaie l'echantillonnage complet. Une
 ## distance de vue de D blocs demande (2D/16)^2 entrees : 2 304 pour D = 384,
-## 9 216 pour D = 768. A ~1,3 Ko l'entree, 16 384 entrees tiennent dans ~21 Mo,
-## ce qui couvre D = 1024 et reste negligeable a cote des blocs voxels eux-memes.
+## 9 216 pour D = 768, et **16 384 pile pour D = 1024** — c'est la distance de
+## vue que ce plafond borne, et au-dela le chargement s'effondre sans rien
+## signaler (invariant n. 5).
+##
+## > ⚠️ **Le cout d'une entree etait annonce cinq fois trop bas.** Le fichier a
+## > porte « ~1,3 Ko l'entree, 16 384 entrees tiennent dans ~21 Mo » ; une entree
+## > porte 256 colonnes et **cinq** tableaux — hauteurs (4 o), matiere (1 o),
+## > teinte (4 o), etang (8 o) et chemin (8 o) —, soit **6,4 Ko**. Le plafond
+## > autorise donc **105 Mo**, et deux generations coexistent, ce qui en fait
+## > 210 au pire. Mesure du 2026-09-11, corrigee sur un calcul et non sur une
+## > estimation : voir `PATCH_BYTES` et la ligne memoire de la demo.
 const HEIGHTMAP_CACHE_CAP: int = 16384
+
+## Octets qu'occupe une entree du cache de colonnes.
+##
+## 256 colonnes par entree, et cinq tableaux par colonne : hauteur (float 32),
+## matiere (octet), teinte (int 32), intervalle d'etang (deux int 32) et
+## intervalle de chemin (deux int 32). Les en-tetes de `Packed*Array` et
+## l'objet `RefCounted` s'ajoutent par-dessus, donc c'est une **borne basse**.
+##
+## Elle est ici pour que la ligne memoire de la demo puisse la citer, et pour
+## qu'un chiffre de ce genre ne soit plus jamais estime a la louche dans un
+## commentaire.
+const PATCH_BYTES: int = 256 * (4 + 1 + 4 + 8 + 8)
 
 ## Attente maximale, en millisecondes, avant de renoncer a attendre le fil qui
 ## calcule deja la meme carte de hauteurs et de la calculer soi-meme. Filet de
@@ -157,6 +178,16 @@ func scatter_grid() -> CWScatter:
 func tree_scatter_grid() -> CWTreeScatter:
 	field()
 	return _tree_scatter
+
+
+## Entrees de cache de colonnes vivantes, les deux generations comprises.
+## Pour l'ATH : multipliee par `PATCH_BYTES`, elle donne ce que la couche de
+## generation tient en memoire, qui est le seul poste qu'elle possede.
+func patch_count() -> int:
+	_patch_mutex.lock()
+	var n: int = _patches.size() + _patches_prev.size()
+	_patch_mutex.unlock()
+	return n
 
 
 func clear_caches() -> void:

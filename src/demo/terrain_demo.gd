@@ -828,7 +828,47 @@ func _refresh_pending() -> void:
 			_load_peak,
 			_voxel_engine.get_thread_count(),
 			"" if stream == null else ", flux actif"])
+		print("[demo] %s" % memoire())
 	_pending = now
+
+
+## Le profil memoire, en une ligne, au moment ou la vue vient de se stabiliser.
+##
+## -- Pourquoi c'est imprime la, et pas seulement dans l'ATH -------------------
+##
+## Une mesure de memoire n'a de sens qu'a un instant defini, et le seul instant
+## defini de cette demo est le front descendant de la file de taches : avant, la
+## vue n'est pas complete ; apres, elle grossit avec ce que le joueur explore.
+## L'imprimer ici la rend comparable d'une session a l'autre, ce qui est tout ce
+## qu'on demande a un chiffre de memoire.
+##
+## Les quatre postes, et ce qu'ils recouvrent :
+##
+##   * **statique** — tout ce que le moteur alloue cote processeur, donnees
+##     voxels comprises. C'est le poste qu'on soupconnait d'etre des maillages ;
+##   * **video** — ce que le pilote declare occupe, tampons de sommets compris ;
+##   * **tampons** et **textures** — la decoupe du precedent. Un maillage est
+##     dans les **tampons** ; ce projet n'a pas de texture, donc la ligne
+##     textures est le decor du moteur et rien d'autre.
+##
+## > **La mesure du 2026-09-11 a dementi le soupcon ecrit dans `nextsteps.md`.**
+## > On y lisait que le gigaoctet observe « ressemble plus a des maillages qu'a
+## > des donnees voxels ». `tools/profile_mesh.gd` compte 214 sommets par pave
+## > maille, soit une trentaine de megaoctets a 384 blocs : les maillages ne
+## > sont pas le poste. Un soupcon n'est pas un profil.
+func memoire() -> String:
+	var patches: int = generator.patch_count()
+	return ("memoire : statique %.0f Mo   video %.0f Mo   (dont maillages %.0f, "
+			+ "textures %.0f)   cache de colonnes %d entrees, %.0f Mo") % [
+		float(Performance.get_monitor(Performance.MEMORY_STATIC)) / 1048576.0,
+		float(RenderingServer.get_rendering_info(
+				RenderingServer.RENDERING_INFO_VIDEO_MEM_USED)) / 1048576.0,
+		float(RenderingServer.get_rendering_info(
+				RenderingServer.RENDERING_INFO_BUFFER_MEM_USED)) / 1048576.0,
+		float(RenderingServer.get_rendering_info(
+				RenderingServer.RENDERING_INFO_TEXTURE_MEM_USED)) / 1048576.0,
+		patches,
+		float(patches) * float(CWVoxelGenerator.PATCH_BYTES) / 1048576.0]
 
 
 func _update_hud() -> void:
@@ -899,7 +939,8 @@ func _update_hud() -> void:
 		lines.append("arbres : estampes dans le terrain%s" % [
 			"" if params.trees else "   (coupes)"])
 		if clouds != null:
-			lines.append("nuages : %d sur %d cellules de %d, couverture %.0f %%%s" % [
+			lines.append(memoire())
+		lines.append("nuages : %d sur %d cellules de %d, couverture %.0f %%%s" % [
 				clouds.count(), (CWClouds.PORTEE * 2 + 1) ** 2, CWClouds.MAILLE,
 				clouds.cover * 100.0, "" if clouds.enabled else "   (coupee)"])
 		if edits != null:

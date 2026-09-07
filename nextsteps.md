@@ -15,8 +15,8 @@ invariants, les pièges, les décisions ouvertes.
 
 ## 0. La prochaine session — **cinq demandes, 2026-09-10 au soir**
 
-> **Les n° 1, 2 et 3 sont faites (2026-09-11) ; la n° 4 et la n° 5 ne sont pas
-> commencées.**
+> **Les n° 1 à 4 sont faites (2026-09-11). La n° 5 — le C++ — ne l'est pas, et
+> la mesure de la n° 4 dit maintenant qu'elle reste le seul levier de débit.**
 > Le programme précédent — les quatre demandes du 2026-09-09 — est entièrement
 > traité ; ce qu'il a rendu est plus bas, et le récit est dans le journal de
 > `docs/ROADMAP.md`.
@@ -227,31 +227,71 @@ refait la table en quinze secondes.
 > biomes ne sont pas réglables de façon continue » — était fausse : ils ne
 > l'étaient pas **avec deux frontières**. Avec une seule, ils le sont tous.
 
-### 4. Le maillage
+### 4. Le maillage — **mesuré, et le soupçon était faux**
 
-C'est le poste que ce fichier n'a jamais mesuré, et le seul soupçon écrit est le
-mien : le ~1,1 Go observé en jeu ressemble plus à des maillages qu'à des données
-voxels. **C'est une constatation, pas un profil.**
+**Fait le 2026-09-11.** Deux outils, et un résultat qui retourne la prémisse.
 
-**Ce qu'on sait déjà, et qui écarte la piste la plus évidente :**
-`greedy_meshing_enabled` est **déjà à vrai** (`CWPalette.build_cubes_mesher`).
-Le gain facile est donc pris.
+> Ce fichier disait : *« le ~1,1 Go observé en jeu ressemble plus à des
+> maillages qu'à des données voxels. C'est une constatation, pas un profil. »*
+> C'en est un maintenant, et **les maillages font 57 Mo sur 1,09 Go**, soit
+> cinq pour cent. Le gigaoctet était bien réel ; il n'était pas là.
 
-> **Mais il y a une piste que personne n'a regardée, et elle est bonne.** Le
-> maillage glouton ne fusionne que des faces **de même couleur**. Or l'invariant
-> n° 45 donne délibérément des **teintes différentes à deux blocs de la même
-> matière** — trois tons pour une prairie, cinq marches de fondu au bord d'une
-> plage. *Le dégradé adouci du 2026-09-08 travaille donc contre le maillage
-> glouton*, et personne n'a mesuré ce qu'il lui coûte en sommets. C'est la
-> première chose à chiffrer : compter les sommets d'un pavé avec et sans le
-> tramage (`CWPalette.SHADE_STEPS`, `SHADE_TONE_STEPS`). Si l'écart est gros,
-> c'est un arbitrage *rendu contre mémoire* et il se tranche à l'œil, comme les
-> autres.
+**Le profil mémoire, vue de 384 blocs, graine 2024, éditeur fermé.** Il sort
+tout seul à la ligne « stabilisée en » de la démo, et il est aussi dans l'ATH
+détaillé (F1) :
 
-Le reste de la passe : profil mémoire réel (données voxels contre maillages
-contre textures), coût du maillage par pavé, et la **saccade** — qui est une
-affaire de latence et d'ordonnancement, pas de débit, et qui ne se voit qu'en
-jeu.
+| poste | 128 blocs | 256 | 384 |
+|---|---|---|---|
+| statique (processeur) | 143 Mo | 226 Mo | **347 Mo** |
+| vidéo | 267 Mo | 486 Mo | **745 Mo** |
+| dont **maillages** | 32 Mo | 42 Mo | **57 Mo** |
+| dont textures | 110 Mo | 110 Mo | 110 Mo |
+| cache de colonnes | — | — | 2 500 entrées, **15 Mo** |
+
+* **les textures ne bougent pas** — 110 Mo à toutes les distances, dans un
+  projet qui n'a pas une seule texture. C'est le décor du moteur : cartes
+  d'ombres et cibles de rendu. Il ne borne rien, et il ne se règle pas ici ;
+* **les maillages croissent lentement** : 32 → 57 Mo quand l'aire est
+  multipliée par neuf. Ils ne borneront pas la distance de vue ;
+* **le reste du statique est la donnée voxel**, et c'est le poste qui grandit
+  vraiment — de l'ordre de 190 Mo à 384 blocs. C'est inhérent à un monde de
+  voxels, et le seul levier connu est le LOD, qui est éteint pour une autre
+  raison (§5).
+
+**La piste qu'on désignait comme bonne l'était, mais elle est bon marché.**
+`tools/profile_mesh.gd` compte les sommets d'un pavé de trois façons :
+
+| | sommets par pavé | écart |
+|---|---|---|
+| le monde tel qu'il est (tramé, glouton) | **214** | — |
+| couleur plate par type (glouton) | 178 | **−17 %** |
+| tramé, sans fusion gloutonne | 1 457 | +580 % |
+
+* **le tramage coûte 17 % des sommets**, soit une dizaine de mégaoctets à
+  384 blocs. L'arbitrage *rendu contre mémoire* est donc tranché, et il l'est
+  dans le sens du rendu : **on garde le dégradé**. Trois tons pour une prairie
+  valent dix mégaoctets ;
+* **le maillage glouton achète un facteur 6,8**, et c'est ce qui rend le rendu
+  en cubes praticable. Le gain facile était déjà pris, et il est gros ;
+* **le maillage coûte 0,07 ms par pavé.** Sur les ~7 000 pavés d'une vue de
+  384 blocs, c'est une demi-seconde de fil pour un chargement de 27,5 s. Le
+  mailleur n'est pas le verrou.
+
+**Et une correction de commentaire qui vaut une mesure.** `HEIGHTMAP_CACHE_CAP`
+annonçait « ~1,3 Ko l'entrée, 16 384 entrées tiennent dans ~21 Mo ». Une entrée
+porte 256 colonnes et **cinq** tableaux : elle fait **6,4 Ko**, le plafond
+autorise donc 105 Mo, et deux générations coexistent. Le chiffre est maintenant
+calculé (`CWVoxelGenerator.PATCH_BYTES`) et affiché, pas estimé.
+
+**Ce qui reste ouvert, et pourquoi ça ne se ferme pas au banc :**
+
+- **la saccade.** C'est une affaire de *latence et d'ordonnancement*, pas de
+  débit : un mailleur deux fois plus rapide qui rend ses pavés au même moment
+  saccade toujours. Elle ne se juge qu'en jouant, manette en main, et aucune
+  des mesures ci-dessus ne la voit ;
+- **le plafond du cache borne toujours la vue à 1 024 blocs** (invariant n° 5),
+  et c'est maintenant le seul plafond chiffré du projet. Le lever coûte 105 Mo
+  par doublement — ce qui, à côté des 347 Mo de données voxels, est acceptable.
 
 ### 5. Le C++ — **seulement si le maillage ne suffit pas**
 
@@ -704,6 +744,12 @@ python tools/blender/generer_arbres.py
 #   seule qui sache regarder en l'air, et c'est ce qu'il faut pour cadrer une
 #   couche du ciel depuis l'endroit d'ou on la verra jouer.
 
+# Ce que coute le MAILLAGE : sommets par pave, avec et sans le tramage, avec et
+# sans la fusion gloutonne, plus l'ordre de grandeur en memoire. C'est lui qui a
+# montre que les maillages font 57 Mo sur 1,09 Go — le soupcon qui les
+# accusait etait faux. **Fermer l'editeur d'abord** pour les temps.
+C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/profile_mesh.gd
+
 # Profil du chargement, poste par poste : champ, bruit, elements, falaise,
 # chemins, dispersions. C'est l'etape 1 de toute optimisation, et le seul
 # endroit ou les chiffres du §0 se refont. **Fermer l'editeur d'abord.**
@@ -889,6 +935,8 @@ tools/repaint_models.gd      remet un .vox dans la palette de projet
 tools/preview_map.gd         aperçu de la carte, vierge et après une diagonale
 tools/find_path.gd           une chaussée, une levée (1.16)
 tools/profile_worldgen.gd    le profil du chargement, poste par poste
+tools/profile_mesh.gd        ce que coute le maillage : sommets, tramage,
+                             fusion gloutonne, memoire (2026-09-11)
 tools/blender/               générateurs des lots de modèles
   flore_vox.py                 palette verbatim, écriture .vox, garde-fous
   flore_formes.py              brins, tiges, feuilles, corolles, cailloux
