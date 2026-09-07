@@ -40,26 +40,24 @@ champ, il manquait un seuil. Elles s'élargissent en descendant et finissent en
 nappes dans les bas-fonds. 2,8 % des terres en eau, profondeur d'un à quatre
 blocs, une berge un bloc au-dessus de la surface, et rien dans les déserts.
 
-**Le relief a trois couches de plus**, posées par-dessus le champ d'altitude et
-jamais dedans — aucune n'est dans la source, et les trois en-têtes le disent.
-Les **massifs** : des masses de roche **délibérément déformées** — un contour
-plié par une déformation du domaine, une ellipse allongée, des lobes qui en font
-des objets à bras, un profil qui donne aux uns un dôme et aux autres un dessus
-plat sur des flancs qui tombent, et des **gradins** sur un massif sur deux. Cœur
-de pierre nue, frange enherbée, une quarantaine de blocs de haut. Ils ne
-s'escaladent pas partout, et c'est voulu : le contrat d'escalade qui les
-gouvernait a été retiré parce qu'il était ce qui les rendait ronds. Leurs
-**grottes** : des galeries brisées et traversantes de cent à cent cinquante
-blocs, à bouches évasées sous un porche de roche, dont le plancher est l'altitude
-du sol à leur entrée — on n'a donc jamais à creuser pour y entrer. Et les
-**chemins**, qui relient les jalons d'une zone, se raccordent à ceux des voisines
-par des portes de frontière, se creusent d'un bloc **sur toute leur largeur**,
-percent les massifs en tunnels proportionnels à la masse traversée, et
-franchissent les rivières sur une **levée** qui comble le lit plutôt que de
-l'enjamber.
+**Le relief a une couche de plus**, posée par-dessus le champ d'altitude et
+jamais dedans : les **chemins**. Ils relient les jalons d'une zone, se
+raccordent à ceux des voisines par des portes de frontière calculées des deux
+côtés sans qu'aucune ne lise l'autre, se creusent d'un bloc **sur toute leur
+largeur**, et franchissent les rivières sur une **levée** qui comble le lit
+plutôt que de l'enjamber. Ils ne sont dans aucune fonction de la source, et
+l'en-tête du fichier le dit — *une chose absente de la source n'est pas hors
+périmètre, elle est à décider.*
 
-La **falaise** revient avec eux — c'est le premier système que ce dépôt retire
-puis rétablit —, et avec elle le **dégradé adouci** entre deux matières de
+> **Trois autres couches ont été portées puis retirées** : la falaise dans sa
+> première version, les ponts, et les surplombs avec leurs grottes. Les trois
+> passaient tous leurs tests. C'est la leçon centrale de ce dépôt, et elle est
+> écrite en tête de `tests/relief_test.gd` : *la suite vérifie de la géométrie,
+> jamais du rendu ; la capture reste le juge.*
+
+La **falaise** est revenue dans une seconde version — c'est le premier système
+que ce dépôt retire puis rétablit —, et avec elle le **dégradé adouci** entre
+deux matières de
 surface. Il tient à une propriété du rendu qu'on n'avait pas exploitée : un
 voxel porte sa matière dans un canal et sa **couleur** dans l'autre, et rien
 n'oblige deux blocs d'herbe à être de la même teinte. Une prairie prend donc
@@ -68,11 +66,15 @@ s'interpénètrent sur une dizaine de blocs au lieu d'être séparés par une co
 de niveau.
 
 Deux chantiers suivent : la **collision** des objets instanciés, qui reste due —
-les surplombs et les chemins, eux, sont de la matière et l'ont gratuitement ; et
-le **jalon 2**, créatures et comportements, en commençant par les points
-d'apparition, dont les constantes sont déjà relevées.
+les chemins, eux, sont de la matière et l'ont gratuitement ; et le **jalon 2**,
+créatures et comportements, en commençant par les points d'apparition, dont les
+constantes sont déjà relevées.
 
-- `docs/ROADMAP.md` — les cinq jalons, leur avancement, les mesures
+- `CLAUDE.md` — l'amorçage : les commandes, les cinq invariants les plus chers,
+  les trois règles de découpe
+- `docs/ROADMAP.md` — les cinq jalons, leur avancement, les mesures, et en
+  annexe le récit détaillé des sessions
+- `docs/ASSETS.md` — l'échelle d'authoring et ce qu'il faut produire par biome
 - `docs/systems/01_generation_terrain.md` — l'analyse du système de terrain
 - `docs/systems/02_contenu_de_biome.md` — contenu de biome, dispersion, entités,
   table de sélection du décor
@@ -81,12 +83,13 @@ d'apparition, dont les constantes sont déjà relevées.
 - `docs/systems/05_carte_du_monde.md` — carte, découverte, noms de région
 - `docs/prompt_generation_flore.md` — la commande du lot de flore
 - `docs/prompt_generation_arbres.md` — la commande du lot d'arbres
-- `nextsteps.md` — reprise de session : chemins, commandes, invariants, pièges
+- `nextsteps.md` — reprise de session : ce qui reste à faire, les commandes, les
+  cinquante et un invariants, les pièges connus
 
 ## Démarrer
 
 ```
-godot --headless --path . -s tests/worldgen_test.gd   # 377 vérifications
+godot --headless --path . -s tests/worldgen_test.gd   # 379 vérifications
 ```
 
 Scène de démonstration : `scenes/terrain_demo.tscn`. Clic pour capturer la
