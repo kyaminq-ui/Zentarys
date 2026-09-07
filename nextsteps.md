@@ -69,15 +69,23 @@ Ce qui reste :
 | fichier | lignes | métiers mêlés |
 |---|---|---|
 | `src/worldgen/cw_terrain_field.gd` | 1 117 | altitude, climat, chenaux, étangs, profil de colonne, caches |
-| `src/demo/terrain_demo.gd` | 1 008 | arguments, terrain, ATH, caméra, recherche de biome, captures |
+| `src/demo/terrain_demo.gd` | 928 | arguments, terrain, ATH, caméra, captures, persistance |
 | `src/worldgen/cw_palette.gd` | 1 002 | palette, matières de surface, teintes, tramage |
 | `src/worldgen/cw_path_network.gd` | 946 | graphe de zone, relaxation, profil, franchissements, règle de colonne |
 | `src/worldgen/cw_voxel_generator.gd` | 797 | chemin froid, chemin chaud, troncs estampés |
 
-Les deux suivants sont **la recherche de biome** (quatre fonctions, six
-variables d'état, un fil du pool — même forme que la carte) et l'**ATH**. Après
-quoi `terrain_demo.gd` ne fera plus que ce que son nom dit : monter la scène et
-lire le clavier.
+**La recherche de biome est sortie aussi** (`CWBiomeSearch`, même forme que la
+carte) : 1 008 → 928 lignes.
+
+> **L'ATH, lui, ne sort pas, et c'est une décision.** `_update_hud` lit
+> **dix-sept** morceaux d'état de la démo — les trois files d'attente, la
+> caméra, les éditions, les deux dispersions, la carte, la recherche, la
+> palette du bloc posé… L'extraire demanderait soit dix-sept arguments, soit
+> une référence arrière vers la démo. La seconde casse la règle *une couche ne
+> connaît que celle du dessous* ; la première est une signature que personne ne
+> maintiendra. **Un affichage qui est une vue sur tout n'est pas une couche**,
+> et le sortir coûterait plus qu'il ne rapporte. Relevé le 2026-09-10 pour
+> qu'on ne le repropose pas.
 
 Deux règles de découpe, et ce sont des règles, pas du goût : **un fichier, une
 décision** ; **une couche ne connaît que celle du dessous** — la chaîne va
@@ -106,20 +114,52 @@ chargement des chunks.*
 >   *latence* et d'ordonnancement, pas de débit : un générateur deux fois plus
 >   rapide qui rend toujours ses pavés au même moment saccade toujours.
 
-**La base est à refaire, et le retrait vient de le prouver** (invariant n° 51).
-Les chiffres du 2026-09-10 : **55,4 s** pour stabiliser une vue de 384 blocs,
-**75,8 µs** par colonne. `sample_column` redevient le poste dominant maintenant
-que la couche de massifs est partie, mais *cela se mesure, cela ne se suppose
-pas*.
+**L'étape 1 est faite le 2026-09-10** — `tools/profile_worldgen.gd`, écrit pour
+ça et à relancer après toute modification du champ. Chargement d'une vue de
+384 blocs : **55,4 s**. Le profil, sur la graine de la démo, éditeur fermé :
 
-À faire dans cet ordre, et pas un autre :
+| poste | coût | part |
+|---|---|---|
+| **génération d'un pavé, tout allumé** | **93,7 µs/colonne** | 100 % |
+| dont le **champ nu**, les trois couches éteintes | **77,6 µs** | **83 %** |
+| dont la falaise | 11,5 µs | 12 % |
+| dont les chemins | 5,1 µs | 5 % |
+| dont les éléments de tuile | 4,9 µs | 5 % |
+| — | | |
+| une colonne isolée (`sample_column_full`) | 81,4 µs | |
+| **dont ~15 échantillons de `CWValueNoise`** | **46 µs** | **~49 % du total** |
+| dont les éléments de tuile | 14,9 µs | |
+| le climat seul (`climate_blend`) | 13,0 µs | |
+| — | | |
+| flore : une cellule de 16 × 16 | 2,03 ms | 7,9 µs/colonne |
+| **dont l'assiette (les quatre coins)** | **1,30 ms** | **64 %** |
+| arbres : une cellule de 64 × 64 | 1,66 ms | 0,41 µs/colonne |
 
-1. **Mesurer par poste** : champ d'altitude, sites de région, éléments de tuile,
-   dispersion, maillage. Les bascules `CWWorldParams` existent pour ça et elles
-   ont servi trois fois ;
-2. **Les gains qui ne demandent pas de C++.** Le nombre de fils
-   (`generation_threads`, auto aujourd'hui), le plafond du cache de pavés
-   (16 384), et `generate_collisions` déjà à faux.
+**Trois choses en sortent, et elles décident la suite.**
+
+1. **Le champ est bien le poste dominant — 83 %** —, et *à l'intérieur du champ,
+   c'est le bruit* : `CWValueNoise.sample` coûte **3,08 µs** l'échantillon, et
+   une colonne en fait une quinzaine. **La moitié du temps de génération est
+   passée dans une seule fonction de vingt lignes**, qui émule de l'arithmétique
+   32 bits que GDScript n'a pas. C'est la cible du C++, et elle est unique ;
+2. **La falaise coûte 12 %**, deux fois plus que les chemins ou les éléments.
+   C'est cohérent avec les +12,9 % d'échantillonnage annoncés (invariant n° 44),
+   donc ce n'est pas une régression — mais c'est cher pour une règle de surface,
+   et la question « la falaise vaut-elle 12 % » se pose maintenant qu'elle n'a
+   plus de massif à raconter ;
+3. **L'assiette a presque triplé le coût de la dispersion de flore** — 722 µs la
+   cellule avant, 2 025 après —, et personne ne l'avait mesuré. Vérifié en la
+   désactivant. Elle sonde quatre colonnes par plante posée, une par une, là où
+   le générateur passe par `sample_patch` pour exactement la même raison. C'est
+   le gain le moins cher du lot, et il ne demande pas de C++.
+
+À faire ensuite, dans cet ordre :
+
+1. ~~**Mesurer par poste.**~~ Fait — `tools/profile_worldgen.gd` ;
+2. **Les gains qui ne demandent pas de C++**, et il y en a deux que la mesure
+   désigne : **l'assiette de la flore** (point 3 ci-dessus), et le nombre de fils
+   (`generation_threads`, auto aujourd'hui). Voir aussi le plafond du cache de
+   pavés (16 384) et `generate_collisions`, déjà à faux.
 
    > ⚠️ **Le LOD n'est pas le gain gratuit qu'il paraît.** `use_lod` est à faux,
    > `VoxelLodTerrain` est câblé, `lod_count = 6`, `lod_view_distance = 2048` —
@@ -127,9 +167,17 @@ pas*.
    > rendu cubes, des dalles d'eau apparaissent en pleine plaine dès le LOD 1,
    > cause non établie. C'est une piste à *déboguer*, pas un interrupteur.
 
-3. **Puis le C++, si la mesure le demande, et sur le seul poste chaud** :
-   `CWTerrainField._height_from` et `CWValueNoise`. Porter la dispersion, la
-   palette ou la carte n'achèterait rien.
+3. **Puis le C++, et la mesure le demande.** La cible est
+   `CWValueNoise.sample`, puis `CWTerrainField._height_from` qui l'appelle
+   quinze fois. Porter la dispersion, la palette ou la carte n'achèterait rien.
+
+   **Ce qu'on peut en attendre, chiffré.** Un `sample` natif tient en quelques
+   dizaines de nanosecondes — c'est trois multiplications 32 bits et une
+   interpolation bicubique. Les 46 µs par colonne tomberaient sous 2, soit
+   **93,7 → ~50 µs/colonne** et un chargement de 384 blocs autour de **30 s** au
+   lieu de 55. Porter `_height_from` entier irait plus loin. C'est donc un
+   facteur deux, pas un facteur dix : *à décider en sachant ce qu'une chaîne de
+   compilation coûte au dépôt.*
 
 > ⚠️ **Le C++ ici n'est pas une case à cocher : le moteur est un build
 > personnalisé.** `godot.windows.editor.double.x86_64.exe`, **double précision**,
@@ -319,6 +367,11 @@ python tools/blender/generer_arbres.py
 #   deux, une capture d'un objet pose a cent blocs est une capture de ce qui se
 #   trouvait dans l'autre sens.
 
+# Profil du chargement, poste par poste : champ, bruit, elements, falaise,
+# chemins, dispersions. C'est l'etape 1 de toute optimisation, et le seul
+# endroit ou les chiffres du §0 se refont. **Fermer l'editeur d'abord.**
+C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/profile_worldgen.gd
+
 # Reperer un chemin — une chaussee, une levee. Rend des lignes pretes a coller
 # derriere `--`, **sur la graine 2024** — celle de la demo, invariant n. 37.
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/find_path.gd
@@ -484,6 +537,7 @@ tools/inspect_model.gd       inventaire d'un .vox : gabarit, index, plages, morc
 tools/repaint_models.gd      remet un .vox dans la palette de projet
 tools/preview_map.gd         aperçu de la carte, vierge et après une diagonale
 tools/find_path.gd           une chaussée, une levée (1.16)
+tools/profile_worldgen.gd    le profil du chargement, poste par poste
 tools/blender/               générateurs des lots de modèles
   flore_vox.py                 palette verbatim, écriture .vox, garde-fous
   flore_formes.py              brins, tiges, feuilles, corolles, cailloux
