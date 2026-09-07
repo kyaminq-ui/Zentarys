@@ -34,7 +34,7 @@ s'ouvre pas proprement. Il permet de piloter l'éditeur par MCP.
 ## Les quatre commandes qui servent tous les jours
 
 ```bash
-# La suite de validation — 403 vérifications, ~25 s. À lancer après toute
+# La suite de validation — 407 vérifications, ~25 s. À lancer après toute
 # modification du monde. C'est le filet, et il tient tous les contrats
 # inter-fichiers que rien d'autre ne tient.
 ./godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd
@@ -83,13 +83,15 @@ entrées. Ces cinq-là sont ceux dont l'oubli coûte une session entière.
 2. **`voxel_of` a deux consommateurs qui doivent s'accorder** (n° 18, n° 39).
    `_generate_block` déroule la règle par intervalles pour remplir un bloc vite ;
    `generated_voxel` l'évalue en un point pour répondre à une requête. Rien dans
-   le code ne les y oblige — ce sont les balayages de `tests/edit_test.gd` et de
-   `tests/relief_test.gd` qui tiennent le contrat. **Une couche ajoutée d'un seul
-   côté donne un monde dont les collisions et l'édition décrivent autre chose que
-   ce qu'on voit.** C'est arrivé : le tronc estampé a manqué du côté de la
-   requête ponctuelle du jalon 1.11 au 2026-09-10, sans qu'une vérification
-   tombe. L'ordre est *tronc, chemin, étang, terrain*, et `voxel_of` le teste à
-   l'envers.
+   le code ne les y oblige — ce sont les balayages de `tests/edit_test.gd`, de
+   `tests/relief_test.gd` et de `tests/tree_test.gd` qui tiennent le contrat.
+   **Une couche ajoutée d'un seul côté donne un monde dont les collisions et
+   l'édition décrivent autre chose que ce qu'on voit.** C'est arrivé deux fois :
+   le tronc estampé a manqué du côté de la requête ponctuelle du jalon 1.11 au
+   2026-09-10, et le feuillage a fait rendre deux réponses différentes aux deux
+   chemins le 2026-09-11. L'ordre est *arbre, chemin, étang, terrain*, et
+   `voxel_of` le teste à l'envers — avec une exception, **le feuillage ne
+   recouvre que le vide**.
 
 3. **Le dessus praticable d'une colonne a un point unique** (n° 42).
    `CWPathNetwork.shaped_top` dit où est le sol quand un chemin traverse la

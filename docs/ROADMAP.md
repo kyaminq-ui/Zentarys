@@ -1833,8 +1833,8 @@ sans valeur tant que les jalons 2 et 3 ne sont pas là.
 | Groupement de la flore en grappes | ✅ | il n'y avait pas de mécanisme à écrire : la crête de bruit à 0,05 le produit seule (variance/moyenne 14,3 contre ~1) |
 | Table de sélection du décor | ✅ | `src/worldgen/cw_decor_rules.gd` : deux crêtes à 0,01, neuf rôles, `docs/systems/02` §8.5-8.6 |
 | Lacet libre du décor | ⬜ | trois rôles le demandent ; `CWVoxelModel` ne précalcule que quatre quarts de tour |
-| Collision des modèles instanciés | ⬜ | houppiers, six modèles entiers et cactus de flore restent traversables ; troncs, branchages et filons sont de la matière. Arbitrage en `nextsteps.md`, §7bis.3 |
-| Éclairage et LOD des modèles instanciés | 🔶 | **le tronc a rejoint le terrain** (1.11) : il est éclairé et se creuse comme lui. Ce qui reste instancié — flore, houppiers, arbres entiers — ne profite toujours ni de l'éclairage voxel ni d'une réduction en distance ; `CWVoxelModel.reduced(n)` est prêt et n'a toujours aucun usage |
+| Collision des modèles instanciés | 🔶 | **tout l'arbre est de la matière depuis le 2026-09-11** : houppiers, dômes, palmes et les cinq modèles entiers, dont le rocher géant, s'ajoutent aux troncs, branchages et filons. Il ne reste traversables que les **cactus de flore**, qui sont à 4 voxels par bloc et veulent une forme de physique, pas de la matière (jalon 3.1) |
+| Éclairage et LOD des modèles instanciés | 🔶 | **l'arbre entier a rejoint le terrain** (le tronc en 1.11, le reste le 2026-09-11) : il est éclairé, se creuse et porte son ombre comme une colline. Ce qui reste instancié — la flore et les nuages — ne profite ni de l'éclairage voxel ni d'une réduction en distance ; `CWVoxelModel.reduced(n)` est prêt et n'a toujours aucun usage |
 | Aperçu de la carte hors du jeu | ✅ | `tools/preview_map.gd`, vierge et parcourue |
 | Mesure de la couche de surplombs | ✅ | `tools/mesa_stats.gd` : part des terres sous un chapeau, en porte-à-faux, en grotte, en roche de pente, plus l'histogramme des pentes |
 | Repérage d'un surplomb, d'un canyon, d'un chemin | ✅ | `tools/find_mesa.gd`, `tools/find_canyon.gd`, `tools/find_path.gd` : trois points de vue prêts à passer à `--ici` / `--vers` |
@@ -3153,16 +3153,35 @@ selon l'objet, et le choix se fait au voxel près.
 
 Le décompte, mesuré sur le lot réel (`tools/inspect_model.gd`) :
 
+> **Ce tableau est résolu depuis le 2026-09-11**, sauf sa dernière ligne. Tout
+> ce qui pouvait devenir de la matière l'est devenu ; la colonne « ce qu'il
+> faut » est gardée telle qu'elle était écrite, et la colonne d'état dit ce qui
+> a été fait.
+
 | objet | aujourd'hui | voxels | ce qu'il faut |
 |---|---|---|---|
 | tronc d'un feuillu, d'un palmier, d'un grand arbre | **matière** | 406 (charpente) | rien — c'est fait (§7) |
 | **branchage d'un grand arbre** | **matière** | compris dans les 406 | rien : les branches sont **dans le modèle de tronc**, donc estampées avec lui |
-| houppier, dôme | instancié | 983 le dôme, ×5 par grand arbre ; 2 316 le houppier de chêne | à décider — voir plus bas |
-| arbre entier (`pin`, `sapin_enneige`, `pin_enneige`) | instancié | 692 – 809 | **à passer en matière** |
-| `arbre_epineux` | instancié | 186 | **à passer en matière** |
-| `rocher_geant` | instancié | 1 907 | **à passer en matière** — c'est un rocher, il est déjà de la roche |
+| houppier, dôme | **matière** (2026-09-11) | 983 le dôme, ×5 par grand arbre ; 2 316 le houppier de chêne | fait |
+| arbre entier (`pin`, `sapin_enneige`, `pin_enneige`) | **matière** (2026-09-11) | 692 – 809 | fait — estampé tel quel, donc sans gigue de taille |
+| `arbre_epineux` | **matière** (2026-09-11) | 186 | fait |
+| `rocher_geant` | **matière** (2026-09-11) | 1 907 | fait |
 | les neuf filons | pas encore posés | 13 – 32 | rien de plus : ils sont dessinés à **1 voxel = 1 bloc** pour être estampés, et se minent. Il ne leur manque que leur *pose* (2.6) |
 | cactus de flore (`cactus_01`, `cactus_02`) | instancié | 181 et 176 | ils sont à **4 voxels par bloc** : inestampables tels quels. Volume approché, ou rien |
+
+> **Et la dernière ligne reste juste, elle a été réexaminée.** Redessiner un
+> cactus à 1 voxel = 1 bloc en ferait une pile de quatre cubes — c'est ce qui a
+> fait retirer `cactus_geant` — et estamper un volume approché mettrait un pâté
+> de blocs *visible* à l'intérieur du modèle fin, qui continue d'être instancié.
+> Ce que le cactus veut est **une forme de physique**, pas de la matière, et
+> c'est le jalon 3.1.
+
+> **Ce que la mesure a dit, le 2026-09-11.** Le passage du feuillage en matière
+> coûte **+5,4 %** sur une vue de 384 blocs (26,1 → 27,5 s), là où ce fichier
+> annonçait +25 %. Et la répartition est contre-intuitive : écrire douze fois
+> plus de voxels coûte **0,4 s**, faire reculer la borne du chemin rapide de 48
+> à 72 blocs en coûte **1,0** — et cette seconde dépense se paie partout, y
+> compris au-dessus d'un désert sans un arbre.
 
 > **Le tableau a perdu une ligne le 2026-09-06** : `cactus_geant` est retiré du
 > lot (§7ter.3), et avec lui le seul objet du désert qui aurait pu passer en

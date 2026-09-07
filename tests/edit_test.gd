@@ -521,11 +521,15 @@ func _test_two_channels() -> void:
 				var c: int = buf.get_voxel(lx, ly, lz, CWPalette.CHANNEL_COLOR)
 				if t != CWPalette.AIR:
 					opaque_seen += 1
-				# **Le bois est l'exception, et c'est le contrat du jalon 1.9.**
-				# Un tronc estampe porte le type WOOD et la teinte de son propre
-				# modele : c'est ce qui donne quatre ecorces pour un seul type de
-				# bloc.
-				if t == CWPalette.WOOD:
+				# **Le bois et le feuillage sont l'exception, et c'est le
+				# contrat du jalon 1.9.** Une piece d'arbre estampee porte le
+				# type de sa matiere et la teinte de son propre modele : c'est
+				# ce qui donne quatre ecorces et vingt verts pour deux types de
+				# bloc. Le feuillage a rejoint le bois ici le 2026-09-11, et il
+				# y a plus besoin que lui — la rampe d'automne 140-147 est
+				# franchement orange, donc un houppier de saison n'aurait
+				# jamais passe le test de voisinage ci-dessous.
+				if t == CWPalette.WOOD or t == CWPalette.LEAVES:
 					continue
 				# **Le reste du terrain ne porte plus la couleur *exacte* de son
 				# type, et c'est delibere depuis le 2026-09-07.** Un bloc de

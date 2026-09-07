@@ -201,18 +201,40 @@ const EMPILEMENT: float = 0.42
 ## houppier a quatorze blocs de l'axe. Ce sont des blocs de terrain comme les
 ## autres : ils s'estampent, donc ils entrent dans la marge.
 ##
-## `trunks_in` s'en sert pour savoir quelles cellules consulter, et un test
-## refuse qu'un modele de tronc la depasse — sans quoi une branche serait
-## tronquee au bord d'un bloc, ce qui se verrait a peine et ne leverait rien.
-const MARGE_TRONC: int = 15
+## `pieces_in` s'en sert pour savoir quelles cellules consulter, et un test
+## refuse qu'une piece d'arbre la depasse — sans quoi un houppier serait tronque
+## au bord d'un bloc, ce qui se verrait a peine et ne leverait rien.
+##
+## **Vingt-quatre depuis que le feuillage est de la matiere** (2026-09-11),
+## quinze avant lui. Le pire cas n'est pas le plus gros houppier : c'est un dome
+## de rayon 8 pose au bout d'une branche qui va deja chercher a quatorze blocs
+## de l'axe. Le second pire est le houppier de l'arbre geant, rayon 15, mais sur
+## l'axe.
+const MARGE_TRONC: int = 24
 
-## Hauteur maximale, en blocs, d'un tronc estampe.
+## Hauteur maximale, en blocs, d'un arbre estampe — feuillage compris.
 ##
 ## Sert au chemin rapide du generateur : un bloc entierement au-dessus du terrain
-## ne peut pas etre saute tant qu'un tronc peut y monter. Verrouillee par un
-## test contre le lot reel — le plus haut est `acacia_charpente` a 30 blocs,
-## soit 38 a l'echelle maximale.
-const HAUTEUR_TRONC_MAX: int = 48
+## ne peut pas etre saute tant qu'un arbre peut y monter. Verrouillee par un
+## test contre le lot reel.
+##
+## > ⚠️ **Elle est passee de 48 a 72 le 2026-09-11, et ce n'est pas gratuit.**
+## > Le vide au-dessus du monde est borne par `patch.highest + cette valeur` :
+## > la faire grandir rend le chemin rapide moins efficace **partout**, pas
+## > seulement la ou il y a des arbres. C'est un cout qui n'apparait dans aucun
+## > compte de voxels ecrits, et il ne se mesure que sur le chargement complet.
+## >
+## > **Mesure du 2026-09-11**, vue de 384 blocs, graine de la demo, editeur
+## > ferme : **26,1 s** avec la borne a 48 et le seul fut estampe, **27,5 s**
+## > avec la borne a 72 et l'arbre entier. Et la repartition est celle qu'on
+## > redoutait — a **27,1 s** avec `--sans-arbres`, qui coupe l'ecriture mais
+## > **pas** la borne : l'ecriture de douze fois plus de voxels coute 0,4 s, la
+## > borne en coute 1,0. *Le poste le plus cher du feuillage en matiere est
+## > celui qu'aucun compte de voxels ne montre.*
+## >
+## > Pour memoire, l'estimation qui figurait dans `nextsteps.md` avant la mesure
+## > annoncait **+25 %**. Le vrai chiffre est +5,4 %.
+const HAUTEUR_TRONC_MAX: int = 72
 
 ## Melangeurs propres a cette couche. Ils doivent differer de ceux de
 ## `CWScatter`, sinon un arbre et une touffe partagent leur flux de tirages et
@@ -440,6 +462,18 @@ func _monte(out: Array, sp: Dictionary, x: int, z: int, ground: int,
 
 	var montage: int = int(sp["montage"])
 	if montage == CWTreeRules.Montage.ENTIER:
+		# **Un modele entier est estampe tel quel, donc sans echelle.** Il n'a
+		# pas de `hauteur` : il ne se reechantillonne pas comme un fut, parce
+		# que ce qu'on etirerait serait une **silhouette** — la fleche d'un
+		# conifere, qui a deja demande trois reprises en trois jours au jalon
+		# 1.12, et dont le sommet ne survivrait pas a une ligne dupliquee au
+		# plus proche voisin.
+		#
+		# Ce qu'on y perd, et c'est assume : les cinq especes entieres — deux
+		# pins, un sapin, l'arbre epineux, le rocher geant — sortent toutes a la
+		# meme taille depuis le 2026-09-11. La variete devra venir de variantes
+		# de modeles, pas d'un facteur.
+		pied.scale = 1.0
 		return
 
 	var couronnes: Array = sp["couronnes"]
@@ -454,17 +488,10 @@ func _monte(out: Array, sp: Dictionary, x: int, z: int, ground: int,
 	# copie de sa table : le modele et ses branches doivent tourner ensemble, et
 	# deux implementations de la meme rotation finiraient par diverger.
 	if montage == CWTreeRules.Montage.GRAND:
-		pied.matiere = true
 		pied.hauteur = maxi(1, roundi(float(tronc.height) * echelle))
-		_grand(out, sp, pied, tronc, x, z, ground, turn, echelle)
+		_grand(out, sp, pied, tronc, x, z, ground, turn)
 		return
 
-	# -- Le tronc passe en matiere -------------------------------------------
-	#
-	# Il n'est plus instancie : `CWVoxelGenerator` l'ecrit dans les donnees du
-	# monde et `CWFloraRenderer` l'ignore. Une seule liste, deux lecteurs — voir
-	# l'en-tete, et `CWScatter.Placement.matiere`.
-	pied.matiere = true
 	pied.hauteur = maxi(1, roundi(float(tronc.height) * echelle))
 
 	# Hauteur du tronc en blocs. Elle est **entiere** depuis que le tronc est de
@@ -479,22 +506,30 @@ func _monte(out: Array, sp: Dictionary, x: int, z: int, ground: int,
 	n = clampi(n, int(bornes[0]), int(bornes[1]))
 
 	if montage == CWTreeRules.Montage.PALMIER:
-		_couronne_de_palmes(out, couronnes, x, z, ground, haut, turn, echelle, n)
+		_couronne_de_palmes(out, couronnes, x, z, ground, haut, turn, n)
 		return
 
 	# FEUILLU : les houppiers s'empilent en se chevauchant, du premier point
 	# d'accroche vers le haut.
+	#
+	# **Leur hauteur ne porte plus l'echelle depuis le 2026-09-11.** Un houppier
+	# est de la matiere, et une matiere ne se met pas a l'echelle (invariant
+	# n. 35, corollaire) : elle s'ecrit bloc par bloc sur la grille du monde.
+	# Le tronc, lui, garde sa gigue — elle passe dans `pied.hauteur`, qui est un
+	# nombre **entier** de blocs, donc le point d'accroche varie toujours d'un
+	# arbre a l'autre. Ce qu'on perd est la taille des masses, ce qu'on garde est
+	# leur altitude ; c'est le meme arbitrage qu'au jalon 1.11 pour le fut.
 	var y0: float = haut * ACCROCHE_HOUPPIER
 	for k in n:
 		var m: CWVoxelModel = _lib.model(couronnes[(turn + k) % couronnes.size()])
 		if m == null:
 			continue
-		var hm: float = float(m.height) * echelle / m.voxels_per_block
+		var hm: float = float(m.height) / m.voxels_per_block
 		var y: float = y0 + float(k) * hm * EMPILEMENT
 		# Un quart de tour different par houppier : deux houppiers du meme modele
 		# empiles a la meme orientation rendent une image doublee.
 		out.append(_piece(m, x, z, ground, y, (turn + k * 3) % CWVoxelModel.ROTATIONS,
-				echelle))
+				1.0))
 
 
 ## Les houppiers d'un grand arbre : un au bout de chaque branche, un a la cime.
@@ -512,8 +547,7 @@ func _monte(out: Array, sp: Dictionary, x: int, z: int, ground: int,
 ## Le houppier descend d'un bloc sous le bout : une masse posee **sur** la
 ## pointe laisse voir le dernier bloc de bois par en dessous.
 func _grand(out: Array, sp: Dictionary, pied: CWScatter.Placement,
-		tronc: CWVoxelModel, x: int, z: int, ground: int, turn: int,
-		echelle: float) -> void:
+		tronc: CWVoxelModel, x: int, z: int, ground: int, turn: int) -> void:
 	var couronnes: Array = sp["couronnes"]
 	if couronnes.is_empty():
 		return
@@ -524,11 +558,10 @@ func _grand(out: Array, sp: Dictionary, pied: CWScatter.Placement,
 	for b in sp["branches"]:
 		var o: Vector2i = CWVoxelModel._turn(b.x, b.y, turn)
 		out.append(_piece(dome, x + o.x, z + o.y, ground,
-				float(b.z) * ratio - 1.0, turn, echelle))
+				float(b.z) * ratio - 1.0, turn, 1.0))
 	# La cime, sur l'axe du tronc : sans elle, quatre masses en couronne
 	# laissent un trou au milieu et l'arbre se lit comme un anneau.
-	out.append(_piece(dome, x, z, ground, float(pied.hauteur) - 2.0, turn,
-			echelle))
+	out.append(_piece(dome, x, z, ground, float(pied.hauteur) - 2.0, turn, 1.0))
 
 
 ## La couronne d'un palmier : des palmes rayonnantes au sommet du stipe.
@@ -554,7 +587,7 @@ func _grand(out: Array, sp: Dictionary, pied: CWScatter.Placement,
 ## deux axes et deux diagonales, soit huit frondes — ce qui est le maximum que
 ## quatre quarts de tour permettent.
 func _couronne_de_palmes(out: Array, couronnes: Array, x: int, z: int,
-		ground: int, haut: float, turn: int, echelle: float, n: int) -> void:
+		ground: int, haut: float, turn: int, n: int) -> void:
 	var poses: int = 0
 	for k in n:
 		var m: CWVoxelModel = _lib.model(couronnes[k % couronnes.size()])
@@ -574,19 +607,25 @@ func _couronne_de_palmes(out: Array, couronnes: Array, x: int, z: int,
 		# La conversion passe par `voxels_per_block` du modele et non par la
 		# constante : c'est l'invariant n° 28, et c'est la meme formule que
 		# `haut` juste au-dessus.
-		var attache: float = float(m.height - 1) * echelle / m.voxels_per_block
+		var attache: float = float(m.height - 1) / m.voxels_per_block
 		# Les palmes descendent legerement a mesure qu'on en pose : une couronne
 		# dont toutes les pieces sont a la meme hauteur se lit comme un disque.
 		var y: float = haut - attache - float(k) * 0.35
 		@warning_ignore("integer_division")
 		var quart: int = (turn + k / couronnes.size()) % CWVoxelModel.ROTATIONS
-		out.append(_piece(m, x, z, ground, y, quart, echelle))
+		out.append(_piece(m, x, z, ground, y, quart, 1.0))
 		poses += 1
 	if poses == 0:
 		return
 
 
-## Une piece d'arbre, prete a instancier.
+## Une piece d'arbre, prete a estamper.
+##
+## **Toute piece d'arbre est de la matiere depuis le 2026-09-11.** Le drapeau
+## reste sur `Placement` — c'est lui qui partage la liste entre les deux
+## consommateurs, et la flore continue de s'en servir a l'envers — mais plus
+## aucune piece d'arbre ne sort a faux. Une seule passe de montage, une seule
+## liste, un seul lecteur : `CWVoxelGenerator`.
 func _piece(m: CWVoxelModel, x: int, z: int, ground: int, dy: float,
 		turn: int, echelle: float) -> Placement:
 	var p := Placement.new()
@@ -604,17 +643,22 @@ func _piece(m: CWVoxelModel, x: int, z: int, ground: int, dy: float,
 	p.rotation = turn
 	p.role = CWDecorRules.Role.AUCUN
 	p.scale = echelle
+	p.matiere = true
 	return p
 
 
-## Les troncs de matiere qui mordent dans le cadre donne, en blocs monde.
+## Les pieces d'arbre qui mordent dans le cadre donne, en blocs monde.
 ##
-## Requete jumelle de `placements_in`, et separee d'elle pour une raison de cout :
-## la marge de `placements_in` est celle du plus grand houppier — neuf blocs —,
-## celle d'un tronc est de quatre. Le generateur appelle celle-ci pour chaque
-## bloc de donnees qui touche la surface ; elle doit balayer le moins de cellules
-## possible.
-func trunks_in(x0: int, z0: int, nx: int, nz: int) -> Array:
+## **Elles sont toutes de la matiere depuis le 2026-09-11** : le filtre sur
+## `p.matiere` reste, parce que c'est lui qui dit *ce que cette requete promet*,
+## et parce que la flore, elle, continue de s'en servir a l'envers.
+##
+## Requete jumelle de `placements_in` de la flore, et separee d'elle parce que
+## les deux couches ont leur bibliotheque et leur marge (invariant n. 24). Le
+## generateur l'appelle pour chaque bloc de donnees qui touche la surface : elle
+## doit balayer le moins de cellules possible, d'ou une marge constante et non
+## le rayon du plus gros modele.
+func pieces_in(x0: int, z0: int, nx: int, nz: int) -> Array:
 	var out: Array = []
 	if not _lib.has_any():
 		return out
@@ -637,21 +681,43 @@ func trunks_in(x0: int, z0: int, nx: int, nz: int) -> Array:
 	return out
 
 
-## Les voxels d'un tronc estampe : `(x, y, z, index de palette)`, en coordonnees
-## monde.
+## Les voxels d'une piece d'arbre estampee : `(x, y, z, index de palette)`, en
+## coordonnees monde.
 ##
-## La hauteur posee est `Placement.hauteur`, et les niveaux du modele y sont
-## copies **au plus proche voisin** : c'est ainsi qu'un tronc garde sa gigue de
-## hauteur sans quitter la grille du bloc. Le dessin horizontal, lui, n'est pas
-## mis a l'echelle — un tronc 20 % plus large ne se voit pas, et le garder
-## entier maintient l'empreinte alignee sur la colonne.
+## -- Deux poses, et `hauteur` dit laquelle ------------------------------------
+##
+## **`hauteur > 0` — le fut.** La hauteur posee est `Placement.hauteur` et les
+## niveaux du modele y sont copies **au plus proche voisin** : c'est ainsi qu'un
+## tronc garde sa gigue de hauteur sans quitter la grille du bloc. Le dessin
+## horizontal, lui, n'est pas mis a l'echelle — un tronc 20 % plus large ne se
+## voit pas, et le garder entier maintient l'empreinte alignee sur la colonne.
+##
+## **`hauteur == 0` — tout le reste** : houppier, dome, palme, et les modeles
+## entiers. Ils se posent tels quels, a `y + round(fy)`. Pas de
+## reechantillonnage : ce qu'on rechantillonnerait serait la **forme** d'une
+## masse, et une masse etiree d'un dixieme ne se lit plus comme la meme espece —
+## alors qu'un fut plus long, si. C'est la raison pour laquelle le tronc a garde
+## sa gigue et les couronnes non.
+##
+## L'arrondi de `fy` est le seul endroit ou une piece perd sa fraction de bloc.
+## C'est inevitable — la matiere est sur la grille du monde —, et c'est aussi
+## pourquoi `fy` continue d'exister : il porte l'empilement exact jusqu'ici.
 ##
 ## `load_from` range les offsets par niveau croissant, ce qui permet de balayer
 ## le modele **une seule fois** quelle que soit la hauteur demandee.
-static func trunk_voxels(pl: CWScatter.Placement) -> Array:
+static func piece_voxels(pl: CWScatter.Placement) -> Array:
 	var out: Array = []
 	var m: CWVoxelModel = pl.model
-	if m == null or pl.hauteur <= 0:
+	if m == null:
+		return out
+	var dx0: PackedInt32Array = m.offsets_x(pl.rotation)
+	var dy0: PackedInt32Array = m.offsets_y(pl.rotation)
+	var dz0: PackedInt32Array = m.offsets_z(pl.rotation)
+	var v0: PackedByteArray = m.values(pl.rotation)
+	if pl.hauteur <= 0:
+		var y0: int = pl.y + roundi(pl.fy)
+		for i in m.voxel_count:
+			out.append(Vector4i(pl.x + dx0[i], y0 + dy0[i], pl.z + dz0[i], v0[i]))
 		return out
 	var src: int = m.height
 	# Pour chaque niveau du modele, les niveaux de sortie qui le copient.
@@ -663,14 +729,26 @@ static func trunk_voxels(pl: CWScatter.Placement) -> Array:
 		var j: int = mini(src - 1, floori(float(k) * float(src) / float(pl.hauteur)))
 		sorties[j].append(k)
 
-	var dx: PackedInt32Array = m.offsets_x(pl.rotation)
-	var dy: PackedInt32Array = m.offsets_y(pl.rotation)
-	var dz: PackedInt32Array = m.offsets_z(pl.rotation)
-	var v: PackedByteArray = m.values(pl.rotation)
 	for i in m.voxel_count:
-		for k in sorties[dy[i]]:
-			out.append(Vector4i(pl.x + dx[i], pl.y + k, pl.z + dz[i], v[i]))
+		for k in sorties[dy0[i]]:
+			out.append(Vector4i(pl.x + dx0[i], pl.y + k, pl.z + dz0[i], v0[i]))
 	return out
+
+
+## L'etendue verticale d'une piece estampee, bornes incluses, en blocs monde.
+##
+## Sert a deux choses qui ne doivent pas se calculer deux fois : la requete
+## ponctuelle, qui ecarte d'un coup les pieces qui ne peuvent pas contenir le
+## point, et la verification qui mesure la hauteur reelle du lot contre
+## `HAUTEUR_TRONC_MAX`.
+static func piece_span(pl: CWScatter.Placement) -> Vector2i:
+	var m: CWVoxelModel = pl.model
+	if m == null:
+		return Vector2i(0, -1)
+	if pl.hauteur > 0:
+		return Vector2i(pl.y, pl.y + pl.hauteur - 1)
+	var y0: int = pl.y + roundi(pl.fy)
+	return Vector2i(y0, y0 + m.height - 1)
 
 
 func _tree_seed_of(cx: int, cz: int) -> int:

@@ -151,7 +151,7 @@ func scatter_grid() -> CWScatter:
 ## s'appuie sur le meme champ de terrain que la flore et que la generation.
 ##
 ## **Le generateur s'en sert, lui** (jalon 1.11) : les troncs sont ecrits dans
-## les donnees du monde par `_stamp_trunks`. C'est le meme exemplaire que celui
+## les donnees du monde par `_stamp_trees`. C'est le meme exemplaire que celui
 ## du rendu — un seul cache de cellules, donc le tronc estampe et le houppier
 ## instancie viennent forcement du meme tirage.
 func tree_scatter_grid() -> CWTreeScatter:
@@ -227,11 +227,12 @@ static func voxel_of(y: int, top: int, surface: int, subsurface: int,
 	return CWPalette.STONE
 
 
-## Vrai si un tronc estampe occupe ce point, en coordonnees **monde**.
+## Le type de bloc d'un arbre estampe en ce point, ou `AIR`. Coordonnees
+## **monde**.
 ##
 ## -- Pourquoi cette fonction existe -------------------------------------------
 ##
-## `_stamp_trunks` ecrit les troncs **dans les donnees du monde**, mais du seul
+## `_stamp_trees` ecrit les arbres **dans les donnees du monde**, mais du seul
 ## cote de `_generate_block`. La requete ponctuelle les ignorait, et les deux
 ## ecritures de la regle decrivaient donc deux mondes differents sur chaque
 ## colonne qui porte un arbre : le bloc genere rend du bois, la requete rendait
@@ -241,20 +242,44 @@ static func voxel_of(y: int, top: int, surface: int, subsurface: int,
 ## l'autre sur le coeur d'un massif. Releve le 2026-09-10, en repointant le
 ## second sur une chaussee apres le retrait des massifs.
 ##
+## **Depuis le 2026-09-11 elle couvre aussi le feuillage**, qui est passe en
+## matiere avec le reste de l'arbre. C'etait le piege annonce : une couche
+## ajoutee d'un seul cote donne un monde dont les collisions et l'edition
+## decrivent autre chose que ce qu'on voit, et le tronc en avait deja fait la
+## demonstration pendant quatre jalons.
+##
+## Elle rend un **type** et non un booleen, parce qu'un arbre n'est plus d'une
+## seule matiere : bois, feuillage, et roche pour le rocher geant. Le type se
+## lit sur la palette du voxel (`CWPalette.matiere_de`), jamais sur la piece.
+##
 ## Ce que ca coute : une consultation de la grille d'arbres, soit une a quatre
 ## cellules, toutes en cache apres la premiere. C'est du chemin **froid** —
 ## `_generate_block` ne passe pas par ici, il a sa propre boucle.
-func trunk_at(wx: int, y: int, wz: int) -> bool:
+func tree_at(wx: int, y: int, wz: int) -> int:
+	if not field().params().trees:
+		return CWPalette.AIR
 	var trees: CWTreeScatter = tree_scatter_grid()
 	if trees == null:
-		return false
-	for pl in trees.trunks_in(wx, wz, 1, 1):
-		if y < pl.y or y >= pl.y + pl.hauteur:
+		return CWPalette.AIR
+	var trouve: int = CWPalette.AIR
+	for pl in trees.pieces_in(wx, wz, 1, 1):
+		var span: Vector2i = CWTreeScatter.piece_span(pl)
+		if y < span.x or y > span.y:
 			continue
-		for v in CWTreeScatter.trunk_voxels(pl):
-			if v.x == wx and v.y == y and v.z == wz:
-				return true
-	return false
+		for v in CWTreeScatter.piece_voxels(pl):
+			if v.x != wx or v.y != y or v.z != wz:
+				continue
+			var t: int = CWPalette.matiere_de(v.w)
+			# **Le feuillage ne recouvre rien**, et c'est ce qui rend la
+			# reponse independante de l'ordre. Sans cette regle, une couronne
+			# posee sur l'axe de son fut couvre le fut, et les deux ecritures
+			# de la regle se departagent par l'ordre de leurs listes : le bloc
+			# rendait du feuillage, la requete du bois. Constate le
+			# 2026-09-11, a la premiere execution de la suite.
+			if t != CWPalette.LEAVES:
+				return t
+			trouve = t
+	return trouve
 
 
 ## Bloc genere en un point, en coordonnees de scene. Ne consulte aucune edition :
@@ -268,12 +293,13 @@ func generated_voxel(x: int, y: int, z: int) -> int:
 	var p: CWWorldParams = f.params()
 	var wx: int = p.world_origin.x + x
 	var wz: int = p.world_origin.y + z
-	# Le tronc estampe (jalon 1.11) passe **avant tout le reste**, parce que
-	# `_stamp_trunks` ecrit apres tous les remplissages de `_generate_block` :
-	# il recouvre ce qui precede, et l'ordre des tests d'ici est celui des
-	# recouvrements, a l'envers (invariant n. 39).
-	if trunk_at(wx, y, wz):
-		return CWPalette.WOOD
+	# L'arbre estampe (jalon 1.11, feuillage compris depuis le 2026-09-11) passe
+	# **avant tout le reste**, parce que `_stamp_trees` ecrit apres tous les
+	# remplissages de `_generate_block` : il recouvre ce qui precede, et l'ordre
+	# des tests d'ici est celui des recouvrements, a l'envers (invariant n. 39).
+	var arbre: int = tree_at(wx, y, wz)
+	if arbre != CWPalette.AIR and arbre != CWPalette.LEAVES:
+		return arbre
 	var c: Vector4 = f.sample_column_full(wx, wz)
 	var sea: int = p.sea_level
 	var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
@@ -305,8 +331,21 @@ func generated_voxel(x: int, y: int, z: int) -> int:
 		surface = CWPalette.blended(CWPalette.GRAVEL, surface,
 				clampf((road.x - CWPathNetwork.HALF_WIDTH)
 						/ CWPathNetwork.ROAD_FADE, 0.0, 1.0), wx, wz)
-	return voxel_of(y, prof.x, surface, subsurface_depth, sea, prof.y, prof.z,
-			shape.y, shape.z)
+	var sol: int = voxel_of(y, prof.x, surface, subsurface_depth, sea, prof.y,
+			prof.z, shape.y, shape.z)
+	# **Le feuillage ne recouvre que le vide**, et c'est la seule couche du
+	# monde qui ait cette forme-la. Un fut, un chemin, un etang recouvrent ce
+	# qu'ils traversent ; une couronne, non — elle est posee autour d'un fut
+	# qu'elle ne doit pas effacer, et elle deborde parfois jusqu'au sol qu'elle
+	# ne doit pas remplacer par des feuilles.
+	#
+	# La regle est ecrite ici **et** dans `_stamp_trees`, comme tout ce qui est
+	# dans `voxel_of` (invariant n. 18). Elle vaut d'etre dite plutot que
+	# devinee : sans elle, l'ordre des deux listes decide, et deux listes
+	# construites par deux chemins differents ne sont pas dans le meme ordre.
+	if sol == CWPalette.AIR and arbre == CWPalette.LEAVES:
+		return CWPalette.LEAVES
+	return sol
 
 
 ## Matiere de surface d'une colonne, une fois l'etang pris en compte.
@@ -410,11 +449,16 @@ func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: i
 	# a les consulter, ni a garder vivant un bloc vide pour la moitie haute d'une
 	# plante.
 	#
-	# **Les troncs, eux, s'invitent** depuis le jalon 1.11 : ils sont ecrits dans
+	# **Les arbres, eux, s'invitent** depuis le jalon 1.11 : ils sont ecrits dans
 	# le terrain. Le vide au-dessus du sol n'est donc plus vide sur la hauteur
-	# d'un tronc, et le chemin rapide doit reculer d'autant. La borne est une
-	# constante et non une mesure du voisinage : un tronc pose hors du bloc peut
+	# d'un arbre, et le chemin rapide doit reculer d'autant. La borne est une
+	# constante et non une mesure du voisinage : un arbre pose hors du bloc peut
 	# y mordre, et sa colonne n'est pas dans ce releve de hauteurs.
+	#
+	# Le feuillage est passe en matiere le 2026-09-11, et cette borne avec lui :
+	# 48 blocs, puis 72. Elle rend le chemin rapide moins efficace **partout**,
+	# y compris au-dessus d'un desert sans un arbre, et ce cout n'apparait dans
+	# aucun compte de voxels ecrits. Voir `CWTreeScatter.HAUTEUR_TRONC_MAX`.
 	if float(y_min) > patch.highest + float(CWTreeScatter.HAUTEUR_TRONC_MAX) \
 			and y_min > sea:
 		return
@@ -478,14 +522,15 @@ func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: i
 				_fill_run(out_buffer, lx, lz, y_min, y_max, stride,
 						road_lo, road_hi, CWPalette.AIR)
 
-	_stamp_trunks(out_buffer, origin_in_voxels, size, stride, lod, p, patch)
+	_stamp_trees(out_buffer, origin_in_voxels, size, stride, lod, p, patch)
 
 
-## Ecrit dans le bloc les troncs qui le traversent (jalon 1.11).
+## Ecrit dans le bloc les pieces d'arbre qui le traversent (jalon 1.11 pour le
+## fut, 2026-09-11 pour le feuillage et les modeles entiers).
 ##
 ## -- Pourquoi ici, et pas par la couche d'edition ----------------------------
 ##
-## Un tronc est du monde procedural, pas une modification du joueur : le passer
+## Un arbre est du monde procedural, pas une modification du joueur : le passer
 ## par `CWWorldEdits` mettrait chaque arbre du monde sur le disque. Il est donc
 ## ecrit a la generation, comme la source le fait
 ## (`World_fillVoxelColumnTyped`), ce qui lui donne gratuitement la persistance
@@ -494,22 +539,29 @@ func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: i
 ## -- Ce que ca coute ---------------------------------------------------------
 ##
 ## L'appel ne concerne que les blocs qui touchent la surface : les autres sont
-## sortis par les deux chemins rapides. `trunks_in` consulte une a quatre
+## sortis par les deux chemins rapides. `pieces_in` consulte une a quatre
 ## cellules d'arbres, toutes en cache apres le premier bloc de la pile
 ## verticale, et une cellule de 64 blocs contient de l'ordre de sept arbres.
 ##
 ## -- Le type et la couleur ---------------------------------------------------
 ##
-## Le type ecrit est `CWPalette.WOOD` pour **tous** les troncs, la teinte est
-## celle du voxel du modele. C'est le partage du jalon 1.9 : le canal semantique
-## dit « du bois », le canal de rendu garde l'ecorce claire du bouleau et la
-## sombre du tropical. Sans lui, il aurait fallu un type de bloc par nuance.
-func _stamp_trunks(buf: VoxelBuffer, origin: Vector3i, size: Vector3i,
+## Le type se lit sur la **palette du voxel** (`CWPalette.matiere_de`) et non sur
+## la piece : un arbre n'est pas d'une seule matiere — un fut est du bois, un
+## houppier du feuillage, et un `pin` ou un `rocher_geant` sont des modeles
+## entiers qui portent les deux, ou de la roche. Attacher le type a la piece
+## aurait demande une table par modele, qui aurait menti des le premier modele
+## mixte.
+##
+## La teinte, elle, reste celle du voxel du modele. C'est le partage du jalon
+## 1.9 : le canal semantique dit du bois ou du feuillage, le canal de rendu
+## garde l'ecorce claire du bouleau, la sombre du tropical et les douze verts de
+## la rampe de feuillage. Sans lui, il aurait fallu un type de bloc par nuance.
+func _stamp_trees(buf: VoxelBuffer, origin: Vector3i, size: Vector3i,
 		stride: int, lod: int, p: CWWorldParams, patch: ColumnPatch) -> void:
 	# Le LOD n'est pas gere : un tronc de trois blocs de large disparait a la
 	# premiere reduction, et `VoxelTerrain` ne demande que le niveau 0. La garde
 	# est la pour le jour ou la pyramide reviendrait sur le tapis.
-	if lod != 0 or _shutting_down:
+	if lod != 0 or _shutting_down or not p.trees:
 		return
 	var trees: CWTreeScatter = tree_scatter_grid()
 	if trees == null:
@@ -520,22 +572,41 @@ func _stamp_trunks(buf: VoxelBuffer, origin: Vector3i, size: Vector3i,
 	# tombe jamais juste, et rien ne bronche.
 	var wx: int = p.world_origin.x + origin.x
 	var wz: int = p.world_origin.y + origin.z
-	var placements: Array = trees.trunks_in(wx, wz, size.x, size.z)
+	var placements: Array = trees.pieces_in(wx, wz, size.x, size.z)
 	if placements.is_empty():
 		return
 
 	var y_min: int = origin.y
 	var y_max: int = origin.y + size.y - 1
 	for pl in placements:
-		for v in CWTreeScatter.trunk_voxels(pl):
+		# L'etendue verticale d'abord : une piece entierement au-dessus ou en
+		# dessous du bloc ne demande pas qu'on deroule ses milliers de voxels.
+		# C'est ce qui rend le feuillage abordable — un houppier de chene fait
+		# 2 316 voxels, celui de l'arbre geant 5 994, et la pile verticale des
+		# blocs d'une colonne en traverse la plupart pour rien.
+		var span: Vector2i = CWTreeScatter.piece_span(pl)
+		if span.y < y_min or span.x > y_max:
+			continue
+		for v in CWTreeScatter.piece_voxels(pl):
 			if v.y < y_min or v.y > y_max:
 				continue
 			var lx: int = v.x - wx
 			var lz: int = v.z - wz
 			if lx < 0 or lz < 0 or lx >= size.x or lz >= size.z:
 				continue
-			buf.set_voxel(CWPalette.WOOD, lx, v.y - y_min, lz,
-					CWPalette.CHANNEL_TYPE)
+			var ly: int = v.y - y_min
+			var t: int = CWPalette.matiere_de(v.w)
+			# **Le feuillage ne recouvre que le vide.** Une couronne est posee
+			# autour du fut qui la porte : la laisser ecraser ce qu'elle
+			# traverse effacerait le fut sur toute sa hauteur, et rendrait de
+			# plus la reponse dependante de l'ordre des listes — le bloc disait
+			# feuillage la ou la requete ponctuelle disait bois. La regle est la
+			# meme des deux cotes, et c'est `generated_voxel` qui la porte en
+			# face (invariant n. 18).
+			if t == CWPalette.LEAVES and buf.get_voxel(
+					lx, ly, lz, CWPalette.CHANNEL_TYPE) != CWPalette.AIR:
+				continue
+			buf.set_voxel(t, lx, ly, lz, CWPalette.CHANNEL_TYPE)
 			buf.set_voxel(CWPalette.raw_of(v.w), lx, v.y - y_min, lz,
 					CWPalette.CHANNEL_COLOR)
 

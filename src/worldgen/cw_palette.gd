@@ -129,6 +129,31 @@ const ORE_RUBY: int = 38
 const ORE_DIAMOND: int = 39
 const ORE_ICE_CRYSTAL: int = 40
 
+# -- Une seconde entree recyclee : 19, de roche nue a feuillage (2026-09-11) ---
+#
+# Le feuillage des arbres est **ecrit dans le terrain** depuis cette date : on
+# doit pouvoir le creuser, et il portera la collision. Chacun de ses voxels est
+# donc un *type de bloc*, ce qui demande une entree dans la reserve terrain.
+#
+# L'entree prise est le **19**, dernier de la rampe de roche nue 14-19 et **la
+# seule de cette rampe qu'aucun modele du depot n'employait** — verifie avec
+# `tools/inspect_model.gd` avant de la prendre, pas apres (invariant n. 31). Le
+# geste est exactement celui de WOOD sur le 4, et de MAGMA/SCORIA sur 30 et 31 :
+# une entree change de statut sans qu'une frontiere bouge et sans qu'un fichier
+# soit a repeindre.
+#
+# **La rampe 14-18 n'est pas recalculee, elle est tronquee.** Ecrire
+# `_ramp(c, 14, 5, ...)` aurait redistribue les cinq teintes intermediaires sur
+# une plage plus courte, donc change 15, 16, 17 et 18 — qui sont, eux, peints
+# dans les modeles. La rampe garde ses six pas et le sixieme est ecrase ensuite.
+#
+# **Sa couleur est un vert de feuillage**, et elle ne sert qu'a `place()` : un
+# houppier estampe ecrit son type ici et sa **teinte de modele** dans
+# `CHANNEL_COLOR`, donc les douze nuances de la rampe vegetation survivent au
+# passage dans le terrain. C'est le partage du jalon 1.9, et c'est lui qui rend
+# l'operation gratuite — sans quoi il aurait fallu un type de bloc par nuance.
+const LEAVES: int = 19
+
 ## Premier et dernier filon, et code d'entite du premier. Voir `ore_of_code`.
 const ORE_BEGIN: int = ORE_GOLD
 const ORE_END: int = ORE_ICE_CRYSTAL
@@ -492,6 +517,13 @@ static func _fill_asset_ranges(c: PackedColorArray) -> void:
 	# rabat sur STONE et les six cailloux du lot de flore rendent la meme
 	# couleur.
 	_ramp(c, 14, 6, Color8(178, 180, 186), Color8(54, 56, 62))    # roche nue
+	# 19 est ecrase juste apres : c'est le type de bloc du feuillage (voir
+	# LEAVES en tete de fichier). La rampe garde ses six pas pour que 15 a 18 —
+	# qui sont peints dans les modeles — ne bougent pas d'un octet.
+	# Vert median de la rampe de feuillage 128-139, comme WOOD porte l'ecorce
+	# mediane de 148-155 : ce n'est vu que si l'on pose un bloc de feuillage a la
+	# main, un houppier estampe gardant la teinte de son propre voxel.
+	c[LEAVES] = Color8(74, 150, 74)
 	_ramp(c, 20, 5, Color8(226, 198, 140), Color8(118, 94, 56))   # gres, argile
 	_ramp(c, 25, 3, Color8(58, 56, 62), Color8(22, 20, 26))       # basalte, obsidienne
 	c[28] = Color8(96, 104, 70)     # roche lichenee, claire
@@ -951,6 +983,44 @@ static func is_water(index: int) -> bool:
 
 
 ## Nom lisible d'un index de palette, pour les outils et l'ATH.
+## Le **type de bloc** que produit un voxel de modele, d'apres son index de
+## palette.
+##
+## -- Pourquoi la matiere se lit sur la palette et non sur la piece -----------
+##
+## Un arbre estampe n'est pas d'une seule matiere. Un tronc est du bois, un
+## houppier du feuillage — et un `pin`, un `sapin_enneige` ou un `rocher_geant`
+## sont des modeles **entiers** qui portent les deux, ou de la roche. Attacher le
+## type a la *piece* aurait donc demande une table par modele, qu'il aurait fallu
+## tenir a jour a chaque ajout du lot, et qui aurait menti des le premier modele
+## mixte.
+##
+## La palette, elle, le dit deja : ses plages sont un contrat d'authoring, et
+## elles disent exactement de quoi un voxel est fait (invariant n. 27, vu du
+## cote des modeles). Un voxel peint dans la rampe des ecorces **est** du bois,
+## quel que soit le fichier ou il se trouve. La regle est donc une fonction pure
+## de l'index, et un modele n'a rien a declarer.
+static func matiere_de(index: int) -> int:
+	# Les types de bloc que le generateur ecrit deja se rendent eux-memes : un
+	# filon estampe reste un filon, une coulee reste du magma.
+	if index <= WATER_DEEP or (index >= MAGMA and index <= ORE_ICE_CRYSTAL):
+		return index
+	# La reserve de matiere minerale des modeles — roche nue, gres, basalte,
+	# lichen. Tout cela se casse en roche.
+	if index >= 14 and index < MAGMA:
+		return STONE
+	# Vegetation : les ecorces sont du bois, tout le reste du feuillage. La
+	# frontiere est celle de la rampe 148-155, qui est **la** plage des troncs.
+	if index >= 148 and index <= 155:
+		return WOOD
+	if index >= RANGE_FLORA_BEGIN and index <= RANGE_FLORA_END:
+		return LEAVES
+	# Tout ce qui n'est pas de la matiere connue tombe en roche plutot qu'en
+	# air : un modele mal peint doit se voir comme un bloc de trop, jamais
+	# disparaitre en silence.
+	return STONE
+
+
 static func name_of(index: int) -> String:
 	match index:
 		AIR: return "air"
@@ -978,6 +1048,7 @@ static func name_of(index: int) -> String:
 		ORE_RUBY: return "filon de rubis"
 		ORE_DIAMOND: return "filon de diamant"
 		ORE_ICE_CRYSTAL: return "filon de cristal de glace"
+		LEAVES: return "feuillage"
 		_: return "?"
 
 

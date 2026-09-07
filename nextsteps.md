@@ -15,7 +15,8 @@ invariants, les pièges, les décisions ouvertes.
 
 ## 0. La prochaine session — **cinq demandes, 2026-09-10 au soir**
 
-> **La n° 1 est faite (2026-09-11), les quatre autres ne sont pas commencées.**
+> **Les n° 1 et 2 sont faites (2026-09-11), les trois autres ne sont pas
+> commencées.**
 > Le programme précédent — les quatre demandes du 2026-09-09 — est entièrement
 > traité ; ce qu'il a rendu est plus bas, et le récit est dans le journal de
 > `docs/ROADMAP.md`.
@@ -82,40 +83,79 @@ regarder d'ailleurs que d'où on la verra.
   jamais. Ça ne se voit pas, et le jour où ça se verra, ce sera une vitesse par
   altitude.
 
-### 2. La collision du feuillage — **tranchée : oui**
+### 2. La collision du feuillage — **faite, sauf les cactus**
 
 *Ce sera oui pour les feuillages des arbres, le rocher géant et les cactus.*
 
-C'est la réponse à l'arbitrage laissé ouvert depuis le jalon 1.11, et elle ferme
-la finition du jalon 1. Ces trois-là passent donc de l'**instance** à la
-**matière**, comme le tronc en 1.11.
+**Fait le 2026-09-11 pour les deux premiers.** Toutes les pièces d'un arbre —
+houppiers, dômes, palmes, et les cinq modèles entiers dont le rocher géant —
+sont désormais écrites dans les données voxels par
+`CWVoxelGenerator._stamp_trees`. La couche d'instances d'arbres a disparu avec
+elles : elle ne posait plus rien.
 
-**Ce que ça implique, et le troisième point est celui qu'on oubliera :**
+**Les cactus sont le seul morceau qui ne se fasse pas, et la raison est
+structurelle, pas un manque de temps.** Ils sont à **4 voxels par bloc** —
+quatre fois plus fins que la grille du terrain — et l'invariant n° 12 dit
+pourquoi la flore n'y entre jamais. Les deux façons de forcer le passage sont
+toutes deux mauvaises, et le dépôt les a déjà écartées une fois :
 
-* **le coût annoncé est périmé.** « ×12 sur ce qu'un arbre écrit, ~+25 % de
-  chargement » date d'avant le retrait des massifs et d'avant le réglage du pool.
-  Le refaire d'abord — invariant n° 51, et `tools/profile_worldgen.gd` est là
-  pour ça ;
-* **il faut un type `LEAVES`.** La réserve terrain va de 1 à 40 ; 1-13, 30-31 et
-  32-40 sont pris. Le geste est celui du tronc — `WOOD` est l'index 4, recyclé le
-  jour même — : `CHANNEL_TYPE` dit *feuillage*, `CHANNEL_COLOR` garde la teinte
-  du modèle, ce qui donne toutes les nuances de houppier pour un seul type.
-  **Vérifier avec `tools/inspect_model.gd` quels index sont réellement employés
-  avant d'en prendre un** (invariant n° 31) ;
-* ⚠️ **`patch.highest` et le chemin rapide du haut.** Le vide au-dessus du monde
-  est borné par `patch.highest + CWTreeScatter.HAUTEUR_TRONC_MAX`. Un houppier
-  monte plus haut et déborde plus large qu'un tronc : cette constante doit
-  grandir, et **la faire grandir rend le chemin rapide moins efficace partout**,
-  pas seulement là où il y a des arbres. C'est un coût qui ne se voit pas dans le
-  compte des voxels écrits, et il peut dépasser celui de l'écriture ;
-* ⚠️ **`generated_voxel` doit les connaître.** C'est exactement le défaut du
-  2026-09-10 : le tronc était écrit d'un seul côté, et la requête ponctuelle
-  décrivait un monde sans arbres pendant quatre jalons. `CWVoxelGenerator.trunk_at`
-  devra couvrir les pièces de feuillage, et la vérification d'accord devra tomber
-  **sur un arbre**, ce que ni les 4 096 points ni l'accord sur chaussée ne
-  garantissent aujourd'hui ;
-* **rien ne se verra tant que `generate_collisions` est à faux** sur le terrain
-  de la démo. La matière est le prérequis, l'interrupteur est le jalon 3.1.
+* **les redessiner à 1 voxel = 1 bloc** ferait d'un cactus de quatre blocs une
+  pile de quatre cubes. C'est exactement ce qui a fait retirer `cactus_geant` le
+  2026-09-06 — « à un voxel par bloc un saguaro n'a ni cannelure ni épine » ;
+* **estamper un volume approché** (`CWVoxelModel.reduced(4)` existe pour ça)
+  mettrait un pâté de blocs *visible* à l'intérieur du modèle fin, qui continue
+  d'être instancié. Deux cactus au même endroit, dont un moche.
+
+**Ce que le cactus veut vraiment, c'est une forme de physique**, et c'est ce que
+l'annexe de `docs/ROADMAP.md` (§3) proposait déjà : `Placement` porte position,
+rayon et hauteur, un cylindre par cactus coûte zéro voxel. Ça se pose au jalon
+3.1 avec le contrôleur — **et rien de tout ceci ne se voit avant lui**, puisque
+`generate_collisions` est à faux.
+
+**Ce que la mesure a corrigé, et c'est le vrai résultat de la passe :**
+
+| | vue de 384 blocs |
+|---|---|
+| avant (fût seul, borne du chemin rapide à 48) | **26,1 s** |
+| après (arbre entier, borne à 72) | **27,5 s** |
+| après, avec `--sans-arbres` — coupe l'écriture, **pas** la borne | 27,1 s |
+
+* **+5,4 %, là où ce fichier annonçait +25 %.** L'estimation datait d'avant le
+  retrait des massifs et d'avant le réglage du pool, et c'est l'invariant n° 51
+  une fois de plus ;
+* ⚠️ **et le poste dominant n'est pas celui qu'on écrit.** Écrire douze fois
+  plus de voxels coûte **0,4 s** ; faire reculer `HAUTEUR_TRONC_MAX` de 48 à 72
+  en coûte **1,0**, et cette seconde dépense se paie **partout**, y compris
+  au-dessus d'un désert sans un arbre. C'était annoncé comme le piège qu'on
+  oublierait ; il est le plus cher des deux.
+
+**Trois choses que seule la mise en œuvre a montrées.**
+
+1. ⚠️ **Une couronne recouvre le fût qui la porte, et l'ordre des deux listes
+   les départageait.** Le bloc rendait du feuillage là où la requête ponctuelle
+   rendait du bois — invariant n° 18 en défaut, dès la première exécution. La
+   règle qui referme le cas est écrite des deux côtés : **le feuillage ne
+   recouvre que le vide**. C'est la seule couche du monde qui ait cette forme —
+   un fût, un chemin, un étang recouvrent ce qu'ils traversent ;
+2. **la marge se mesure sur les espèces, pas sur ce qui pousse autour du
+   départ.** Le premier relevé donnait 12 blocs d'étalement et 31 de haut ; en
+   montant chaque espèce de chaque biome aux deux extrêmes de la gigue, c'est
+   **21 et 57** — le pire cas est un dôme de cerisier au bout d'une branche, et
+   le houppier de l'arbre géant. La prairie du point de départ n'a ni palmier,
+   ni baobab, ni arbre géant ;
+3. **les cinq modèles entiers perdent leur gigue de taille.** Un modèle entier
+   est estampé tel quel : le rééchantillonner étirerait une **silhouette**, et
+   la flèche d'un conifère a déjà demandé trois reprises en trois jours au jalon
+   1.12. Deux pins, un sapin, l'arbre épineux et le rocher géant sortent donc
+   tous à la même taille. La variété devra venir de variantes de modèles.
+
+**Et une entrée de palette de plus, sans qu'une frontière bouge** :
+`LEAVES = 19`, dernier ton de la rampe de roche nue et la seule que ne peignait
+aucun modèle du dépôt. Le geste est celui de `WOOD` sur le 4 et de
+`MAGMA`/`SCORIA` sur 30 et 31. **Le type se lit sur la palette du voxel**
+(`CWPalette.matiere_de`) et non sur la pièce — un `pin` porte du bois et du
+feuillage, un `rocher_geant` de la roche, et une table par modèle aurait menti
+dès le premier modèle mixte.
 
 ### 3. Des biomes mieux répartis, et égaux
 
@@ -595,7 +635,10 @@ python tools/blender/generer_arbres.py
 ./godot.windows.editor.double.x86_64.exe --path . scenes/terrain_demo.tscn \
     --resolution 1600x900 -- --biome 7 --shot 32 --vue 256
 #   options : --sans-arbres, --sans-flore, --sans-chemins, --sans-falaise,
-#   --sans-nuages, pour isoler une couche. Les deux dernieres servent aussi a mesurer ce
+#   --sans-nuages, pour isoler une couche. **--sans-arbres coupe une ecriture
+#   dans le terrain depuis le 2026-09-11, plus un rendu** : il vide donc les
+#   caches, et il ne coupe **pas** la borne du chemin rapide, qui est une
+#   constante. C'est ce qui a permis de separer les deux couts. Les deux dernieres servent aussi a mesurer ce
 #   qu'elle coute au chargement. --carte ouvre la carte du monde au demarrage.
 #   --fils n force le nombre de fils de generation : c'est le reglage le plus
 #   rentable du projet, et son optimum est propre a chaque machine.
@@ -665,7 +708,7 @@ biome, **F2** fige l'heure, **F3**/**F4** reculent ou avancent d'une heure,
 ## 3. État
 
 **Jalon 1 (le monde) : 1.1 à 1.16 sont portés, testés et vus en jeu.** Suite de
-validation : **403 vérifications, 0 échec**, ~25 s. Le détail de chaque jalon est
+validation : **407 vérifications, 0 échec**, ~25 s. Le détail de chaque jalon est
 dans `docs/ROADMAP.md` ; ce qui suit est ce qu'il faut savoir *avant de toucher
 au code*.
 
@@ -679,8 +722,9 @@ toucher un désert (1.12bis), la **falaise** qui habille de roche les flancs
 raides (1.13, retirée puis rétablie tramée), les **lacs et rivières** qui suivent
 les fonds de vallée (1.14), le **réseau de chemins** et ses levées (1.16).
 
-Par-dessus : la **flore** (1.7) et les **arbres** (1.11) instanciés par deux
-couches de dispersion jumelles, l'**édition** et sa persistance (1.8),
+Par-dessus : la **flore** (1.7), instanciée ; les **arbres** (1.11), dont
+toutes les pièces sont **écrites dans le terrain** depuis le 2026-09-11 —
+la couche d'instances d'arbres n'existe plus, l'**édition** et sa persistance (1.8),
 l'**éclairage voxel** là où le joueur a creusé (1.9), et la **carte du monde**
 (1.10).
 
@@ -728,8 +772,10 @@ porte*. `_generate_block` les pose du plus profond au plus superficiel,
    **4 ou 6**, personnage et créatures à **40/3**. La grille est portée par le
    *modèle*, pas par la bibliothèque.
 3. **La flore n'est jamais écrite dans les données voxels** (invariant n° 12) ;
-   **le tronc d'un arbre, si** (jalon 1.11) — et les deux moitiés d'un arbre
-   sortent du même tirage, dans la même liste (invariant n° 35).
+   **un arbre, entièrement, si** — le fût depuis le jalon 1.11, le feuillage et
+   les modèles entiers depuis le 2026-09-11. Toutes ses pièces sortent du même
+   tirage, dans la même liste (invariant n° 35). C'est aussi ce qui interdit
+   d'estamper les cactus : ils sont de la **flore**, à 4 voxels par bloc.
 
 ### La carte des fichiers
 
@@ -745,7 +791,7 @@ src/worldgen/
   cw_biome.gd              les six biomes et la règle qui les décide (1.12)
   cw_path_network.gd       le réseau de chemins, ses portes et ses levées (1.16)
   cw_palette.gd            palette, matières de surface, coulées de lave (1.12)
-  cw_voxel_generator.gd    VoxelGeneratorScript, cache de colonnes, troncs estampés
+  cw_voxel_generator.gd    VoxelGeneratorScript, cache de colonnes, arbres estampés
   cw_voxel_model.gd        modèle .vox préparé : deux grilles de dessin (1.12)
   cw_model_library.gd      chargement des modèles + tables par biome et par rôle
   cw_scatter.gd            grille de dispersion 16², cellules en cache
@@ -754,7 +800,8 @@ src/worldgen/
   cw_flora_renderer.gd     instanciation de la flore (MultiMesh par cellule)
   cw_tree_rules.gd         les espèces d'arbres et leurs trois montages (1.11)
   cw_tree_scatter.gd       la couche jumelle : cellule de 64, espacement de 14,
-                           et le tronc en matière (1.11)
+                           et l'arbre entier en matière (1.11, feuillage
+                           compris depuis le 2026-09-11)
   cw_world_edits.gd        creuser, poser, interroger un bloc (1.8)
   cw_light.gd              éclairage voxel : deux passes, cases à repeindre (1.9)
   cw_world_map.gd          carte : dalles de Voronoï, découverte, teintes (1.10)
@@ -1100,13 +1147,23 @@ docs/images/                 gabarit, carte et composition de flore, en jeu
     l'envers l'une de l'autre.** `_generate_block` pose ses intervalles du plus
     profond au plus superficiel et les laisse s'écraser ; `voxel_of` les teste
     dans l'ordre **inverse** et sort au premier. L'ordre complet est : *le
-    chemin creuse, l'étang mouille, le terrain porte* — et le **tronc estampé**
-    passe avant tout, puisque `_stamp_trunks` écrit après tous les
+    chemin creuse, l'étang mouille, le terrain porte* — et l'**arbre estampé**
+    passe avant tout, puisque `_stamp_trees` écrit après tous les
     remplissages. Une couche ajoutée d'un seul côté donne un monde dont les
     collisions et l'édition décrivent autre chose que ce qu'on voit — c'est
     l'invariant n° 18, et le tronc en a été l'exemple : il a manqué du côté de
     la requête ponctuelle du jalon 1.11 au 2026-09-10, sans qu'aucune
     vérification tombe.
+
+    ⚠️ **Une exception, et une seule : le feuillage ne recouvre que le vide**
+    (2026-09-11). Une couronne est posée *autour* du fût qui la porte ; la
+    laisser écraser ce qu'elle traverse effacerait le fût sur toute sa hauteur,
+    et surtout ferait décider l'**ordre des listes** — le bloc rendait du
+    feuillage là où la requête ponctuelle rendait du bois, dès la première
+    exécution de la suite. La règle est écrite des deux côtés :
+    `_stamp_trees` saute une feuille sur un voxel non vide, `generated_voxel`
+    ne rend `LEAVES` que si le terrain sous elle est de l'air. C'est la seule
+    couche du monde qui ait cette forme-là.
 40. ~~*Les deux intervalles d'air ne se réunissent jamais en un seul.*~~ Sans
     objet depuis le retrait des grottes : il ne reste qu'un intervalle d'air,
     celui du dégagement d'un chemin.

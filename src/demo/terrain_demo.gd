@@ -114,7 +114,6 @@ var terrain: VoxelNode
 var edits: CWWorldEdits
 var stream: VoxelStream
 var flora: CWFloraRenderer
-var trees: CWFloraRenderer
 var map_overlay: CWMapOverlay
 ## La carte du monde, son rendu de fond et sa decouverte. Sortie d'ici le
 ## 2026-09-10 : voir `CWDemoMap`.
@@ -284,9 +283,12 @@ func _read_cmdline() -> void:
 			"--sans-falaise":
 				params.cliff_slope = false
 				generator.clear_caches()
+			# Depuis le 2026-09-11, couper les arbres coupe une **ecriture dans
+			# le terrain** et non un rendu : les paves deja engendres les
+			# portent, d'ou le vidage de caches, comme pour les chemins.
 			"--sans-arbres":
-				if trees != null:
-					trees.enabled = false
+				params.trees = false
+				generator.clear_caches()
 			"--sans-flore":
 				if flora != null:
 					flora.enabled = false
@@ -507,20 +509,19 @@ func _build_flora() -> void:
 		flora.set_terrain(terrain.get_voxel_tool())
 	add_child(flora)
 
-	# La couche des arbres : le meme rendu, une autre dispersion. Elle a sa
-	# cellule (64 blocs), sa bibliotheque et sa marge — voir `CWTreeScatter`.
-	# L'ombre portee, elle, est allumee ici et nulle part ailleurs : c'est la
-	# moitie de ce qui pose un arbre dans le paysage, et il y en a cent fois
-	# moins que de touffes d'herbe.
-	trees = CWFloraRenderer.new()
-	trees.name = "Trees"
-	trees.view_distance = view_distance
-	trees.enabled = not scale_board
-	trees.cast_shadows = true
-	trees.setup(generator.tree_scatter_grid(), params.world_origin, camera)
-	if terrain != null and terrain.has_method("get_voxel_tool"):
-		trees.set_terrain(terrain.get_voxel_tool())
-	add_child(trees)
+	# -- Il n'y a plus de couche d'arbres a instancier ------------------------
+	#
+	# Il y en avait une, jumelle de celle-ci : meme rendu, autre dispersion,
+	# cellule de 64 blocs, et l'ombre portee allumee pour elle seule. Elle est
+	# partie le 2026-09-11 avec le passage du feuillage en **matiere** : toutes
+	# les pieces d'un arbre sont maintenant ecrites dans le terrain par
+	# `CWVoxelGenerator._stamp_trees`, donc la couche d'instances ne posait plus
+	# rien — elle parcourait ses cellules pour construire des noeuds vides.
+	#
+	# Ce qu'on y perd : l'ombre portee etait reglee ici, elle vient maintenant
+	# du terrain comme celle d'une colline. Ce qu'on y gagne : un arbre est un
+	# objet du monde et non un decor pose dessus, et `--sans-arbres` cesse
+	# d'etre un interrupteur de rendu pour devenir `params.trees`.
 
 	# Les nuages : la troisieme couche instanciee, et la seule qui n'ait pas de
 	# sol a consulter. Elle est montee ici avec les deux autres parce que c'est
@@ -607,8 +608,6 @@ func set_view_distance(blocks: int) -> void:
 			_viewer.view_distance = view_distance
 	if flora != null:
 		flora.view_distance = view_distance
-	if trees != null:
-		trees.view_distance = view_distance
 	_hud_timer = 0.0
 
 
@@ -897,10 +896,8 @@ func _update_hud() -> void:
 			lines.append("flore : %d plantes sur %d cellules, vue %d blocs%s" % [
 				fs.y, fs.x, flora.view_distance,
 				"" if flora.enabled else "   (coupee)"])
-		if trees != null:
-			var ts: Vector2i = trees.stats()
-			lines.append("arbres : %d pieces sur %d cellules de 64%s" % [
-				ts.y, ts.x, "" if trees.enabled else "   (coupee)"])
+		lines.append("arbres : estampes dans le terrain%s" % [
+			"" if params.trees else "   (coupes)"])
 		if clouds != null:
 			lines.append("nuages : %d sur %d cellules de %d, couverture %.0f %%%s" % [
 				clouds.count(), (CWClouds.PORTEE * 2 + 1) ** 2, CWClouds.MAILLE,

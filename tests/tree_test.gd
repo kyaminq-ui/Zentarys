@@ -316,8 +316,16 @@ func _test_scatter() -> void:
 	_ok("aucun couple de troncs sous l'espacement minimum, frontieres comprises",
 			trop_proches == 0, "%d couple(s)" % trop_proches)
 
-	# Le montage : toutes les pieces d'un arbre partagent leur colonne et leur
-	# echelle, et seul le tronc pose au sol.
+	# Le montage : toutes les pieces d'un arbre partagent leur colonne de sol, et
+	# seul le tronc pose a fleur de terre.
+	#
+	# **L'echelle n'en fait plus partie depuis le 2026-09-11.** Elle etait
+	# commune tant que toutes les pieces etaient instanciees ; maintenant qu'elles
+	# sont de la matiere, seul le fut la porte — et sous forme d'une hauteur
+	# **entiere** de blocs, pas d'un facteur. Les couronnes sont a 1, parce
+	# qu'une matiere ne se met pas a l'echelle (invariant n. 35, corollaire).
+	# Ce qui reste commun, et qui compte, c'est le sol : deux pieces d'un meme
+	# arbre posees sur deux altitudes de reference le couperaient en deux.
 	var mauvais_montage: Array = []
 	var avec_couronne: int = 0
 	for c in cells:
@@ -333,12 +341,15 @@ func _test_scatter() -> void:
 				avec_couronne += 1
 			var base: CWScatter.Placement = pieces[0]
 			for pl in pieces:
-				if pl.y != base.y or not is_equal_approx(pl.scale, base.scale):
+				if pl.y != base.y:
 					mauvais_montage.append("%s : pieces desaccordees" % str(k))
+					break
+				if pl.hauteur <= 0 and not is_equal_approx(pl.scale, 1.0):
+					mauvais_montage.append("%s : couronne mise a l'echelle" % str(k))
 					break
 			if pieces.size() > 1 and pieces[1].fy <= 0.0:
 				mauvais_montage.append("%s : couronne au sol" % str(k))
-	_ok("les pieces d'un arbre partagent colonne, altitude et echelle",
+	_ok("les pieces d'un arbre partagent leur sol, et seul le fut a une echelle",
 			mauvais_montage.is_empty(), str(mauvais_montage.slice(0, 4)))
 	_ok("des arbres assembles sont poses (tronc + couronnes)",
 			avec_couronne > 0, "%d" % avec_couronne)
@@ -403,41 +414,15 @@ func _test_scatter() -> void:
 # -- 4. Le tronc ecrit dans le terrain (jalon 1.11) ---------------------------
 
 func _test_matiere() -> void:
-	print("[le tronc en matiere]")
+	print("[l'arbre en matiere]")
 	var p := CWWorldParams.new()
 	p.world_seed = 2024
 	var g := CWVoxelGenerator.new()
 	g.params = p
 	var scatter: CWTreeScatter = g.tree_scatter_grid()
 	if not scatter.library().has_any():
-		_skip("le tronc en matiere", "aucun modele d'arbre charge")
+		_skip("l'arbre en matiere", "aucun modele d'arbre charge")
 		return
-
-	# -- Les deux constantes de marge, contre le lot reel --------------------
-	#
-	# `MARGE_TRONC` decide quelles cellules `trunks_in` consulte et
-	# `HAUTEUR_TRONC_MAX` de combien recule le chemin rapide du generateur. Un
-	# modele qui les depasserait serait tronque au bord d'un bloc, ce qui se
-	# verrait a peine et ne leverait rien.
-	var lib: CWModelLibrary = scatter.library()
-	var trop_large := PackedStringArray()
-	var trop_haut := PackedStringArray()
-	for biome in CWTreeRules.biomes():
-		for sp in CWTreeRules.SPECIES[biome]:
-			if int(sp["montage"]) == CWTreeRules.Montage.ENTIER:
-				continue
-			var m: CWVoxelModel = lib.model(sp["tronc"])
-			if m == null:
-				continue
-			if m.radius_blocks > CWTreeScatter.MARGE_TRONC:
-				trop_large.append("%s r=%d" % [m.name, m.radius_blocks])
-			if roundi(float(m.height) * CWTreeScatter.ECHELLE_MAX) \
-					> CWTreeScatter.HAUTEUR_TRONC_MAX:
-				trop_haut.append("%s h=%d" % [m.name, m.height])
-	_ok("aucun tronc ne deborde de la marge horizontale",
-			trop_large.is_empty(), ", ".join(trop_large))
-	_ok("aucun tronc ne depasse la hauteur annoncee",
-			trop_haut.is_empty(), ", ".join(trop_haut))
 
 	# -- Les branches d'un grand arbre portent-elles vraiment leur houppier ? -
 	#
@@ -450,6 +435,7 @@ func _test_matiere() -> void:
 	#
 	# La tolerance est d'un bloc : le bout est le dernier voxel dessine, et
 	# l'arrondi de la ligne peut le poser a un bloc de la valeur nominale.
+	var lib: CWModelLibrary = scatter.library()
 	var bouts_vides := PackedStringArray()
 	var grands: int = 0
 	for biome in CWTreeRules.biomes():
@@ -484,10 +470,18 @@ func _test_matiere() -> void:
 	# masses, une taiga se lit a ses fleches, et les deux ne se rencontrent pas.
 	_ok("les huit grands arbres sont dans la table", grands == 8, "%d" % grands)
 
-	# -- Qui est de la matiere, et qui n'en est pas --------------------------
+	# -- Tout est de la matiere, et rien n'est instancie ---------------------
+	#
+	# C'est le changement du 2026-09-11 : le feuillage a rejoint le fut. La
+	# verification est donc a l'envers de celle qu'elle remplace — elle
+	# demandait qu'une seule piece par arbre soit de la matiere, elle demande
+	# maintenant qu'aucune ne reste dehors. Un houppier oublie serait une masse
+	# instanciee **en plus** de sa version estampee : deux arbres au meme
+	# endroit, dont un qu'on traverse.
 	var origin := Vector2i(p.world_origin.x >> CWTreeScatter.TREE_CELL_SHIFT,
 			p.world_origin.y >> CWTreeScatter.TREE_CELL_SHIFT)
 	var troncs: Array = []
+	var pieces: Array = []
 	var arbres: Dictionary = {}
 	for dz in range(-3, 4):
 		for dx in range(-3, 4):
@@ -496,37 +490,100 @@ func _test_matiere() -> void:
 				if not arbres.has(k):
 					arbres[k] = []
 				arbres[k].append(pl)
-				if pl.matiere:
+				pieces.append(pl)
+				if pl.hauteur > 0:
 					troncs.append(pl)
 	if troncs.is_empty():
-		_skip("le tronc en matiere", "aucun feuillu autour du point de depart")
+		_skip("l'arbre en matiere", "aucun feuillu autour du point de depart")
 		return
-	print("     %d arbre(s), dont %d a tronc de matiere"
-			% [arbres.size(), troncs.size()])
+	print("     %d arbre(s), %d piece(s), dont %d fut(s)"
+			% [arbres.size(), pieces.size(), troncs.size()])
 
-	# Une piece de matiere est **le tronc, et lui seul**. Deux troncs de matiere
-	# sur un meme arbre en ecriraient deux au meme endroit ; un houppier de
-	# matiere serait du feuillage qu'on ne peut plus traverser.
+	var instanciees: int = 0
+	for pl in pieces:
+		if not pl.matiere:
+			instanciees += 1
+	_ok("aucune piece d'arbre n'est restee une instance", instanciees == 0,
+			"%d" % instanciees)
+
+	# **Un arbre a au plus un fut.** `hauteur > 0` est ce qui distingue le fut du
+	# reste, parce que lui seul est reechantillonne verticalement (voir
+	# `piece_voxels`). Deux futs sur un meme arbre en ecriraient deux au meme
+	# endroit.
 	var fautes := PackedStringArray()
 	for k in arbres:
 		var n: int = 0
 		for pl in arbres[k]:
-			if pl.matiere:
+			if pl.hauteur > 0:
 				n += 1
-				if pl.hauteur <= 0:
-					fautes.append("%s sans hauteur" % pl.model.name)
 		if n > 1:
-			fautes.append("%d troncs en (%d,%d)" % [n, k.x, k.y])
-	_ok("un arbre a au plus un tronc de matiere, et il a une hauteur",
-			fautes.is_empty(), ", ".join(fautes))
+			fautes.append("%d futs en (%d,%d)" % [n, k.x, k.y])
+	_ok("un arbre a au plus un fut reechantillonne", fautes.is_empty(),
+			", ".join(fautes))
 
-	# Un arbre entier n'est jamais de la matiere : la source le pose en entite,
-	# et son feuillage est dans le meme modele que son fut.
+	# Un modele entier — `pin`, `sapin_enneige`, `rocher_geant` — est une piece
+	# unique, et il est estampe **tel quel** : pas de reechantillonnage, donc pas
+	# de hauteur. C'est ce qui l'empeche d'etre etire, ce qui defigurerait une
+	# silhouette de conifere.
 	var entiers: int = 0
 	for k in arbres:
-		if arbres[k].size() == 1 and arbres[k][0].matiere:
+		if arbres[k].size() == 1 and arbres[k][0].hauteur == 0:
 			entiers += 1
-	_ok("un modele entier n'est pas estampe", entiers == 0, "%d" % entiers)
+	print("     %d modele(s) entier(s) autour du point de depart" % entiers)
+
+	# -- Les deux constantes de marge, contre **tout** le lot ----------------
+	#
+	# `MARGE_TRONC` decide quelles cellules `pieces_in` consulte et
+	# `HAUTEUR_TRONC_MAX` de combien recule le chemin rapide du generateur. Une
+	# piece qui les deborderait serait tronquee au bord d'un bloc, ce qui se
+	# verrait a peine et ne leverait rien.
+	#
+	# **Elles se mesurent sur les especes, pas sur ce qui pousse autour du point
+	# de depart.** Ce qui pousse autour du depart est une prairie de Greenlands :
+	# elle ne contient ni palmier, ni baobab, ni arbre geant, et c'est justement
+	# le pire cas qu'on cherche. On monte donc chaque espece de chaque biome, aux
+	# **deux extremes** de la gigue et aux quatre quarts de tour, et on mesure ce
+	# que ca pose. Depuis que le feuillage est de la matiere, le pire cas n'est
+	# plus un fut mais un dome pose au bout d'une branche, a quatorze blocs de
+	# l'axe.
+	var dx_max: int = 0
+	var dy_max: int = 0
+	var pire_large: String = ""
+	var pire_haut: String = ""
+	for biome in CWTreeRules.biomes():
+		for sp in CWTreeRules.SPECIES[biome]:
+			for jitter in [0.0, 0.5, 1.0]:
+				for turn in CWVoxelModel.ROTATIONS:
+					var montees: Array = []
+					scatter._monte(montees, sp, 0, 0, 0, {
+						"turn": turn, "jitter": jitter, "pieces": 1.0})
+					for pl in montees:
+						for v in CWTreeScatter.piece_voxels(pl):
+							var d: int = maxi(absi(v.x), absi(v.z))
+							if d > dx_max:
+								dx_max = d
+								pire_large = pl.model.name
+							if v.y + 1 > dy_max:
+								dy_max = v.y + 1
+								pire_haut = pl.model.name
+	print("     le lot pose s'etend a %d bloc(s) de son axe (%s) et %d de haut (%s)"
+			% [dx_max, pire_large, dy_max, pire_haut])
+	_ok("aucune piece ne deborde de la marge horizontale",
+			dx_max <= CWTreeScatter.MARGE_TRONC,
+			"%d > %d (%s)" % [dx_max, CWTreeScatter.MARGE_TRONC, pire_large])
+	_ok("aucun arbre ne depasse la hauteur annoncee",
+			dy_max <= CWTreeScatter.HAUTEUR_TRONC_MAX,
+			"%d > %d (%s)" % [dy_max, CWTreeScatter.HAUTEUR_TRONC_MAX, pire_haut])
+	# Et les deux ne doivent pas etre **trop** larges non plus : la marge decide
+	# combien de cellules chaque bloc de surface consulte, et la hauteur de
+	# combien de blocs vides le chemin rapide cesse de sauter. Les deux se
+	# paient sur le chargement de tout le monde, arbres ou pas — mesure du
+	# 2026-09-11 : la borne de hauteur coute 1,0 s sur 27,5, l'ecriture 0,4.
+	_ok("les deux marges restent proches de ce que le lot demande",
+			CWTreeScatter.MARGE_TRONC <= dx_max + 8
+			and CWTreeScatter.HAUTEUR_TRONC_MAX <= dy_max + 24,
+			"marge %d pour %d, hauteur %d pour %d" % [CWTreeScatter.MARGE_TRONC,
+					dx_max, CWTreeScatter.HAUTEUR_TRONC_MAX, dy_max])
 
 	# -- La reechantillonnage vertical ---------------------------------------
 	#
@@ -534,7 +591,7 @@ func _test_matiere() -> void:
 	# niveau vide au milieu : un trou dans un fut se voit de loin, et une
 	# hauteur qui ne suit pas la gigue rendrait tous les arbres identiques.
 	var tronc: CWScatter.Placement = troncs[0]
-	var voxels: Array = CWTreeScatter.trunk_voxels(tronc)
+	var voxels: Array = CWTreeScatter.piece_voxels(tronc)
 	var niveaux: Dictionary = {}
 	var hors: int = 0
 	for v in voxels:
@@ -560,7 +617,7 @@ func _test_matiere() -> void:
 	var k0 := Vector2i(tronc.x, tronc.z)
 	var premier: CWScatter.Placement = null
 	for pl in arbres[k0]:
-		if pl.matiere:
+		if pl.hauteur > 0:
 			continue
 		if premier == null or pl.fy < premier.fy:
 			premier = pl
@@ -572,10 +629,10 @@ func _test_matiere() -> void:
 
 	# -- La requete du generateur --------------------------------------------
 	#
-	# `trunks_in` ne rend que de la matiere, et elle rend le tronc dont la
-	# colonne tombe dans le cadre. C'est elle que `_generate_block` appelle a
-	# chaque bloc de surface.
-	var dans: Array = scatter.trunks_in(tronc.x - 2, tronc.z - 2, 5, 5)
+	# `pieces_in` ne rend que de la matiere, et elle rend le fut dont la colonne
+	# tombe dans le cadre. C'est elle que `_generate_block` appelle a chaque bloc
+	# de surface.
+	var dans: Array = scatter.pieces_in(tronc.x - 2, tronc.z - 2, 5, 5)
 	var trouve: bool = false
 	var intrus: int = 0
 	for pl in dans:
@@ -583,7 +640,7 @@ func _test_matiere() -> void:
 			intrus += 1
 		if pl == tronc:
 			trouve = true
-	_ok("trunks_in rend le tronc de son cadre, et rien d'instancie",
+	_ok("pieces_in rend le fut de son cadre, et rien d'instancie",
 			trouve and intrus == 0, "%d resultat(s), %d intrus" % [dans.size(), intrus])
 
 	# -- Et le bout du chemin : le bloc genere -------------------------------
@@ -630,3 +687,41 @@ func _test_matiere() -> void:
 				buf.get_voxel(lx, ly, lz, CWPalette.CHANNEL_TYPE) == CWPalette.WOOD,
 				"type %d en (%d,%d,%d)" % [buf.get_voxel(lx, ly, lz,
 						CWPalette.CHANNEL_TYPE), lx, ly, lz])
+
+	# -- Le feuillage, et l'accord des deux ecritures de la regle -------------
+	#
+	# **C'est le point que `nextsteps.md` annoncait comme celui qu'on oublierait.**
+	# Les deux balayages qui tiennent l'invariant n. 18 — les 4 096 points du
+	# jalon 1.8 et l'accord sur chaussee de `relief_test` — ne garantissent pas
+	# de tomber sur un arbre. C'est exactement ainsi que le tronc a manque du
+	# cote de la requete ponctuelle du jalon 1.11 au 2026-09-10. Celle-ci vise
+	# donc **la colonne d'un arbre**, et elle balaie toute sa hauteur.
+	var feuilles: int = 0
+	var teintes_f: Dictionary = {}
+	var desaccords := PackedStringArray()
+	for k in troncs.size():
+		var t: CWScatter.Placement = troncs[k]
+		var haut_max: int = t.y
+		for q in arbres[Vector2i(t.x, t.z)]:
+			haut_max = maxi(haut_max, CWTreeScatter.piece_span(q).y)
+		for y in range(t.y - 2, haut_max + 3):
+			var attendu: int = g.tree_at(t.x, y, t.z)
+			var obtenu: int = g.generated_voxel(t.x - p.world_origin.x, y,
+					t.z - p.world_origin.y)
+			if attendu != CWPalette.AIR and obtenu != attendu:
+				desaccords.append("(%d,%d,%d) %d != %d"
+						% [t.x, y, t.z, obtenu, attendu])
+		if k < 6:
+			for q in arbres[Vector2i(t.x, t.z)]:
+				for v in CWTreeScatter.piece_voxels(q):
+					if CWPalette.matiere_de(v.w) == CWPalette.LEAVES:
+						feuilles += 1
+						teintes_f[v.w] = true
+	_ok("les arbres poses portent du feuillage", feuilles > 0,
+			"%d voxel(s)" % feuilles)
+	_ok("le feuillage garde les nuances de son modele", teintes_f.size() > 1,
+			"%d teinte(s)" % teintes_f.size())
+	_ok("la requete ponctuelle dit la meme chose que le bloc, sur un arbre",
+			desaccords.size() == 0,
+			"%d desaccord(s) : %s" % [desaccords.size(),
+					", ".join(desaccords.slice(0, 4))])

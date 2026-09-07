@@ -83,6 +83,16 @@ const OFFSET_COUNT: int = 32
 ## Active le **reseau de chemins** (jalon 1.16) et ses levees.
 @export var road_network: bool = true
 
+## Active les **arbres estampes** (jalon 1.11, feuillage compris depuis le
+## 2026-09-11).
+##
+## C'est la bascule de `--sans-arbres`, et elle a change de maison ce jour-la :
+## elle coupait le rendu d'une couche d'instances, elle coupe maintenant une
+## ecriture dans le terrain. La difference se voit — il faut vider les caches
+## apres l'avoir changee, comme pour les chemins et la falaise, parce que les
+## paves deja generes portent les arbres.
+@export var trees: bool = true
+
 ## Active la **roche de pente** (la falaise, jalon 1.15).
 ##
 ## Ce n'est pas qu'une regle de couleur : la pente se mesure par difference

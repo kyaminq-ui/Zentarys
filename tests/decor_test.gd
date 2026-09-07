@@ -275,6 +275,11 @@ func _test_matiere() -> void:
 	# jalon 1.11. Un sol de bois serait maintenant une faute d'un genre nouveau
 	# — une surface de terrain peinte en ecorce —, et c'est le meme balayage qui
 	# l'attrape.
+	#
+	# `LEAVES` est le troisieme, et il est arrive le 2026-09-11 par le meme
+	# chemin : l'index 19 etait le dernier ton de la rampe de roche nue, il est
+	# devenu le type de bloc du feuillage estampe. Une prairie qui rendrait du
+	# feuillage serait un sol de feuilles.
 	var retirees: Dictionary = {}
 	# Et les deux bandes d'altitude, retirees le meme jour : la roche nue et la
 	# calotte de neige ne doivent plus apparaitre **hors du biome dont elles
@@ -290,7 +295,8 @@ func _test_matiere() -> void:
 			for above in [-30.0, -4.0, 8.0, 40.0, 120.0, 260.0]:
 				var m: int = CWPalette.surface_of(biome, above, t, h,
 						i * 37, i * 91)
-				if m == CWPalette.WOOD or m == CWPalette.TUNDRA:
+				if m == CWPalette.WOOD or m == CWPalette.TUNDRA \
+						or m == CWPalette.LEAVES:
 					retirees[CWPalette.name_of(m)] = true
 				if CWDecorRules.decor_allowed(biome, m):
 					continue
