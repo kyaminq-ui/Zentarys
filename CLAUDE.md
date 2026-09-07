@@ -34,9 +34,11 @@ s'ouvre pas proprement. Il permet de piloter l'éditeur par MCP.
 ## Les quatre commandes qui servent tous les jours
 
 ```bash
-# La suite de validation — 407 vérifications, ~25 s. À lancer après toute
+# La suite de validation — 433 vérifications, ~2 min. À lancer après toute
 # modification du monde. C'est le filet, et il tient tous les contrats
-# inter-fichiers que rien d'autre ne tient.
+# inter-fichiers que rien d'autre ne tient. (Elle prenait 25 s jusqu'au
+# 2026-09-12 : ce qui coûte est la suite de LOD, qui doit engendrer le monde à
+# six niveaux pour les comparer.)
 ./godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd
 
 # Une capture en jeu, sans piloter la fenêtre. C'est le SEUL moyen de voir une
@@ -59,7 +61,7 @@ s'ouvre pas proprement. Il permet de piloter l'éditeur par MCP.
 # Échap pour rendre la souris puis quitter.
 ./godot.windows.editor.double.x86_64.exe --path . scenes/terrain_demo.tscn
 
-# Cinq bascules qui servent souvent, et qui n'existent que pour la capture :
+# Six bascules qui servent souvent, et qui n'existent que pour la capture :
 #   --heure h   se pose à une heure du cycle (0 minuit, 0,5 midi) et le fige
 #   --regard d  l'assiette de la caméra, en degrés au-dessus de l'horizon
 #   --carte     ouvre la carte du monde au démarrage
@@ -67,15 +69,20 @@ s'ouvre pas proprement. Il permet de piloter l'éditeur par MCP.
 #               c'est le seul cas où l'évitement de collision se juge
 #   --fils n    force le nombre de fils de génération — le réglage le plus
 #               rentable du projet, et son optimum est propre à la machine
+#   --lod [n]   allume la pyramide de LOD (n niveaux, 6 par défaut), et
+#               --lod-vue d sa distance de vue. 2 048 blocs de vue en 16 s,
+#               contre 384 en 23 s à plat. Le brouillard et le plan lointain de
+#               la caméra suivent tout seuls : sans cela une capture de LOD ne
+#               montre qu'un mur laiteux à quatre cents blocs
 ```
 
 Le reste de l'outillage — statistiques de biomes, planches de validation
 d'assets, aperçus de carte, générateurs de modèles — est en `nextsteps.md` §2.
 
-## Les cinq invariants qui coûtent le plus cher
+## Les six invariants qui coûtent le plus cher
 
-La liste complète est en `nextsteps.md` §4, et elle compte cinquante-quatre
-entrées. Ces cinq-là sont ceux dont l'oubli coûte une session entière.
+La liste complète est en `nextsteps.md` §4, et elle compte cinquante-huit
+entrées. Ces six-là sont ceux dont l'oubli coûte une session entière.
 
 1. **Les constantes du bruit et du LCG sont porteuses** (n° 1). Les valeurs
    attendues dans `_test_value_noise` et la séquence MSVC `41, 18467, 6334…`
@@ -120,7 +127,20 @@ entrées. Ces cinq-là sont ceux dont l'oubli coûte une session entière.
    rend toujours le climat *mélangé*, mais il ne décide plus rien — c'est
    l'aiguille de l'ATH, et un seuil réglé en la regardant serait faux.
 
-5. **Il y a quatre grilles de dessin, et le modèle porte la sienne** (n° 28).
+5. **Une cellule de LOD est une boîte, pas un point** (n° 55, 56, 57). Tout le
+   générateur est écrit comme si « juste au-dessus du sol » était `sol + 1` ; au
+   LOD c'est la **cellule suivante**, et `CWVoxelGenerator._cell_above` est le
+   point unique qui le dit. Une couche mince et locale — un étang, le dégagement
+   d'un chemin — qui démarre à `sol + 1` occupe la cellule du sol et l'efface :
+   c'est ce qui a fait passer le mode LOD pour inutilisable pendant dix jours.
+   **La mer, elle, en a le droit** et c'est la seule : elle est un plan, elle ne
+   peut pas faire de dalle, et c'est elle qui cache le débordement de la cellule
+   d'un fond marin. Rien de tout cela ne se voit au pas de un — donc rien de tout
+   cela n'était dans les 407 vérifications d'alors. `tests/lod_test.gd` les tient
+   maintenant, et il a fallu **remettre chaque défaut en place** pour vérifier
+   qu'il les voit.
+
+6. **Il y a quatre grilles de dessin, et le modèle porte la sienne** (n° 28).
    Arbres et filons à **1** voxel par bloc, flore à **4 ou 6**, personnage et
    créatures à **40/3**. Tout ce qui convertit des voxels en blocs doit lire
    `model.voxels_per_block`, jamais la constante. S'ils divergent, la plante sort

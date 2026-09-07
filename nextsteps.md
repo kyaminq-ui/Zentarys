@@ -13,64 +13,52 @@ invariants, les pièges, les décisions ouvertes.
 
 ---
 
-## 0. La prochaine session — **le LOD natif, et rien d'autre**
+## 0. La prochaine session
 
-*Demandé le 2026-09-12 au soir : la prochaine session sera entièrement portée sur
-la configuration et l'intégration de `VoxelLodTerrain` au projet.*
+*Rien n'est demandé pour l'instant.* Le programme du 2026-09-12 au soir — le LOD
+natif, et rien d'autre — est traité ; son compte rendu est en §0bis. Ce qui
+suit sont les trois choses qu'il a laissées ouvertes, dans l'ordre où elles
+mordront.
 
-> Le programme précédent — les cinq demandes du 2026-09-11 au soir — est
-> entièrement traité. Son compte rendu est en §0ter ; le récit, mesures et
-> impasses comprises, est dans le journal de `docs/ROADMAP.md`.
+### 1. ⚠️ Le mode LOD n'a jamais été creusé ni rechargé
 
-### Ce que le dépôt sait déjà, et qu'il ne faut pas redécouvrir
+C'est **la seule chose qui décide du défaut de la scène**, et elle ne se règle
+pas ici. `TerrainDemo.use_lod` reste à faux, et il y reste tant que personne
+n'aura, manette en main :
 
-⚠️ **Ça a déjà été essayé, et écarté.** Le 2026-09-03 : `VoxelLodTerrain`
-accepte `VoxelMesherCubes` sans se plaindre et construit bien la géométrie
-lointaine, mais **de larges dalles d'eau bleues apparaissent en pleine plaine
-dès le LOD 1**, à des altitudes où le terrain est de l'herbe. Le même point de
-vue en `VoxelTerrain` n'en montre aucune. La bascule est restée exposée pour
-cette session-ci : `TerrainDemo.use_lod`, avec `lod_view_distance` et
-`lod_count` à côté.
+* **creusé et posé** en mode LOD (clic gauche / clic droit) ;
+* **quitté puis rouvert** le monde, pour voir si l'édition est revenue.
 
-**La cause n'a jamais été établie, et c'est le premier travail.** L'hypothèse
-écrite est que `CHANNEL_TYPE` porte un **index de palette**, valeur qui ne
-survit à aucune moyenne — 3 et 5 moyennés donnent 4, qui est une autre matière —,
-mais *il n'est pas démontré que la réduction se produise là*. Les deux
-questions à trancher avant toute décision :
+La couche d'édition est branchée par `has_method("get_voxel_tool")` et non sur la
+classe, donc elle prend son outil du nœud sans rien savoir de lui — c'est un
+argument, pas une preuve. Les collisions sont à faux dans les deux modes, donc
+elles ne sont pas dans le chemin. Si ça marche, `use_lod` passe à vrai et le
+mode plat devient le repli ; si ça ne marche pas, le sujet est le `VoxelTool`
+d'un `VoxelLodTerrain`, pas le générateur.
 
-1. **où la réduction a lieu** — le générateur est-il appelé une fois par niveau
-   de LOD, ou le LOD 0 est-il sous-échantillonné ? Les deux se distinguent en
-   instrumentant `CWVoxelGenerator._generate_block` : `lod` est un argument, et
-   savoir s'il arrive non nul répond à la question en une exécution ;
-2. **si un canal séparé ou un mesher interpolant en espace couleur** règle le
-   problème. C'est là que le projet a un atout qu'il n'avait pas en septembre :
-   depuis le 2026-09-08, `CHANNEL_COLOR` porte une **couleur** et non un index
-   (invariant n° 45). Une couleur, elle, survit à une moyenne. Si le mailleur
-   peut travailler sur ce canal seul aux niveaux lointains, la dalle d'eau
-   disparaît par construction.
+### 2. La distance de vue n'est plus bornée par ce qu'on croyait
 
-**Trois choses qui vont mordre, et elles sont déjà écrites ailleurs :**
+L'invariant n° 5 — le plafond du cache de colonnes borne la vue à 1 024 blocs —
+**ne s'applique qu'au mode plat**. En LOD, la pyramide ne garde qu'un anneau
+mince par niveau : 740 entrées pour 2 048 blocs de vue, contre 2 500 pour 384 à
+plat. `lod_view_distance` peut donc monter, et personne ne sait encore où ça
+casse. Le prochain plafond est probablement la mémoire vidéo (305 Mo à 2 048).
 
-* ⚠️ **la propriété n'a pas le même nom** : `bounds` sur `VoxelTerrain`,
-  `voxel_bounds` sur `VoxelLodTerrain`. Deux classes, deux noms (§5) ;
-* ⚠️ **le générateur doit répondre par niveau, et il ne le fait pas
-  aujourd'hui.** `sample_patch` prend un `step`, donc le sous-échantillonnage
-  est déjà possible — mais **l'écotone et la falaise ne sont pas
-  sous-échantillonnables sans réfléchir** : la pente se mesure par différence
-  avant sur la grille du monde (invariant n° 44), et un pochoir de LOD 2
-  rendrait une autre pente, donc d'autres falaises, donc un LOD qui ne
-  ressemble pas au LOD 0 ;
-* ⚠️ **le plafond du cache de colonnes borne toujours la vue à 1 024 blocs**
-  (invariant n° 5). C'est **exactement** le sujet : si le LOD sert à voir plus
-  loin, il faudra lever ce plafond, et le prix est chiffré — 6,4 Ko l'entrée,
-  105 Mo au plafond actuel, autant par doublement.
+### 3. Ce que le LOD ne sait toujours pas faire, et ce que ça coûte
 
-**Et ce que Distant Horizons a appris à ce dépôt reste vrai** (annexe de
-`docs/ROADMAP.md`, « vue lointaine ») : son idée centrale n'est pas son moteur
-de rendu, c'est son *modèle de données* — ne pas stocker des voxels au loin mais
-un profil de colonne. Ce modèle est **déjà celui du générateur ici**. Si le LOD
-natif résiste une seconde fois, c'est la route de repli, et elle n'est pas un
-pis-aller.
+* **les arbres s'arrêtent au LOD 2** (`CWVoxelGenerator.TREE_MAX_LOD`), donc à
+  quatre fois `lod_distance` du joueur. C'est une décision de lisibilité et non
+  de coût, et elle se rediscute en regardant une capture, pas un banc ;
+* **la flore, elle, ne dépasse pas le LOD 0** : elle est instanciée par-dessus le
+  terrain (`CWFloraRenderer`), pas écrite dedans, et elle suit `view_distance` et
+  non la distance rendue. C'est cohérent — une touffe d'herbe à mille blocs n'a
+  pas de sens — mais c'est une seconde frontière, à un autre rayon que celle des
+  arbres ;
+* **le réseau de chemins est consulté une fois par bloc**, sur une cellule
+  d'index de 256 unités. Un bloc de LOD 5 en couvre **512**, donc il lit les
+  chemins d'un quart de son emprise. Ça ne s'est pas vu sur les captures — une
+  chaussée au LOD 5 fait une cellule de large — mais c'est faux, et c'est écrit
+  ici pour que la prochaine personne ne le redécouvre pas depuis une capture.
 
 ---
 
@@ -87,7 +75,7 @@ coûte une demi-session.
 | **la saccade au chargement** | §0ter, en fin | affaire de latence, pas de débit. Aucune mesure ne la voit ; elle se juge manette en main |
 | **la gigue de taille des cinq arbres entiers** | §0ter, en fin | perdue en passant en matière. La variété devra venir de variantes de modèles |
 | **les fichiers de `worldgen` à mille lignes** | ci-dessous | c'est la dette de découpe, et elle ne fait mal à personne aujourd'hui |
-| **le plafond du cache de colonnes** | invariant n° 5 | il borne la vue à 1 024 blocs — et c'est le LOD qui va le rencontrer en premier |
+| **le plafond du cache de colonnes** | invariant n° 5 | il borne la vue à 1 024 blocs **en mode plat**. Le LOD l'a rencontré le 2026-09-13 et l'a rendu sans objet : la pyramide n'en garde qu'un anneau |
 
 ---
 
@@ -111,12 +99,14 @@ capture, pas au banc. ⚠️ Et depuis le 2026-09-12 elle est **la seule matièr
 monde qui ne soit pas celle d'un biome** : la retirer retirerait la roche de la
 surface entièrement.
 
-**3. Le plafond du cache de colonnes borne la distance de vue.** L'invariant
-n° 5 demande `(2 × distance / 16)²` entrées ; à 1 024 blocs de vue on est
-**exactement** au plafond de 16 384. Au-delà, le cache s'auto-évince en boucle
-et le chargement s'effondre **sans rien signaler**. Le prix est chiffré et non
-plus estimé : **6,4 Ko l'entrée**, donc 105 Mo au plafond actuel et autant par
-doublement (`CWVoxelGenerator.PATCH_BYTES`).
+**3. ~~Le plafond du cache de colonnes borne la distance de vue.~~** Vrai du
+mode plat, et de lui seul, depuis le 2026-09-13. L'invariant n° 5 demande
+`(2 × distance / 16)²` entrées, et à 1 024 blocs on est **exactement** au plafond
+de 16 384 ; au-delà le cache s'auto-évince en boucle et le chargement s'effondre
+**sans rien signaler**. Le prix est chiffré : **6,4 Ko l'entrée**, 105 Mo au
+plafond (`CWVoxelGenerator.PATCH_BYTES`). Mais **en mode LOD la question ne se
+pose plus** : 740 entrées suffisent à 2 048 blocs de vue, contre 2 500 pour 384 à
+plat. Ce n'était pas un mur, c'était le mur du mauvais mode.
 
 **4. 2.6, l'apparition** — la porte du jalon 2. Elle n'attend rien.
 
@@ -145,6 +135,107 @@ réponses. Chacune se referme en une demi-heure le jour où elle gêne.
   endroit dont le biome a été décidé sur un tout autre chiffre, celui du site.
   Les deux ne se contredisent pas — l'un est le climat du lieu, l'autre celui
   du pays — mais un réglage de seuil fait en regardant l'ATH serait faux.
+
+---
+
+## 0bis. Le LOD natif — compte rendu du 2026-09-13
+
+**Le programme était : « la configuration et l'intégration de `VoxelLodTerrain`
+au projet », et rien d'autre.** C'est fait. Le récit complet, avec les impasses,
+est dans le journal de `docs/ROADMAP.md` et dans la section « Vue lointaine » du
+même fichier ; ce qui suit est le résultat.
+
+### L'hypothèse qui bloquait le sujet depuis dix jours était fausse
+
+Le fichier posait deux questions à trancher avant toute décision. **La première a
+répondu à la seconde.**
+
+> *Où la réduction a lieu ?* — Nulle part. **Le générateur est appelé une fois par
+> niveau**, avec `lod` en argument et un pas de `1 << lod` : LOD 0 à 5, blocs de
+> 18³, origines alignées sur `16 × pas`. Une sonde d'une ligne dans
+> `_generate_block` l'a montré en une exécution.
+
+Donc **rien n'est jamais moyenné**, et l'index de palette qui ne survit pas à une
+moyenne n'a jamais été le sujet. L'hypothèse n'avait jamais été vérifiée : elle
+avait été écrite le 2026-09-03, puis relue comme un acquis.
+
+### Les deux vrais défauts, et pourquoi aucun test ne les voyait
+
+Ils étaient tous les deux dans `CWVoxelGenerator`, et **tous les deux invisibles
+au pas de un** — c'est-à-dire dans les 407 vérifications qui existaient.
+
+1. **le bloc ne couvrait pas ce qu'il prétendait.** `y_max` valait
+   `origine + (taille − 1) × pas`, soit le *plancher* de la dernière cellule et
+   non la dernière unité de monde qu'elle couvre. Tout ce qui vivait dans les
+   `pas − 1` unités au-dessus était rogné, bloc de surface compris : au LOD 4,
+   **72 % des colonnes rendaient de la roche nue** ;
+2. **l'eau démarrait à `sol + 1`, donc dans la cellule du sol.** Au pas de seize,
+   une mare de deux blocs de fond devenait une dalle bleue de seize de côté,
+   debout de toute la hauteur de la cellule. **C'était la dalle.**
+
+La correction du second est `_cell_above(w, stride)` : la première unité de monde
+de la cellule *suivant* celle qui porte `w`. Au pas de un elle rend `w + 1`, donc
+le LOD 0 ne bouge pas d'un voxel — et c'est vérifié pour tout `w`.
+
+### Deux corollaires, et chacun a demandé sa mesure
+
+* ⚠️ **la mer a le droit d'occuper la cellule du sol**, et c'est la seule des
+  trois couches d'eau. La règle du dessus vise une couche *mince et locale* qui
+  se gonflerait ; la mer est un plan à altitude unique qui n'existe que là où le
+  terrain passe dessous, donc elle ne peut pas faire de dalle en pleine plaine.
+  Lui appliquer la même règle faisait tomber la part d'eau de **54,6 % à 35,2 %**
+  sur une emprise à 41 % de mer : c'est l'eau qui cache le débordement vers le
+  haut de la cellule d'un fond marin, et l'en priver fait reculer le rivage
+  partout ;
+* ⚠️ **l'arbre ne doit pas manger le sol au LOD.** La règle « le feuillage ne
+  recouvre que le vide » ne visait que la couronne, parce qu'au pas de un un fût
+  se pose sur le sol sans l'occuper. Au pas de quatre, la cellule du sol porte
+  aussi le premier mètre du fût.
+
+### Ce que ça vaut
+
+Même machine, même point de vue, mesure du 2026-09-13 :
+
+| | vue | chargement | pic de tâches | cache de colonnes | vidéo |
+|---|---|---|---|---|---|
+| `VoxelTerrain` | 384 blocs | 23,1 s | 35 000 | 2 500 entrées, 15 Mo | 181 Mo |
+| `VoxelLodTerrain` ×6 | **2 048 blocs** | **16,1 s** | **782** | **740, 5 Mo** | 305 Mo |
+
+### Ce qui a dû suivre pour que le mode soit seulement jugeable
+
+* **le brouillard était réglé pour 384 blocs et pour eux seuls.** La première
+  capture ne montrait qu'un mur laiteux. `CWDaylight.view_distance` met la
+  densité à l'échelle, à profondeur optique constante au bord de la vue ;
+* **le plan lointain de la caméra** était en dur à 2 048 ;
+* **les arbres montent jusqu'au LOD 2** (`TREE_MAX_LOD`) ;
+* `TerrainDemo.rendered_distance()` est le point unique qui dit jusqu'où on rend,
+  et il nourrit l'observateur, la caméra, le brouillard et l'ATH. Les avoir
+  choisis chacun de son côté est ce qui avait rendu la première capture
+  illisible.
+
+### Et la suite qui tient tout ça : `tests/lod_test.gd`
+
+**26 vérifications, et il a fallu s'y reprendre à trois fois pour qu'elle mesure
+quelque chose.** Les deux essais ratés valent d'être gardés :
+
+* une première version comparait la **composition** des sommets de colonne. Elle
+  attrape la roche nue, et **pas la dalle** — parce que la dalle ne change pas la
+  matière du sommet, elle change *laquelle des deux couches occupe la cellule*.
+  L'énoncé qui l'attrape est **« le sol ne se noie pas »** ;
+* une seconde la mesurait sur l'emprise du point de départ. **Elle passait au
+  vert avec le défaut remis en place** : cette emprise n'a ni mer ni mare.
+  `CWLodTest.ORIGIN` vise donc un endroit choisi pour ce qu'il contient — 41 %
+  de mer, 17 % de mares. *Un test qui ne peut pas échouer coûte plus cher que pas
+  de test : il rassure.*
+
+Les deux défauts corrigés ont été **remis en place un par un** pour vérifier que
+la suite les voit : 5 échecs pour le premier, 3 pour le second à tous les
+niveaux. C'est la seule preuve qu'un garde-fou en est un.
+
+⚠️ **La suite passe de ~25 s à ~2 min**, et c'est la commande qu'on lance après
+chaque modification. Le poste est la passe de LOD 0 sur l'emprise. La descente se
+fait du haut vers le bas, saute les blocs uniformément vides et s'arrête dès que
+toutes les colonnes ont leur sol — sans ces trois économies elle prenait 3 min 40.
 
 ---
 
@@ -402,8 +493,18 @@ ne s'ouvre pas proprement (il est déclaré dans `project.godot`).
 ## 2. Commandes
 
 ```
-# Suite de validation (407 vérifications, ~25 s)
+# Suite de validation (433 vérifications, ~2 min)
+# ⚠️ Elle prenait 25 s jusqu'au 2026-09-12. Ce qui coûte est `tests/lod_test.gd`,
+# qui doit engendrer le monde à six niveaux de LOD pour les comparer — c'est la
+# seule façon de tenir un contrat qui ne se voit pas au pas de un.
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd
+
+# Le mode LOD, en jeu. `--lod [n]` allume la pyramide (n niveaux, 6 par défaut),
+# `--lod-vue d` sa distance de vue. Le brouillard et le plan lointain de la
+# caméra suivent tout seuls depuis le 2026-09-13 : sans cela une capture de LOD
+# ne montre qu'un mur laiteux à quatre cents blocs.
+./godot.windows.editor.double.x86_64.exe --path . scenes/terrain_demo.tscn \
+    --resolution 1600x900 -- --lod 6 --biome 0 --altitude 40 --regard -5 --shot 45
 
 # Réimport après ajout d'un class_name (sinon l'éditeur ne le voit pas)
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . --import
@@ -701,6 +802,8 @@ tests/edit_test.gd           règles d'édition, requête ponctuelle, persistanc
 tests/light_test.gd          les deux passes, l'atténuation, les cases à repeindre (1.9)
 tests/map_test.gd            échelle, découverte, puzzle, rendu, teintes, noms (1.10)
 tests/relief_test.gd         chemins, levées, tramage, écotone de Voronoï (1.16)
+tests/lod_test.gd            la pyramide de LOD : la composition ne dépend pas du
+                             niveau, et le sol ne se noie pas (2026-09-13)
 tests/sky_test.gd            le lot de nuages, la pureté du tirage, et les deux
                              accords que rien d'autre ne tient (2026-09-11)
 tools/export_palette.gd      régénère assets/palette/* depuis CWPalette
@@ -760,9 +863,15 @@ docs/images/                 gabarit, carte et composition de flore, en jeu
 4. **`swamp_channel_weight = 0` est délibéré.** Le champ sommé par
    `World_waterProximityInfluence` est perdu dans la décompilation. On connaît
    la structure du mélange, pas la grandeur mélangée. Ne pas deviner.
-5. **Le plafond du cache de colonnes doit couvrir l'empreinte chargée.**
-   `HEIGHTMAP_CACHE_CAP` ≥ `(2 × distance_de_vue / 16)²`, sinon le cache
-   s'auto-évince en boucle et le chargement s'effondre sans rien signaler.
+5. **Le plafond du cache de colonnes doit couvrir l'empreinte chargée —
+   *en mode plat*.** `HEIGHTMAP_CACHE_CAP` ≥ `(2 × distance_de_vue / 16)²`, sinon
+   le cache s'auto-évince en boucle et le chargement s'effondre sans rien
+   signaler. C'est ce qui bornait la vue à 1 024 blocs.
+   ⚠️ **En mode LOD, cet invariant ne mord plus** (2026-09-13) : la pyramide ne
+   garde qu'un anneau mince par niveau, et l'empreinte cesse de croître avec le
+   carré de la distance — 740 entrées pour 2 048 blocs de vue, contre 2 500 pour
+   384 à plat. Ne pas régler `lod_view_distance` contre cette formule : elle ne
+   décrit pas ce mode.
 6. **Le marqueur « en cours » de `_get_patch` n'est pas décoratif.** Sans lui,
    les blocs verticaux d'une même colonne recalculent tous la même carte de
    hauteurs en parallèle et le cache ne sert plus à rien pendant le chargement.
@@ -1163,6 +1272,33 @@ docs/images/                 gabarit, carte et composition de flore, en jeu
     valant l'amplitude divisée par la pente locale du champ — et infinie là où
     le champ est plat, c'est-à-dire au cœur de chaque région. *Une frontière
     dans l'espace se brouille dans l'espace.*
+
+55. **Une cellule de LOD n'est pas un point, c'est une boîte de `pas` unités.**
+    Tout le générateur est écrit comme si « juste au-dessus du sol » était
+    `sol + 1` ; au LOD c'est **la cellule suivante**, et `_cell_above(w, pas)` est
+    le point unique qui le dit. Au pas de un il rend `w + 1`, donc le LOD 0 ne
+    bouge pas d'un voxel — et c'est vérifié pour tout `w`, négatifs compris (la
+    division doit s'arrondir **vers le bas**, pas se tronquer : le niveau de la
+    mer est à −60). Une couche mince et locale qui démarre à `sol + 1` occupe la
+    cellule du sol et l'efface : c'est ce qui faisait la dalle d'eau.
+56. **La mer est la seule couche d'eau qui ait le droit d'occuper la cellule du
+    sol.** Elle est un plan à altitude unique et n'existe que là où le terrain
+    passe dessous, donc elle ne peut pas faire de dalle en pleine plaine ; et
+    c'est elle qui cache le débordement vers le haut de la cellule d'un fond
+    marin. Lui appliquer la règle de l'étang faisait tomber la part d'eau de
+    **54,6 % à 35,2 %** au LOD 5. L'étang et le dégagement d'un chemin, eux, sont
+    minces et locaux : ils passent par `_cell_above`.
+57. **Un bloc couvre `taille × pas` unités de monde, pas `(taille − 1) × pas`.**
+    La borne haute d'un bloc est la dernière unité que sa dernière cellule
+    couvre, jamais son plancher. Se tromper rogne la bande haute de chaque bloc,
+    bloc de surface compris — 72 % des colonnes en roche nue au LOD 4 — et **ça
+    ne se voit pas au pas de un**, où les deux formules coïncident.
+58. **Un test de LOD doit porter sur une emprise qui contient ce qu'il vérifie.**
+    La première version de `tests/lod_test.gd` mesurait autour du point de
+    départ, qui n'a ni mer ni mare : elle passait au vert avec le défaut remis en
+    place. `CWLodTest.ORIGIN` vise un endroit choisi — 41 % de mer, 17 % de
+    mares. Et **un garde-fou se vérifie en remettant le défaut** : sans ça on ne
+    sait pas s'il garde quoi que ce soit.
 
 ## 5. Pièges connus
 

@@ -1854,8 +1854,8 @@ sans valeur tant que les jalons 2 et 3 ne sont pas là.
 | Débit de chargement | ✅ | vue 384 : > 3 min → **27 s** ; vue 768 : **120 s** |
 | Portage du champ en GDExtension C++ | ⬜ | ~80 µs/colonne en GDScript ; **verrou de la vue lointaine**, voir ci-dessous |
 | `VoxelStream` (sauvegarde du monde modifié) | ✅ | `VoxelStreamSQLite`, `save_generator_output = false` : seul le diff part sur le disque, 647 éditions = 20 Ko |
-| LOD natif (`VoxelLodTerrain`) | ⛔ | testé, inutilisable avec un rendu en cubes — voir ci-dessous |
-| Étage de terrain lointain (façon Distant Horizons) | ⬜ | bloqué par la vitesse d'échantillonnage |
+| LOD natif (`VoxelLodTerrain`) | ✅ | **2 048 blocs de vue en 16 s**, contre 384 en 23 s à plat (2026-09-13). Le verdict de 2026-09-03 reposait sur un diagnostic faux — voir ci-dessous |
+| Étage de terrain lointain (façon Distant Horizons) | ⬜ | **route de repli, et elle n'est plus la seule** : le LOD natif rend cinq fois la portée sans elle |
 | Intégration continue sur la suite headless | ⬜ | |
 
 ### Débit de chargement — ce qui a été mesuré
@@ -2018,22 +2018,87 @@ Cube World se regarde de loin : les bandes de biomes et les massifs sont
 lisibles à des kilomètres. Une vue de quelques centaines de blocs ne reproduit
 pas ce comportement, donc la question est légitime dès maintenant.
 
-**Le LOD natif de Voxel Tools ne répond pas au besoin.** Mesuré le 2026-09-03 :
-`VoxelLodTerrain` accepte `VoxelMesherCubes` sans se plaindre et construit bien
-la géométrie lointaine, mais **des blocs d'eau apparaissent en pleine plaine à
-partir du LOD 1** — de larges dalles bleues horizontales, à des altitudes où le
-terrain est de l'herbe. Le même point de vue en `VoxelTerrain` n'en montre
-aucune. La cause exacte n'est pas établie : le canal utilisé est un *index* de
-palette, une valeur qui ne survit à aucune réduction de résolution numérique,
-mais il n'est pas démontré que ce soit bien là que la réduction se produit.
-Ce qui est établi, c'est que le défaut est propre au mode LOD et qu'il rend le
-rendu inutilisable tel quel.
+**Le LOD natif de Voxel Tools répond au besoin — depuis le 2026-09-13.** Il a
+été déclaré inutilisable le 2026-09-03 et l'est resté dix jours sur un
+diagnostic faux ; c'est cette erreur-là qui vaut d'être gardée.
 
-Le basculement reste exposé (`TerrainDemo.use_lod`) pour revérifier après un
-changement de version ou de mesher. À investiguer avant toute décision : où la
-réduction de LOD a lieu (générateur appelé par niveau, ou sous-échantillonnage
-du LOD 0), et si un canal séparé ou un mesher interpolant en espace couleur
-règle le problème.
+*Ce qu'on croyait :* de larges dalles d'eau bleues apparaissaient en pleine
+plaine dès le LOD 1, à des altitudes où le terrain est de l'herbe. L'hypothèse
+écrite ici était que `CHANNEL_TYPE` porte un **index de palette**, valeur qui ne
+survit à aucune moyenne — 3 et 5 moyennés donnent 4, qui est une autre matière.
+
+*Ce qui est vrai :* **le générateur est appelé une fois par niveau**, avec `lod`
+en argument et un pas de `1 << lod`. Une sonde d'une ligne dans
+`_generate_block` l'a montré en une exécution — LOD 0 à 5, blocs de 18³ (16 plus
+le bord du mailleur), origines alignées sur `16 × pas`. **Rien n'est jamais
+moyenné**, et l'hypothèse ne pouvait pas être vraie. Elle n'avait jamais été
+vérifiée ; elle avait été écrite, puis relue neuf fois comme un acquis.
+
+Les deux vrais défauts étaient dans `CWVoxelGenerator`, et **aucun des deux ne
+pouvait se voir au pas de un** — donc aucun des 407 tests ne les voyait :
+
+* **le bloc ne couvrait pas ce qu'il prétendait.** `y_max` valait
+  `origine + (taille − 1) × pas`, c'est-à-dire le *plancher* de la dernière
+  cellule et non la dernière unité de monde qu'elle couvre. Tout ce qui vivait
+  dans les `pas − 1` unités au-dessus était rogné, bloc de surface compris : au
+  LOD 4, **72 % des colonnes rendaient de la roche nue** là où le monde est de
+  l'herbe ;
+* **l'eau démarrait à `sol + 1`, donc dans la cellule du sol.** Au pas de seize,
+  une mare de deux blocs de fond devenait une dalle bleue de seize de côté,
+  debout de toute la hauteur de la cellule, posée sur la prairie. **C'était la
+  dalle.**
+
+Deux corollaires, et chacun a demandé sa mesure :
+
+* **la mer, elle, a le droit d'occuper la cellule du sol**, et c'est la seule
+  des trois couches d'eau. La règle du dessus vise une couche *mince et locale*
+  qui se gonflerait ; la mer est un plan à altitude unique et n'existe que là où
+  le terrain passe dessous. Lui appliquer la même règle faisait tomber la part
+  d'eau de **54,6 % à 35,2 %** sur une emprise à 41 % de mer — le rivage
+  reculait d'une demi-cellule partout, parce que c'est l'eau qui cache le
+  débordement vers le haut de la cellule d'un fond marin ;
+* **l'arbre ne doit pas manger le sol au LOD.** La règle « le feuillage ne
+  recouvre que le vide » ne visait que la couronne, parce qu'au pas de un un fût
+  se pose sur le sol sans l'occuper. Au pas de quatre, la cellule du sol porte
+  aussi le premier mètre du fût, et la prairie prenait la couleur de l'écorce
+  autour de chaque arbre.
+
+**Ce que ça vaut, mesuré sur la même machine et le même point de vue :**
+
+| | vue | chargement | pic de tâches | cache de colonnes | vidéo |
+|---|---|---|---|---|---|
+| `VoxelTerrain` | 384 blocs | 23,1 s | 35 000 | 2 500 entrées, 15 Mo | 181 Mo |
+| `VoxelLodTerrain` ×6 | **2 048 blocs** | **16,1 s** | **782** | **740 entrées, 5 Mo** | 305 Mo |
+
+Cinq fois la portée pour un tiers de temps en moins. Et **le plafond du cache de
+colonnes cesse de borner la distance de vue** (invariant n° 5) : la pyramide ne
+garde qu'un anneau mince par niveau, donc son empreinte ne croît plus avec le
+carré de la distance. La contrainte qui bornait le projet à 1 024 blocs depuis
+des semaines n'est plus la bonne contrainte.
+
+**Trois choses ont dû suivre pour que le mode soit seulement jugeable :**
+
+* **le brouillard était réglé pour 384 blocs, et pour eux seuls.** La première
+  capture de LOD ne montrait qu'un mur laiteux : le terrain portait à deux
+  mille, le brouillard le cachait à quatre cents. `CWDaylight.view_distance` met
+  la densité à l'échelle, à profondeur optique constante au bord de la vue ;
+* **le plan lointain de la caméra** était en dur à 2 048 ; il suit la distance
+  rendue, avec une marge de moitié ;
+* **les arbres sont estampés jusqu'au LOD 2** (`TREE_MAX_LOD`) et non plus au
+  seul LOD 0. C'est un seuil de *lisibilité*, pas de coût : au pas de quatre un
+  houppier fait encore deux ou trois cellules et lit comme un arbre, au pas de
+  huit il n'en fait qu'une et une forêt devient un semis de cubes verts. Le coût
+  est plat — un bloc de LOD 2 couvre une cellule d'arbres, un bloc de LOD 0 en
+  consulte une à quatre.
+
+**Ce qui n'est pas encore prouvé, et qui décide du défaut de la scène.**
+`TerrainDemo.use_lod` reste à **faux**. Ce qui est vérifié : le rendu, le
+chargement, la mémoire, et la composition du monde niveau par niveau
+(`tests/lod_test.gd`). Ce qui ne l'est pas : **l'édition, la persistance et les
+collisions en mode LOD**. La couche d'édition est branchée par `has_method` et
+non sur la classe, donc elle prend son `VoxelTool` du nœud sans rien savoir de
+lui — mais personne n'a encore creusé un trou en mode LOD, ni rouvert le monde
+après. C'est une manette en main, pas un test.
 
 *Non lié :* le relief lointain paraît bleuté dans les deux modes. C'est
 l'éclairage ambiant du ciel sur des faces détournées du soleil, pas un défaut de
@@ -2047,7 +2112,7 @@ est déjà celui du générateur ici — `CWTerrainField.sample_column` rend
 profils. **Aucune dette d'architecture n'est en train de se créer** : l'étage
 lointain se branchera sur ces primitives sans les modifier.
 
-**Le vrai verrou est ailleurs.** Un anneau lointain de 2 km de rayon
+**Le verrou du repli est ailleurs.** Un anneau lointain de 2 km de rayon
 échantillonné tous les 32 blocs représente ~16 000 colonnes, soit **~1,3 s** de
 calcul au coût actuel ; le même anneau à 4 km tous les 16 blocs demande ~21 s.
 Ce n'est pas la structure qui bloque, c'est les 80 µs par colonne. L'ordre des
@@ -2064,12 +2129,18 @@ Construire l'étage 2 avant l'étape 1 reviendrait à bâtir une pyramide de LOD
 au-dessus d'un échantillonneur trop lent : on multiplierait le problème au lieu
 de le résoudre.
 
+> **Cet ordre des travaux n'est plus le chemin principal** depuis que le LOD
+> natif marche. Il reste la route de repli, et le portage en C++ reste le levier
+> qui décide de tout le reste — mais on n'a plus besoin d'écrire un étage
+> lointain pour voir à deux kilomètres.
+
 ---
 
 ## Journal
 
 | Date | Fait |
 |---|---|
+| 2026-09-13 | **Le LOD natif marche, et l'hypothese qui le bloquait depuis dix jours etait fausse.** (1) **La sonde d'abord.** Le fichier de reprise posait deux questions avant toute decision : ou la reduction a lieu, et si un canal separe reglerait la dalle d'eau. Une ligne dans `_generate_block` a repondu a la premiere en une execution — **le generateur est appele une fois par niveau**, LOD 0 a 5, pas de `1 << lod`, origines alignees sur `16 x pas` —, et cette reponse **annule la seconde** : rien n'est jamais moyenne, donc l'index de palette qui ne survit pas a une moyenne n'a jamais ete le sujet. *L'hypothese n'avait jamais ete verifiee ; elle avait ete ecrite, puis relue neuf fois comme un acquis.* (2) **Les deux vrais defauts, et aucun ne pouvait se voir au pas de un** — donc aucun des 407 tests ne les voyait. `y_max` valait `origine + (taille - 1) x pas`, c'est-a-dire le plancher de la derniere cellule et non la derniere unite qu'elle couvre : la bande haute de chaque bloc perdait son sol, et **72 % des colonnes rendaient de la roche nue au LOD 4** la ou le monde est de l'herbe. Et l'eau demarrait a `sol + 1`, donc **dans la cellule du sol** : au pas de seize, une mare de deux blocs de fond devenait une dalle bleue de seize de cote, debout de toute la hauteur de la cellule. C'etait la dalle. (3) **Deux corollaires, et chacun a demande sa mesure.** *La mer a le droit d'occuper la cellule du sol*, et c'est la seule des trois couches d'eau : la regle du dessus vise une couche mince et **locale** qui se gonflerait, la mer est un plan a altitude unique qui n'existe que la ou le terrain passe dessous. Lui appliquer la meme regle faisait tomber la part d'eau de **54,6 % a 35,2 %** sur une emprise a 41 % de mer — c'est l'eau qui cache le debordement vers le haut de la cellule d'un fond marin. Et *l'arbre ne doit pas manger le sol* : la regle « le feuillage ne recouvre que le vide » ne visait que la couronne, parce qu'au pas de un un fut se pose sur le sol sans l'occuper — au pas de quatre la cellule du sol porte aussi le premier metre du fut, et la prairie prenait la couleur de l'ecorce autour de chaque arbre. (4) **Ce que ca vaut**, meme machine, meme point de vue : `VoxelTerrain` 384 blocs en 23,1 s, pic 35 000 taches, 2 500 entrees de cache ; `VoxelLodTerrain` x6 **2 048 blocs en 16,1 s**, pic **782**, **740 entrees**. Cinq fois la portee pour un tiers de temps en moins — et **le plafond du cache de colonnes cesse de borner la distance de vue** (invariant n° 5), la pyramide ne gardant qu'un anneau mince par niveau. La contrainte qui bornait le projet a 1 024 blocs depuis des semaines n'est plus la bonne contrainte. (5) **Trois choses ont du suivre pour que le mode soit seulement jugeable.** Le brouillard etait regle pour 384 blocs et pour eux seuls : la premiere capture de LOD ne montrait qu'un mur laiteux, le terrain portant a deux mille et le brouillard le cachant a quatre cents. Le plan lointain de la camera etait en dur a 2 048. Et **les arbres sont estampes jusqu'au LOD 2** et non plus au seul LOD 0 : seuil de *lisibilite* et non de cout — au pas de quatre un houppier fait encore deux ou trois cellules, au pas de huit il n'en fait qu'une et une foret devient un semis de cubes verts ; le cout, lui, est plat. (6) **`tests/lod_test.gd`, 26 verifications, et il a fallu s'y reprendre a trois fois pour qu'il mesure quelque chose.** Une premiere version comparait la *composition* des sommets de colonne : elle attrapait la roche nue et pas la dalle, parce que la dalle ne change pas la matiere du sommet — elle change **laquelle des deux couches occupe la cellule**. L'enonce qui l'attrape est *le sol ne se noie pas*. Une deuxieme version le mesurait sur l'emprise du point de depart : **elle passait au vert avec le defaut remis en place**, cette emprise n'ayant ni mer ni mare. Le repere vise donc un endroit choisi pour ce qu'il contient — 41 % de mer, 17 % de mares. *Un test qui ne peut pas echouer coute plus cher que pas de test : il rassure.* (7) `use_lod` reste a **faux** : le rendu, le chargement, la memoire et la composition sont verifies ; **l'edition, la persistance et les collisions en mode LOD ne le sont pas**, et ca se juge manette en main. Suite : **433 verifications, 0 echec**, ~2 min. |
 | 2026-09-12 | **Un pays, une matiere ; un pays, une region ; et une carte qui est une legende.** (1) **Les matieres.** La roche ne sort plus que sur une falaise — la bande des hauteurs de Lava Lands part, elle qui avait triple toute seule, de 0,3 a 2,8 % du monde, quand la mer est descendue de soixante blocs la veille : *une regle qui change de taille parce qu'une autre couche a bouge n'est pas une regle, c'est un effet de bord*. La plage et le haut-fond partent avec, et c'etait une decision et non une deduction — ils nommaient bien un endroit, mais **ils le nommaient de la meme facon dans trois pays**, et le rivage etait devenu le seul lieu du monde ou les biomes se ressemblent. Le marais s'en va aussi, et le roseau avec lui : il etait la seconde matiere de Jungles et le seul sol ou cette plante poussait — le retirer sans son porteur aurait fait disparaitre la plante en silence (invariant n° 22), donc les deux partent ensemble, `FAMILIES_SURFACE` avec eux. La rive d'une mare garde sa **forme** — une berge seche entre l'eau et le terrain, qui est de la geometrie — et prend la couleur de son pays ; le lit garde la couche meuble, parce que ce n'est pas une matiere de surface mais **le sous-sol vu en coupe**. Mesure : roche 2,8 → **0,4 %**, marais → 0, et chaque biome rend exactement sa part en matiere (sable 13,4 %, gravier 19,5 %). (2) **Le biome se decide au site de region, plus au climat de la colonne.** Le defaut n'etait pas la taille des biomes — le climat melange est un **plateau plat par region**, mesure, coupe de transitions de deux cents blocs — c'etait le bord : on y traversait jusqu'a **quatre seuils**, donc quatre pays, en deux cents pas. Classer au site fait d'un biome une cellule de Voronoi, seize mille blocs, **par construction**. Ce qui garantissait la vraisemblance du voisinage n'etait pas le melange mais les **provinces climatiques**, qui sont au niveau du site : elles survivent telles quelles. L'ecotone cesse d'etre un brouillage de climat et devient un **deplacement du point** de trente blocs — *une frontiere dans l'espace se brouille dans l'espace* —, et tout l'appareil qui bornait l'ancien disparait : gradient du champ de climat, memoisation par cellule de seize, amplitude plafonnee, sortie anticipee. La frequence fine peut meme revenir a celle du reste du depot (0,34, trois blocs) : un deplacement, contrairement a un brouillage, ne peut pas tirer a pile ou face sur un plateau. Mesure : les six parts ne bougent pas d'un dixieme de point, l'ecotone passe de 3,4 a **4,4 %** des colonnes d'une fenetre de frontiere et de 8 a **13 blocs** d'incursion moyenne, et la colonne ne coute pas plus cher — la passe sur neuf sites economisee dans `_sample` paie la recherche tramee. Le climat melange reste rendu par `climate_blend`, elargi a ~1 500 blocs, **pour l'ATH seulement** : il ne decide plus rien. (3) **Les nuages ont un ventre.** « Il manque la moitie basse » : la rangee basse des metaballes etait posee a 0,02 h avec un rayon de 0,34 h, donc son ventre descendait a −0,32 h quand le plan de coupe etait a +0,30 h — *la coupe ne rasait pas le dessous, elle tranchait la rangee presque au sommet*. Ce n'etait pas la coupe qui manquait de masse, c'etait la masse qui manquait sous la coupe : la rangee monte a 0,34 h, l'etage haut suit a 0,76–0,98 pour ne pas s'y noyer, la coupe descend a 0,12. Le lot grandit d'un tiers (le voile fait 105 blocs de large) et **la maille du ciel passe de 220 a 320** — un ciel dont les nuages se touchent est un plafond, et c'est le seul rapport du lot qu'une capture ne rattrape pas. (4) **La carte cesse de recopier le sol.** Elle prenait `CWPalette.colors()[surface_index]`, ou la neige (125, 181, 199) et l'eau (42, 200, 252) sont deux cyans clairs : une Snowlands cotiere avait la couleur de la mer qui la borde. Six teintes a elle, indexees par **biome** et non par matiere — *une carte est une legende, pas une photographie* —, et un test qui verifie qu'elles se distinguent deux a deux ; c'est lui qui a trouve que le couple le plus proche n'etait pas celui qu'on croyait mais **la jungle et l'ocean**, deux sombres. (5) **Et elle ne montrait aucune mer.** Elle jugeait sur une colonne prise au site : sur les 81 regions du depart, **28 sont oceaniques et pas une ne rendait d'eau**, parce que le melange d'altitude ramene la colonne d'un site pose a −100 jusqu'a +7 pour un niveau de mer a −60. *Une colonne au site dit ce qu'il y a sous les pieds du site, pas ce qu'est la region* : la carte lit maintenant le drapeau `is_ocean`, comme son icone le faisait deja. (6) **Elle nomme tout le monde.** Le nom voyageait avec l'icone de relief, qu'une region marine n'a pas — un sixieme du monde sans nom *par construction* —, et il ne se dessinait qu'a partir de l'echelle 2, soit cinq zones : au-dela tous disparaissaient d'un coup. Le seuil de zoom reglait un probleme de **chevauchement**, ce qui est en dire plus qu'on ne sait ; on mesure donc le chevauchement — chaque nom demande sa boite, on la pose si elle est libre —, et les plus proches du joueur passent en premier. `--zones n` capture la carte dense, qui est le seul cas qui se juge. Suite : **407 verifications, 0 echec**. |
 | 2026-09-11 | **Cinq demandes : les nuages deviennent des objets, l'arbre entier devient de la matiere, les six biomes deviennent egaux, et le gigaoctet n'etait pas ou on le cherchait.** (1) **Les nuages.** Trois modeles `.vox` a 1 voxel = 1 bloc, un `CWClouds` qui les pose sur une grille de ciel par fonction pure de la cellule, le shader de nuages retire entier (fbm, cinq octaves, uniformes, six constantes `CLOUD_*`), et `DAY_LENGTH` de 720 a **2 400 s**. Trois pieges de rendu, dont deux qu'aucun test ne pouvait voir : le brouillard (`disable_fog` — *un nuage appartient au ciel, et le ciel ne prend que 18 % du brouillard*), les **soucoupes bleu marine** de la premiere capture — on regarde un nuage par en dessous, un dessous ne recoit que l'ambiante, et la cause etait que **la matiere etait fausse** : un nuage est traverse par la lumiere, ce que dit `backlight`, et proportionnellement au soleil donc sans eclairer la nuit —, et les **meduses turquoise** de la deuxieme, la rampe 240-247 montant jusqu'a un bleu de ciel franc dont on voit le bas ; elle s'arrete a 243. La plage **effets** de la palette, jamais peinte, a fourni la rampe sans qu'une frontiere bouge. `--regard d` nait avec eux : rien ne savait regarder en l'air. (2) **La collision du feuillage.** Houppiers, domes, palmes et les cinq modeles entiers passent en matiere ; la couche d'instances d'arbres disparait. Les cactus restent dehors, et la raison est structurelle : a 4 voxels par bloc, les redessiner en ferait une pile de cubes et en estamper un volume approche mettrait un pate visible dans le modele fin — *ce qu'un cactus veut est une forme de physique*, au jalon 3.1. Mesure : **+5,4 %** de chargement la ou le fichier annoncait +25 %, et **le poste dominant n'est pas celui qu'on ecrit** — ecrire douze fois plus de voxels coute 0,4 s, reculer `HAUTEUR_TRONC_MAX` de 48 a 72 en coute 1,0, et celle-la se paie au-dessus d'un desert sans un arbre. Un vrai defaut trouve a la premiere execution : **une couronne recouvre le fut qui la porte**, et l'ordre des deux listes les departageait — le bloc rendait du feuillage, la requete du bois (invariant n° 18). La regle qui referme : *le feuillage ne recouvre que le vide*. `LEAVES = 19`, et le type se lit sur la palette du voxel, jamais sur la piece. (3) **Six parts egales**, ocean compris, donc en deplacant aussi le **niveau de la mer** (0 → −60). Greenlands 41,0 → 18,5 %, Lava Lands 1,1 → 16,6 %. Ce qui a change n'est pas six valeurs mais **la forme de la regle** : le solveur n'a pas pu trouver le desert, `DESERT_T` descendant a zero pour 3 % du monde, parce qu'il y avait **deux frontieres d'humidite** la ou le champ est bimodal. Il n'y en a plus qu'une ; la temperature fait tout le reste. Prix annonce et paye : Lava Lands cesse d'etre rare, et les degres de l'ATH ne se lisent plus — ce sont des quantiles d'un champ. Le niveau de mer, lui, **n'est pas stable d'une graine a l'autre** (−54 a −68) : une graine decide ou sont les continents. `tools/biome_balance.gd` est fait pour etre relance. (4) **Le maillage, mesure — et le soupcon etait faux.** Le ~1,1 Go observe etait reel, mais **les maillages font 57 Mo sur 1,09 Go**, soit cinq pour cent ; le reste est la donnee voxel (347 Mo) et le decor du moteur (110 Mo de textures dans un projet qui n'en a aucune). Le tramage coute **17 %** des sommets et le maillage glouton en achete **6,8×** : l'arbitrage rendu contre memoire est tranche dans le sens du rendu, trois tons pour une prairie valent dix megaoctets. Et `HEIGHTMAP_CACHE_CAP` annoncait 1,3 Ko l'entree : elle en fait **6,4**, donc le plafond autorise 105 Mo. (5) **Le C++**, condition remplie par la mesure de (4). `native/` est complet — GDExtension et non module, le moteur etant un build personnalise —, `CWValueNoise` a deux corps et **ne fait pas confiance au natif parce qu'il est la** : `_natif_accorde` le fait passer un examen au chargement et le refuse s'il ne rend pas les memes bits, l'exactitude etant l'invariant n° 1. Il ne compile pas sur cette machine : le SDK Windows n'y est pas, ce qui est une modification de la machine et non du projet. |
 | 2026-09-10 (soir) | **Le monde a une heure.** Un cycle jour/nuit où **tout se déduit d'un scalaire dans `[0, 1)` par la seule fonction `CWDaylight.applique`** — rotation, énergie et couleur du soleil ; zénith, horizon et sol du ciel ; couleur et relief des nuages ; ambiante ; couleur, densité et diffusion du brouillard. C'est une contrainte, pas une commodité : deux points d'entrée donneraient une aube au ciel rose et au brouillard bleu, et le défaut ne se verrait qu'à l'aube. Les nuages sont un **bruit fractal en coordonnées de direction** (`src/demo/cw_sky.gdshader`) et non un dôme texturé — pas de géométrie, pas de plafond de couverture, et c'est la route qui donnera les ombres de nuages : la même fonction, échantillonnée au sol. `--heure h` se pose à une heure et fige le cycle, `--jour n` change sa durée, `--nuages c` la couverture ; **F2** fige, **F3**/**F4** reculent ou avancent d'une heure — *regarder une aube en temps réel n'est pas une méthode de réglage*. **Le doute sur l'éclairage cuit est levé dans le bon sens** : on craignait que la composante « ciel » à 255 de `CWLight` garde le monde clair la nuit ; ce n'est pas le cas, parce que le terrain **généré** ne passe jamais par `CWLight` — un champ de hauteurs est éclairé partout où on le voit — et que seul ce que le joueur a creusé porte de l'ombre cuite. Le voxel cuit est donc devenu un terme d'occlusion sans qu'on y touche, et une ombre reste une ombre à toute heure. **Trois réglages ont demandé une capture, et aucun ne se voyait dans le code.** (a) `fog_sky_affect` vaut **1** par défaut : le brouillard repeignait le ciel entier de sa couleur, dégradé, nuages et soleil disparus sous un aplat. La capture de midi rendait cela quand celle de minuit montrait le dégradé, simplement parce qu'à minuit le brouillard est de la couleur du ciel qu'il cachait — *un défaut qui se voit le jour et pas la nuit ressemble à un bug de shader ; c'en était un de réglage*. (b) La projection des nuages, `EYEDIR.xz / EYEDIR.y`, **diverge à l'horizon** : juste physiquement, illisible à l'écran, et c'est justement là qu'une vue à la première personne regarde. Un décalage au dénominateur borne la perspective au lieu de la laisser exploser. (c) Les deux bandes de `smoothstep` des nuages se lisaient contre `[0, 1]` alors que cinq octaves d'un bruit de valeur ne montent guère au-dessus de **0,72** : tout le nuage restait dans son fondu et dans sa teinte d'ombre, ce qui donnait des masses grises et ressemblait à un problème d'éclairage. |

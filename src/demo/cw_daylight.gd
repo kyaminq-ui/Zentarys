@@ -51,8 +51,12 @@ extends Node3D
 ## qu'un midi. Les deux raisons la mettent dans `applique` et non dans une
 ## constante d'environnement.
 ##
-## > ⚠️ **Elle est reglee pour une vue de 384 blocs.** Augmenter la distance sans
-## > reprendre `FOG_DENSITY_*` rend le lointain laiteux bien avant son bord.
+## > **Elle etait reglee pour une vue de 384 blocs, et pour elle seule.** C'est
+## > `view_distance` qui la met a l'echelle depuis le 2026-09-13 : les densites
+## > ci-dessous restent celles de la vue de reference, et le brouillard se
+## > dilate a mesure que la vue porte. Sans cela le mode LOD est indefendable —
+## > il charge deux mille blocs de terrain que le brouillard cache a quatre
+## > cents, et une capture de LOD ne montre qu'un mur laiteux.
 
 const SKY_SHADER: String = "res://src/demo/cw_sky.gdshader"
 
@@ -146,6 +150,22 @@ const FOG_SKY_AFFECT: float = 0.18
 ## qu'une aube se voit **dans le paysage** et pas seulement dans le ciel.
 const FOG_SCATTER_DAY: float = 0.12
 const FOG_SCATTER_TWILIGHT: float = 0.55
+
+## La vue pour laquelle `FOG_DENSITY_*` a ete regle a l'oeil. Elle n'est pas un
+## reglage : c'est l'etalon qui donne son sens aux deux densites, et le diviseur
+## de la mise a l'echelle. La changer reviendrait a refaire le reglage.
+const FOG_REFERENCE_VIEW: float = 384.0
+
+
+## Distance de vue du terrain, en blocs. Le brouillard s'y regle pour cacher le
+## **bord de la vue chargee** et pas un point arbitraire : a profondeur optique
+## constante, une vue deux fois plus longue veut un brouillard deux fois plus
+## tenu. La demo la pose a chaque changement de distance, dans les deux modes.
+var view_distance: float = FOG_REFERENCE_VIEW:
+	set(value):
+		view_distance = maxf(value, 1.0)
+		if is_inside_tree():
+			applique()
 
 
 ## L'heure, dans `[0, 1)`. 0 minuit, 0,25 lever, 0,5 midi, 0,75 coucher.
@@ -273,6 +293,6 @@ func applique() -> void:
 	environment.ambient_light_energy = lerpf(AMBIENT_NIGHT, AMBIENT_DAY, jour)
 	environment.fog_light_color = FOG_NIGHT.lerp(FOG_DAY, jour) \
 			.lerp(FOG_TWILIGHT, crepuscule * 0.6)
-	environment.fog_density = lerpf(FOG_DENSITY_NIGHT, FOG_DENSITY_DAY, jour)
+	environment.fog_density = lerpf(FOG_DENSITY_NIGHT, FOG_DENSITY_DAY, jour) 			* (FOG_REFERENCE_VIEW / view_distance)
 	environment.fog_sun_scatter = lerpf(0.0,
 			lerpf(FOG_SCATTER_DAY, FOG_SCATTER_TWILIGHT, crepuscule), jour)

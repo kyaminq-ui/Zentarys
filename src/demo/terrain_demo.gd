@@ -94,19 +94,57 @@ const BIOME_KEYS: Dictionary = {
 
 ## Bascule VoxelTerrain (detail unique) <-> VoxelLodTerrain (pyramide de LOD).
 ##
-## RESULTAT MESURE (2026-09-03) : inutilisable en l'etat avec un rendu en cubes.
-## La geometrie lointaine se construit bien, mais de larges dalles d'eau
-## apparaissent en pleine plaine des le LOD 1, a des altitudes ou le terrain est
-## de l'herbe. Le meme point de vue en VoxelTerrain n'en montre aucune. Cause
-## exacte non etablie (le canal porte un index de palette, valeur qui ne survit
-## a aucune reduction numerique, mais l'endroit de la reduction reste a
-## confirmer). Conserve pour reverifier apres un changement de mesher ou de
-## version. Voir docs/ROADMAP.md, section « Vue lointaine ».
+## MESURE DU 2026-09-13, sur la meme machine et le meme point de vue :
+##
+## | | vue | chargement | pic de taches | cache de colonnes |
+## |---|---|---|---|---|
+## | `VoxelTerrain` | 384 blocs | 23,1 s | 35 000 | 2 500 entrees, 15 Mo |
+## | `VoxelLodTerrain` x6 | **2 048 blocs** | **16,1 s** | **782** | **740 entrees, 5 Mo** |
+##
+## Cinq fois la portee pour un tiers de temps en moins. Et le cache de colonnes
+## cesse d'etre ce qui borne la vue (invariant n. 5) : la pyramide ne garde
+## qu'un anneau mince par niveau, donc son empreinte ne croit plus avec le carre
+## de la distance.
+##
+## -- Ce qui a change depuis le verdict de 2026-09-03 --------------------------
+##
+## Le mode etait declare inutilisable : de larges dalles d'eau en pleine plaine
+## des le LOD 1. La cause supposee — la moyenne d'un index de palette — etait
+## fausse : **le generateur est appele une fois par niveau** (sonde du
+## 2026-09-13), donc rien n'est jamais moyenne. Les deux vrais defauts etaient
+## dans `CWVoxelGenerator`, et tous deux invisibles au pas de un :
+##
+##   * le bloc ne couvrait que `(taille - 1) x pas` unites de monde au lieu de
+##     `taille x pas`, donc la bande haute de chaque bloc perdait sa surface —
+##     72 % des colonnes rendaient de la roche nue au LOD 4 ;
+##   * l'eau demarrait a `sol + 1`, c'est-a-dire **dans la cellule du sol** :
+##     une mare de deux blocs devenait une dalle bleue de seize.
+##
+## Voir `CWVoxelGenerator._generate_block` et `_cell_above`.
+##
+## -- Ce que le mode LOD ne sait toujours pas faire ----------------------------
+##
+## ⚠️ **Les arbres ne sont estampes qu'au LOD 0**, donc ils s'arretent net a
+## `lod_distance` du joueur. C'est le defaut visible qui reste, et il se corrige
+## en montant `lod_distance` plutot qu'en estampant au LOD : un houppier de dix
+## blocs ne fait plus qu'une cellule au LOD 4, et une foret y deviendrait un
+## semis de cubes verts.
 @export var use_lod: bool = false
 @export_range(1, 8, 1) var lod_count: int = 6
 ## Distance de vue en mode LOD. Sans commune mesure avec `view_distance` :
 ## c'est tout l'interet de la pyramide.
 @export var lod_view_distance: int = 2048
+## Portee du LOD 0, en blocs — et le pas de chaque niveau suivant.
+##
+## C'est **la seule commande qui decide jusqu'ou on voit des arbres**, puisqu'ils
+## ne sont ecrits qu'au niveau plein. Le defaut de Voxel Tools est 48, ce qui les
+## arrete a portee de jet ; le prix d'un doublement est le carre, paye sur le
+## niveau le plus cher de la pyramide.
+@export_range(32, 512, 16) var lod_distance: float = 64.0
+## Fondu entre deux niveaux, en secondes. Zero — le defaut de Voxel Tools — fait
+## sauter la geometrie d'un coup quand on avance ; un quart de seconde suffit a
+## ce que la bascule cesse de se voir.
+@export var lod_fade_duration: float = 0.25
 
 var params: CWWorldParams
 var generator: CWVoxelGenerator
@@ -180,6 +218,7 @@ func _ready() -> void:
 	daylight = CWDaylight.new()
 	daylight.name = "Daylight"
 	add_child(daylight)
+	_read_lod_cmdline()
 	_build_terrain()
 	_build_camera()
 	_build_flora()
@@ -199,6 +238,33 @@ func _ready() -> void:
 	elif auto_shot_delay > 0.0:
 		_shot_countdown = auto_shot_delay
 	_read_cmdline()
+
+
+## Le choix du terrain, lu **avant** que la scene soit montee.
+##
+## Meme raison que `--fils` : `use_lod` decide de la classe du noeud de terrain,
+## donc il doit etre connu avant `_build_terrain()`. A l'heure ou `_read_cmdline`
+## passe, le terrain charge deja et le rebatir jetterait le flux de sauvegarde.
+##
+##   --lod [n]      pyramide de LOD, n niveaux (defaut `lod_count`)
+##   --lod-vue d    la distance de vue du mode LOD, en blocs
+func _read_lod_cmdline() -> void:
+	var args: PackedStringArray = OS.get_cmdline_user_args()
+	var i: int = 0
+	while i < args.size():
+		match args[i]:
+			"--lod":
+				use_lod = true
+				if i + 1 < args.size() and args[i + 1].is_valid_int():
+					i += 1
+					lod_count = clampi(int(args[i]), 1, 8)
+			"--sans-lod":
+				use_lod = false
+			"--lod-vue":
+				if i + 1 < args.size():
+					i += 1
+					lod_view_distance = int(args[i])
+		i += 1
 
 
 ## Reglages passes en ligne de commande, apres `--`.
@@ -437,8 +503,16 @@ func _build_terrain() -> void:
 		lod.mesher = mesher
 		lod.lod_count = lod_count
 		lod.view_distance = lod_view_distance
+		lod.lod_distance = lod_distance
+		lod.lod_fade_duration = lod_fade_duration
 		lod.generate_collisions = false
+		# Meme raison qu'en mode plat : des blocs de maillage de 32 au lieu de 16
+		# donnent huit fois moins de maillages et d'appels de rendu pour la meme
+		# quantite de voxels, et les blocs de donnees restent a 16.
+		lod.mesh_block_size = 32
 		lod.voxel_bounds = box
+		# ⚠️ `voxel_bounds` ici, `bounds` en mode plat : deux classes, deux noms
+		# pour la meme chose (piege connu, `nextsteps.md` §5).
 		lod.format = CWPalette.build_voxel_format()
 		lod.stream = stream
 		terrain = lod
@@ -470,17 +544,41 @@ func _build_terrain() -> void:
 	generator.scatter_grid().set_edits(edits)
 
 
+## La distance a laquelle le terrain est reellement rendu, en blocs.
+##
+## Les deux modes ne la rangent pas au meme endroit — `view_distance` pour
+## `VoxelTerrain`, `lod_view_distance` pour la pyramide — et **quatre reglages en
+## dependent** : la portee de l'observateur, le plan lointain de la camera, la
+## densite du brouillard et le chiffre de l'ATH. Les avoir choisis chacun de son
+## cote est ce qui a rendu la premiere capture de LOD illisible : le terrain
+## portait a deux mille blocs, le brouillard le cachait a quatre cents.
+func rendered_distance() -> int:
+	return lod_view_distance if use_lod else view_distance
+
+
+## Accorde ce qui suit la distance de rendu : la camera, le brouillard.
+##
+## Le plan lointain prend une marge de moitie — un bloc au bord de la vue est a
+## `d` du **joueur**, mais le coin d'un pave charge peut etre plus loin, et un
+## plan lointain trop court le tranche en plein ciel.
+func _apply_rendered_distance() -> void:
+	var d: float = float(rendered_distance())
+	if is_instance_valid(camera):
+		camera.far = maxf(d * 1.5, 512.0)
+	if daylight != null:
+		daylight.view_distance = d
+
+
 func _build_camera() -> void:
 	camera = Camera3D.new()
 	camera.name = "FlyCamera"
-	camera.far = 2048.0
 	camera.fov = 72.0
 	add_child(camera)
 
 	var viewer := VoxelViewer.new()
 	viewer.name = "VoxelViewer"
 	_viewer = viewer
-	viewer.view_distance = lod_view_distance if use_lod else view_distance
+	viewer.view_distance = rendered_distance()
 	# Le poste dominant n'est pas le cout d'un bloc mais leur nombre, et il croit
 	# avec le produit des trois axes. A l'horizontale la portee sert a voir loin ;
 	# a la verticale elle ne sert qu'a couvrir l'epaisseur du relief autour du
@@ -496,6 +594,7 @@ func _build_camera() -> void:
 			maxf(start_h, float(params.sea_level)) + 26.0,
 			float(spawn_offset.y))
 	camera.rotation = Vector3(_pitch, _yaw, 0.0)
+	_apply_rendered_distance()
 
 
 ## Couche de flore : instanciee par-dessus le terrain, pas ecrite dedans. Les
@@ -617,6 +716,7 @@ func set_view_distance(blocks: int) -> void:
 			_viewer.view_distance = view_distance
 	if flora != null:
 		flora.view_distance = view_distance
+	_apply_rendered_distance()
 	_hud_timer = 0.0
 
 
@@ -832,7 +932,7 @@ func _refresh_pending() -> void:
 	elif _pending > 0:
 		# Front descendant : la vue est complete, la mesure devient valide.
 		print("[demo] vue %d blocs : stabilisee en %.1f s (pic %d taches, %d fils%s)" % [
-			view_distance,
+			rendered_distance(),
 			float(Time.get_ticks_msec() - _load_started_ms) / 1000.0,
 			_load_peak,
 			_voxel_engine.get_thread_count(),
@@ -942,7 +1042,7 @@ func _update_hud() -> void:
 		lines.append("chenal %.4f%s   vue %d blocs%s   %d fils" % [
 			c4.w,
 			"  (etang)" if CWTerrainField.pond_gate(c.x, c4.w, sea, biome) else "",
-			lod_view_distance if use_lod else view_distance,
+			rendered_distance(),
 			("   LOD x%d" % lod_count) if use_lod else "",
 			_voxel_engine.get_thread_count() if _voxel_engine != null else 0])
 		if flora != null:

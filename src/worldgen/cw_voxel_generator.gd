@@ -64,6 +64,14 @@ const HEIGHTMAP_CACHE_CAP: int = 16384
 ## commentaire.
 const PATCH_BYTES: int = 256 * (4 + 1 + 4 + 8 + 8)
 
+## Dernier niveau de LOD ou les arbres sont encore estampes.
+##
+## Deux, mesure a l'oeil le 2026-09-13 : au pas de quatre un houppier fait
+## encore deux ou trois cellules et lit comme un arbre ; au pas de huit il n'en
+## fait qu'une, et une foret devient un semis de cubes verts. C'est un seuil de
+## **lisibilite**, pas de cout — le cout, lui, est plat (voir `_stamp_trees`).
+const TREE_MAX_LOD: int = 2
+
 ## Attente maximale, en millisecondes, avant de renoncer a attendre le fil qui
 ## calcule deja la meme carte de hauteurs et de la calculer soi-meme. Filet de
 ## securite : sans lui, un fil interrompu bloquerait les autres.
@@ -397,10 +405,18 @@ func generated_voxel(x: int, y: int, z: int) -> int:
 ## des exceptions par matiere). Ce que la rive dessine est de la geometrie — une
 ## berge seche entre l'eau et le terrain —, et la geometrie ne dependait pas de
 ## la couleur.
-static func pond_surface(surface: int, prof: Vector3i, in_gate: bool) -> int:
+static func pond_surface(surface: int, prof: Vector3i, in_gate: bool,
+		stride: int = 1) -> int:
 	if not in_gate:
 		return surface
-	if prof.y <= prof.z:
+	# **Le lit ne se decouvre que sous l'eau qui sera reellement dessinee.** Au
+	# pas de un — tout le jeu, l'edition et les deux dispersions —, la cellule
+	# au-dessus du lit est `prof.x + 1`, c'est-a-dire `prof.y`, et le test est
+	# mot pour mot celui d'avant. Au LOD, une mare de trois blocs de fond est
+	# plus mince qu'une cellule, donc elle n'est pas dessinee : lui laisser son
+	# lit de terre poserait une tache brune en pleine prairie, la ou l'oeil
+	# n'attend aucune mare. Le lit suit l'eau, dans les deux sens.
+	if _cell_above(prof.x, stride) <= prof.z:
 		return CWPalette.subsurface_index(surface)
 	return surface
 
@@ -456,7 +472,18 @@ func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: i
 	var patch: ColumnPatch = _get_patch(f, p, origin_in_voxels, size, stride, lod, sea)
 
 	var y_min: int = origin_in_voxels.y
-	var y_max: int = origin_in_voxels.y + (size.y - 1) * stride  # borne incluse
+	# **La derniere unite de monde que le bloc couvre**, et non la derniere qu'il
+	# echantillonne. Les deux ne different qu'au LOD, ou une cellule vaut `stride`
+	# unites : `origin.y + (size.y - 1) * stride` designait le *plancher* de la
+	# derniere cellule, donc tout ce qui vivait dans les `stride - 1` unites
+	# au-dessus etait rogne par `_fill_run` — la couche de surface comprise.
+	#
+	# C'etait un des deux defauts du mode LOD, et il ne pouvait pas se voir au
+	# LOD 0 ou `stride` vaut un et ou les deux formules coincident. Mesure au
+	# 2026-09-13 : au LOD 4, **72 % des colonnes rendaient de la roche nue** la
+	# ou le monde est de l'herbe, parce que leur bloc de surface tombait dans
+	# cette bande morte et que la cellule gardait la roche ecrite en dessous.
+	var y_max: int = origin_in_voxels.y + size.y * stride - 1  # borne incluse
 
 	# Chemins rapides : bloc entierement vide ou entierement plein. Ce sont eux
 	# qui rendent praticable un monde de mille blocs de haut.
@@ -501,12 +528,37 @@ func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: i
 			var road_hi: int = patch.roads[i * 2 + 1] if has_roads else 0
 			i += 1
 			var top: int = floori(h)
+			# **La premiere unite de monde au-dessus de la cellule qui porte le
+			# sol.** Au LOD 0 c'est `top + 1`, et rien ne change ; au-dela, c'est
+			# ce qui empeche l'eau de recouvrir le sol.
+			#
+			# Une cellule de LOD vaut `stride` unites de monde et le bloc de
+			# surface n'en occupe qu'une. Une eau qui demarre a `top + 1` tombe
+			# donc dans la **meme cellule** que le sol et l'efface : au LOD 4,
+			# une mare de deux blocs de fond devenait une dalle bleue de seize,
+			# posee sur l'herbe. C'est la « dalle d'eau du LOD 1 » restee
+			# inexpliquee depuis le 2026-09-03 — et ce n'etait pas une moyenne
+			# d'index de palette : le generateur est appele **par niveau**, donc
+			# rien n'est jamais moyenne (sonde du 2026-09-13).
+			#
+			# La regle vaut pour les deux couches **minces et locales** qui se
+			# posent au-dessus du sol : l'etang et le degagement d'un chemin.
+			# Aucune ne peut revendiquer la cellule du sol, et une couche plus
+			# mince qu'une cellule disparait d'elle-meme — ce qui est le
+			# comportement voulu : a deux kilometres, une mare de trois blocs n'a
+			# pas a se voir. **La mer en est exclue**, et pour une raison qui
+			# n'est pas un oubli : voir son propre commentaire plus bas.
+			var above: int = _cell_above(top, stride)
 
 			# Roche, du bas du bloc jusqu'a la couche meuble.
 			_fill_run(out_buffer, lx, lz, y_min, y_max, stride,
 					y_min, top - subsurface_depth, CWPalette.STONE)
-			# Couche meuble.
-			if subsurface_depth > 0:
+			# Couche meuble, **seulement quand elle est plus epaisse qu'une
+			# cellule** : trois blocs de terre etales sur seize donneraient une
+			# bande brune sous chaque crete lointaine, la ou le monde est de la
+			# roche. Elle est de toute facon sous le bloc de surface, donc
+			# invisible tant qu'on ne creuse pas — et on ne creuse pas au LOD.
+			if subsurface_depth >= stride:
 				_fill_run(out_buffer, lx, lz, y_min, y_max, stride,
 						top - subsurface_depth + 1, top - 1,
 						CWPalette.subsurface_index(surface))
@@ -516,6 +568,22 @@ func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: i
 			_fill_run(out_buffer, lx, lz, y_min, y_max, stride, top, top,
 					surface, col)
 			# Eau, de la surface du terrain jusqu'au niveau de la mer.
+			#
+			# **La mer, elle, a le droit d'occuper la cellule du sol**, et c'est
+			# la seule des trois couches d'eau qui l'ait. La regle du dessus
+			# (`above`) existe contre une couche *mince et locale* qui se
+			# gonflerait a la taille d'une cellule ; la mer n'est ni l'une ni
+			# l'autre — c'est un plan, a une altitude unique pour tout le monde,
+			# et elle n'existe que la ou le terrain passe dessous. Elle ne peut
+			# donc pas faire de dalle en pleine plaine.
+			#
+			# Et lui interdire la cellule du sol serait **pire** : au LOD, la
+			# cellule qui porte un fond de mer a -64 monte jusqu'a -33, soit
+			# trente blocs au-dessus de la surface de l'eau. C'est l'eau qui
+			# cache ce debordement. Mesure du 2026-09-13 sur une emprise a 41 %
+			# de mer : la retirer de la cellule du sol faisait tomber la part
+			# d'eau de **54,6 % a 35,2 %** au LOD 5 — un rivage qui recule d'une
+			# demi-cellule partout.
 			if top < sea:
 				_fill_run(out_buffer, lx, lz, y_min, y_max, stride,
 						top + 1, sea, CWPalette.water_index(float(sea - top)))
@@ -531,14 +599,14 @@ func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: i
 			# huit. Les deux nuances ne peuvent donc pas se cotoyer dans une
 			# mare, et `voxel_of` rend la meme chose colonne par colonne.
 			_fill_run(out_buffer, lx, lz, y_min, y_max, stride,
-					pond_lo, pond_hi, CWPalette.WATER)
+					maxi(pond_lo, above), pond_hi, CWPalette.WATER)
 
 			# Le degagement du chemin, en dernier : c'est de l'air, et l'air
 			# efface tout — l'eau que la levee comble comme le terrain que la
 			# chaussee tranche.
 			if road_hi >= road_lo:
 				_fill_run(out_buffer, lx, lz, y_min, y_max, stride,
-						road_lo, road_hi, CWPalette.AIR)
+						maxi(road_lo, above), road_hi, CWPalette.AIR)
 
 	_stamp_trees(out_buffer, origin_in_voxels, size, stride, lod, p, patch)
 
@@ -576,10 +644,18 @@ func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: i
 ## la rampe de feuillage. Sans lui, il aurait fallu un type de bloc par nuance.
 func _stamp_trees(buf: VoxelBuffer, origin: Vector3i, size: Vector3i,
 		stride: int, lod: int, p: CWWorldParams, patch: ColumnPatch) -> void:
-	# Le LOD n'est pas gere : un tronc de trois blocs de large disparait a la
-	# premiere reduction, et `VoxelTerrain` ne demande que le niveau 0. La garde
-	# est la pour le jour ou la pyramide reviendrait sur le tapis.
-	if lod != 0 or _shutting_down or not p.trees:
+	# **Jusqu'au LOD 2, et pas au-dela** (2026-09-13). L'arbre est ecrit dans le
+	# terrain, donc il ne survit au LOD que si le mailleur en garde une forme :
+	# un houppier de chene fait dix blocs de large, soit cinq cellules au pas de
+	# deux et deux ou trois au pas de quatre — un arbre, encore. Au pas de huit
+	# il n'en reste qu'une cellule verte posee sur l'herbe, et une foret y
+	# devient un semis de cubes qui ne lit plus comme rien.
+	#
+	# Le cout ne se multiplie pas comme on le craindrait : un bloc de LOD 2
+	# couvre 64 blocs de monde, soit **une** cellule d'arbres, la ou un bloc de
+	# LOD 0 en consulte une a quatre. Le nombre d'arbres par bloc est du meme
+	# ordre, et il y a bien moins de blocs.
+	if lod > TREE_MAX_LOD or _shutting_down or not p.trees:
 		return
 	var trees: CWTreeScatter = tree_scatter_grid()
 	if trees == null:
@@ -590,12 +666,17 @@ func _stamp_trees(buf: VoxelBuffer, origin: Vector3i, size: Vector3i,
 	# tombe jamais juste, et rien ne bronche.
 	var wx: int = p.world_origin.x + origin.x
 	var wz: int = p.world_origin.y + origin.z
-	var placements: Array = trees.pieces_in(wx, wz, size.x, size.z)
+	# L'emprise se compte en **unites de monde**, pas en cellules : au pas de
+	# quatre, un bloc de seize cellules couvre soixante-quatre blocs de monde, et
+	# demander seize a la dispersion ne rendrait qu'un quart des arbres.
+	var span_x: int = size.x * stride
+	var span_z: int = size.z * stride
+	var placements: Array = trees.pieces_in(wx, wz, span_x, span_z)
 	if placements.is_empty():
 		return
 
 	var y_min: int = origin.y
-	var y_max: int = origin.y + size.y - 1
+	var y_max: int = origin.y + size.y * stride - 1
 	for pl in placements:
 		# L'etendue verticale d'abord : une piece entierement au-dessus ou en
 		# dessous du bloc ne demande pas qu'on deroule ses milliers de voxels.
@@ -606,26 +687,44 @@ func _stamp_trees(buf: VoxelBuffer, origin: Vector3i, size: Vector3i,
 		if span.y < y_min or span.x > y_max:
 			continue
 		for v in CWTreeScatter.piece_voxels(pl):
+			# Le rognage se fait en coordonnees **monde**, avant la division par
+			# le pas : une division entiere de GDScript tronque vers zero, donc
+			# un voxel a une unite a gauche du bloc rentrerait dans sa premiere
+			# cellule au lieu d'en sortir.
 			if v.y < y_min or v.y > y_max:
 				continue
-			var lx: int = v.x - wx
-			var lz: int = v.z - wz
-			if lx < 0 or lz < 0 or lx >= size.x or lz >= size.z:
+			if v.x < wx or v.z < wz or v.x >= wx + span_x or v.z >= wz + span_z:
 				continue
-			var ly: int = v.y - y_min
+			@warning_ignore("integer_division")
+			var lx: int = (v.x - wx) / stride
+			@warning_ignore("integer_division")
+			var lz: int = (v.z - wz) / stride
+			@warning_ignore("integer_division")
+			var ly: int = (v.y - y_min) / stride
 			var t: int = CWPalette.matiere_de(v.w)
-			# **Le feuillage ne recouvre que le vide.** Une couronne est posee
-			# autour du fut qui la porte : la laisser ecraser ce qu'elle
-			# traverse effacerait le fut sur toute sa hauteur, et rendrait de
-			# plus la reponse dependante de l'ordre des listes — le bloc disait
-			# feuillage la ou la requete ponctuelle disait bois. La regle est la
-			# meme des deux cotes, et c'est `generated_voxel` qui la porte en
-			# face (invariant n. 18).
-			if t == CWPalette.LEAVES and buf.get_voxel(
+			# Une couronne est posee autour du fut qui la porte : la laisser
+			# ecraser ce qu'elle traverse effacerait le fut sur toute sa
+			# hauteur, et rendrait de plus la reponse dependante de l'ordre des
+			# listes — le bloc disait feuillage la ou la requete ponctuelle
+			# disait bois. La regle est la meme des deux cotes, et c'est
+			# `generated_voxel` qui la porte en face (invariant n. 18) : elle
+			# n'a pas a connaitre le LOD, la requete ponctuelle etant toujours
+			# au pas de un.
+			# **Le feuillage ne recouvre que le vide** — et, au LOD, l'arbre
+			# entier.
+			#
+			# Au pas de un, un fut se pose sur le sol sans jamais l'occuper :
+			# la regle ne concerne que la couronne, et elle est inchangee. Au
+			# pas de quatre, la cellule qui porte le sol porte aussi le premier
+			# metre du fut, et le fut l'ecrasait — la prairie prenait la couleur
+			# de l'ecorce sur quatre blocs de cote autour de chaque arbre.
+			# Interdire a tout l'arbre de mordre dans la matiere au LOD remet le
+			# tronc une cellule plus haut, ce qui est exactement ou il commence.
+			if (t == CWPalette.LEAVES or stride > 1) and buf.get_voxel(
 					lx, ly, lz, CWPalette.CHANNEL_TYPE) != CWPalette.AIR:
 				continue
 			buf.set_voxel(t, lx, ly, lz, CWPalette.CHANNEL_TYPE)
-			buf.set_voxel(CWPalette.raw_of(v.w), lx, v.y - y_min, lz,
+			buf.set_voxel(CWPalette.raw_of(v.w), lx, ly, lz,
 					CWPalette.CHANNEL_COLOR)
 
 
@@ -787,7 +886,7 @@ func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,
 		var ss: Vector2i = CWPalette.surface_shaded(
 				f.fringe_biome_in(win, cx, cz, h), h - float(sea), cx, cz, slope)
 		var surf: int = pond_surface(ss.x, prof,
-				CWTerrainField.pond_gate(h, chan, sea, biome))
+				CWTerrainField.pond_gate(h, chan, sea, biome), stride)
 		var col: int = ss.y if surf == ss.x else CWPalette.toned(
 				CWPalette.raw_of(surf), cx, cz)
 		# La chaussee, tramee dans la matiere du lieu : un chemin de terre
@@ -867,6 +966,32 @@ func _empty_patch(size: Vector3i) -> ColumnPatch:
 ## c'est delibere : le type est la matiere, la couleur est sa **nuance**. Un
 ## appelant qui oublie `raw` obtient l'aplat d'avant le 2026-09-07, pas une
 ## incoherence.
+## Premiere unite de monde de la cellule **suivant** celle qui porte `w`.
+##
+## Au pas de un — le LOD 0, le seul que `VoxelTerrain` demande — c'est `w + 1`,
+## et tout le reste du generateur est ecrit comme si c'etait toujours vrai. Au
+## LOD, une cellule vaut `stride` unites, et « juste au-dessus du sol » cesse
+## d'etre l'unite suivante pour devenir la cellule suivante.
+##
+## **Elle ne depend pas du plancher du bloc**, et c'est ce qui permet de s'en
+## servir dans la passe de colonnes (`_get_patch`) autant que dans le
+## remplissage : l'origine d'un bloc de LOD est toujours un multiple de
+## `16 * stride`, donc la grille de cellules est celle du monde et non celle du
+## bloc. C'est le meme raisonnement que l'invariant n. 44 pour le pochoir de la
+## pente, et pour la meme raison — deux consommateurs doivent tomber sur le
+## meme nombre.
+##
+## La division est arrondie **vers le bas** et non tronquee : un sol sous le
+## niveau zero donne un dividende negatif, et la troncature de GDScript le
+## rabattrait vers zero, c'est-a-dire une cellule trop haut.
+static func _cell_above(w: int, stride: int) -> int:
+	@warning_ignore("integer_division")
+	var k: int = w / stride
+	if w < 0 and k * stride != w:
+		k -= 1
+	return (k + 1) * stride
+
+
 func _fill_run(buf: VoxelBuffer, lx: int, lz: int, y_min: int, y_max: int,
 		stride: int, wy0: int, wy1: int, value: int, raw: int = -1) -> void:
 	if wy1 < wy0:

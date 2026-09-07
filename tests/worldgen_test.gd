@@ -27,6 +27,7 @@ func _initialize() -> void:
 	_test_tile_features()
 	_test_generator()
 	_test_relief()
+	_test_lod()
 	_test_decor()
 	_test_flora()
 	_test_trees()
@@ -419,6 +420,10 @@ func _test_tile_features() -> void:
 ## matieres qui l'accompagne (jalon 1.16).
 func _test_relief() -> void:
 	CWReliefTest.new().run(self)
+
+
+func _test_lod() -> void:
+	CWLodTest.new().run(self)
 
 
 func _test_decor() -> void:
