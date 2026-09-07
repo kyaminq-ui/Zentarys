@@ -114,9 +114,11 @@ chargement des chunks.*
 >   *latence* et d'ordonnancement, pas de débit : un générateur deux fois plus
 >   rapide qui rend toujours ses pavés au même moment saccade toujours.
 
-**L'étape 1 est faite le 2026-09-10** — `tools/profile_worldgen.gd`, écrit pour
-ça et à relancer après toute modification du champ. Chargement d'une vue de
-384 blocs : **55,4 s**. Le profil, sur la graine de la démo, éditeur fermé :
+**Les étapes 1 et 2 sont faites le 2026-09-10.** Chargement d'une vue de
+384 blocs : **107,7 s** la veille, **55,4 s** après le retrait des massifs,
+**42,0 s** après le réglage du pool ci-dessous. Le profil par poste vient de
+`tools/profile_worldgen.gd`, écrit pour ça et à relancer après toute
+modification du champ — graine de la démo, éditeur fermé :
 
 | poste | coût | part |
 |---|---|---|
@@ -166,14 +168,30 @@ chargement des chunks.*
    > bord en l'air ? Elle se tranche à l'œil, et la dispersion tourne sur un fil
    > du pool, donc elle ne borne pas forcément le chargement.
 
-À faire ensuite, dans cet ordre :
+**Et un gain gratuit, trouvé en cherchant les réglages : le pool était trop
+grand.** Le nombre de fils de génération valait la moitié des processeurs
+logiques — huit ici — depuis le 2026-09-05, où le ramener de quatorze à sept
+avait doublé la vitesse. Personne n'avait cherché l'optimum. Il est plus bas :
+
+| fils | 4 | 5 | **6** | 7 | 8 (l'ancien défaut) | 12 | 16 |
+|---|---|---|---|---|---|---|---|
+| stabilisation | 53,4 s | 45,5 s | **42,2 s** | 43,4 s | 58,6 s | > 90 s | > 90 s |
+
+Le défaut était **déjà au-delà du sommet, de vingt-huit pour cent**. La règle
+laisse désormais deux cœurs physiques au reste — un au mailleur, un au flux —,
+ce qui rend six ici. La cause de la falaise n'est pas établie ; les candidats
+sont les verrous des grilles de sites et d'éléments, que chaque colonne
+consulte. *Un optimum de pool est propre à une machine* : `-- --fils n` refait
+la mesure, et c'est le premier réglage à reprendre sur un autre processeur.
+
+À faire ensuite :
 
 1. ~~**Mesurer par poste.**~~ Fait — `tools/profile_worldgen.gd` ;
-2. **Les gains qui ne demandent pas de C++.** La mesure n'en désigne **aucun de
-   gratuit** : les trois couches ne pèsent que 17 % à elles trois, et l'assiette
-   est intrinsèque. Restent les réglages — le nombre de fils
-   (`generation_threads`, auto aujourd'hui). Voir aussi le plafond du cache de
-   pavés (16 384) et `generate_collisions`, déjà à faux.
+2. ~~**Les gains qui ne demandent pas de C++.**~~ Fait, et il y en avait un :
+   le pool. Il n'en reste pas d'autre que la mesure désigne — les trois couches
+   ne pèsent que 17 % à elles trois, et l'assiette est intrinsèque. Restent le
+   plafond du cache de pavés (16 384) et `generate_collisions`, déjà à faux, ni
+   l'un ni l'autre suspect.
 
    > ⚠️ **Le LOD n'est pas le gain gratuit qu'il paraît.** `use_lod` est à faux,
    > `VoxelLodTerrain` est câblé, `lod_count = 6`, `lod_view_distance = 2048` —
@@ -188,10 +206,12 @@ chargement des chunks.*
    **Ce qu'on peut en attendre, chiffré.** Un `sample` natif tient en quelques
    dizaines de nanosecondes — c'est trois multiplications 32 bits et une
    interpolation bicubique. Les 46 µs par colonne tomberaient sous 2, soit
-   **93,7 → ~50 µs/colonne** et un chargement de 384 blocs autour de **30 s** au
-   lieu de 55. Porter `_height_from` entier irait plus loin. C'est donc un
+   **93,7 → ~50 µs/colonne** et un chargement de 384 blocs autour de **22 s** au
+   lieu de 42. Porter `_height_from` entier irait plus loin. C'est donc un
    facteur deux, pas un facteur dix : *à décider en sachant ce qu'une chaîne de
-   compilation coûte au dépôt.*
+   compilation coûte au dépôt.* Et à décider **après** avoir vu si la falaise
+   des fils se déplace une fois le champ deux fois plus rapide : les deux
+   réglages ne sont pas indépendants.
 
 > ⚠️ **Le C++ ici n'est pas une case à cocher : le moteur est un build
 > personnalisé.** `godot.windows.editor.double.x86_64.exe`, **double précision**,
@@ -377,6 +397,8 @@ python tools/blender/generer_arbres.py
 #   options : --sans-arbres, --sans-flore, --sans-chemins, --sans-falaise,
 #   pour isoler une couche. Les deux dernieres servent aussi a mesurer ce
 #   qu'elle coute au chargement. --carte ouvre la carte du monde au demarrage.
+#   --fils n force le nombre de fils de generation : c'est le reglage le plus
+#   rentable du projet, et son optimum est propre a chaque machine.
 #   --vers x z oriente la camera vers un point, --altitude n la leve : sans les
 #   deux, une capture d'un objet pose a cent blocs est une capture de ce qui se
 #   trouvait dans l'autre sens.
@@ -927,9 +949,9 @@ docs/images/                 gabarit, carte et composition de flore, en jeu
     porté « 28,5 s à 384 blocs » pendant deux jours pendant que le chiffre réel
     dérivait à **107,7 s** : deux passes sur la couche de massifs l'avaient
     quadruplé, et aucune des deux ne l'a remesuré. Le retrait de la couche l'a
-    ramené à **55,4 s** le 2026-09-10. Toute mesure de coût citée ici porte donc
-    sa date, et une date qui a plus d'une session vaut comme ordre de grandeur,
-    pas comme référence.
+    ramené à **55,4 s** le 2026-09-10, et le réglage du pool à **42,0 s** le
+    même jour. Toute mesure de coût citée ici porte donc sa date, et une date qui
+    a plus d'une session vaut comme ordre de grandeur, pas comme référence.
 
 ## 5. Pièges connus
 
@@ -942,11 +964,12 @@ docs/images/                 gabarit, carte et composition de flore, en jeu
 - **L'éditeur ne voit pas un nouvel `@export` tant qu'il n'a pas rechargé le
   script.** `filesystem_manage(op="scan")` ne suffit pas toujours ; changer la
   valeur par défaut dans le source est plus fiable pour un test ponctuel.
-- **Coût mesuré le 2026-09-10 : 75,8 µs par colonne**, soit ~19 ms par bloc 16³
-  à froid, et **55,4 s** pour stabiliser une vue de 384 blocs. C'est le plafond
-  de tout. Ces deux chiffres portent leur date, et c'est délibéré — voir
-  l'invariant n° 51 : le précédent a dérivé de 28,5 s à 107,7 s en deux jours
-  sans que personne le refasse. La couche d'éléments n'ajoute rien de mesurable
+- **Coût mesuré le 2026-09-10 : 93,7 µs par colonne générée** — dont 77,6 pour
+  le champ nu et ~46 pour le seul bruit —, et **42,0 s** pour stabiliser une vue
+  de 384 blocs. C'est le plafond de tout. Ces chiffres portent leur date, et
+  c'est délibéré — voir l'invariant n° 51 : le précédent a dérivé de 28,5 s à
+  107,7 s en deux jours sans que personne le refasse. Le profil complet est en
+  §0, et `tools/profile_worldgen.gd` le refait. La couche d'éléments n'ajoute rien de mesurable
   sur le chemin de streaming, qui passe par `sample_patch` et sort la
   consultation de la grille de la boucle de colonnes.
 - **`sample_column` paie ce que `sample_patch` ne paie pas.** La grille

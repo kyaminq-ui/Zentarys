@@ -303,12 +303,44 @@ func _read_cmdline() -> void:
 ## On suppose donc le SMT et on prend la moitie des fils logiques. Sur une
 ## machine sans SMT ce choix est prudent plutot que faux ; `generation_threads`
 ## est la pour le remettre en cause sur une autre machine.
+## -- La falaise des fils, deuxieme mesure --------------------------------------
+##
+## **Plus de fils de generation rend le chargement plus lent, et la chute est
+## brutale.** Le pool avait ete ramene de quatorze fils a sept le 2026-09-05, ce
+## qui avait double la vitesse ; on en etait reste a « la moitie des processeurs
+## logiques » sans rechercher l'optimum. Il est plus bas. Mesure du 2026-09-10,
+## seize processeurs logiques, vue de 384 blocs, graine 2024 :
+##
+##   fils        4      5      6      7      8      12     16
+##   stabilise   53,4   45,5   42,2   43,4   58,6   > 90   > 90  (secondes)
+##
+## Le defaut d'alors — huit — etait donc **deja au-dela** du sommet, et de
+## vingt-huit pour cent. La cause n'est pas etablie ; les candidats sont les
+## verrous des grilles de sites et d'elements, que chaque colonne consulte, et
+## la concurrence avec le mailleur et le flux de sauvegarde, qui ont leurs
+## propres fils. C'est le meme genre de plateau qu'en 2026-09-05.
+##
+## **La regle retenue laisse deux cœurs physiques au reste** — un au mailleur, un
+## au flux — plutot que d'ajuster une fraction sur une seule machine : elle a une
+## raison mecanique, et elle rend six ici.
+##
+## > ⚠️ **Un optimum de pool est propre a une machine.** Celui-ci a ete mesure
+## > sur une seule. `-- --fils n` refait la mesure ailleurs, et c'est le premier
+## > reglage a reprendre sur un autre processeur.
+##
+## `--fils` est lu ici et non dans `_read_cmdline`, parce que le pool se
+## dimensionne avant que la scene soit montee : a l'heure ou les arguments sont
+## relus, les fils tournent deja.
 func _pick_threads() -> int:
+	var args: PackedStringArray = OS.get_cmdline_user_args()
+	for i in args.size() - 1:
+		if args[i] == "--fils":
+			return maxi(1, int(args[i + 1]))
 	if generation_threads > 0:
 		return generation_threads
 	@warning_ignore("integer_division")
 	var physical: int = OS.get_processor_count() / 2
-	return maxi(1, physical)
+	return maxi(1, physical - 2)
 
 
 func _build_terrain() -> void:
