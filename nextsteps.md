@@ -149,15 +149,29 @@ chargement des chunks.*
    plus de massif à raconter ;
 3. **L'assiette a presque triplé le coût de la dispersion de flore** — 722 µs la
    cellule avant, 2 025 après —, et personne ne l'avait mesuré. Vérifié en la
-   désactivant. Elle sonde quatre colonnes par plante posée, une par une, là où
-   le générateur passe par `sample_patch` pour exactement la même raison. C'est
-   le gain le moins cher du lot, et il ne demande pas de C++.
+   désactivant.
+
+   > **Et ce n'est pas un défaut d'écriture, c'est le prix de la chose.** La
+   > première idée était que les quatre coins, pris un par un par
+   > `sample_column_full`, repayaient la comptabilité par colonne que
+   > `sample_patch` ne paie qu'une fois — les quatre forment exactement une
+   > grille 2 × 2 de pas 2r. **Essayé, mesuré, faux** : 2 035 µs contre 2 025,
+   > et la suite passe des deux côtés, donc les deux chemins disent bien la
+   > même chose. Ce que coûte l'assiette, ce sont **les quatre échantillons de
+   > champ eux-mêmes**, c'est-à-dire le bruit — le même poste que partout
+   > ailleurs. Elle ne deviendra moins chère que si le champ le devient.
+   >
+   > Reste donc une **question de conception, pas d'optimisation** : quatre
+   > colonnes de plus par plante posée valent-elles qu'aucun caillou n'ait un
+   > bord en l'air ? Elle se tranche à l'œil, et la dispersion tourne sur un fil
+   > du pool, donc elle ne borne pas forcément le chargement.
 
 À faire ensuite, dans cet ordre :
 
 1. ~~**Mesurer par poste.**~~ Fait — `tools/profile_worldgen.gd` ;
-2. **Les gains qui ne demandent pas de C++**, et il y en a deux que la mesure
-   désigne : **l'assiette de la flore** (point 3 ci-dessus), et le nombre de fils
+2. **Les gains qui ne demandent pas de C++.** La mesure n'en désigne **aucun de
+   gratuit** : les trois couches ne pèsent que 17 % à elles trois, et l'assiette
+   est intrinsèque. Restent les réglages — le nombre de fils
    (`generation_threads`, auto aujourd'hui). Voir aussi le plafond du cache de
    pavés (16 384) et `generate_collisions`, déjà à faux.
 

@@ -206,6 +206,11 @@ func _poste_dispersion(seed_v: int) -> void:
 		arbres.cell(acx + 1 + (i - r * 8), acz + 1 + r))
 	_ligne("arbres : une cellule de 64 x 64 blocs", ca)
 	_ligne("  ramene a la colonne", ca / 4096.0)
+	print("  L'assiette — les quatre coins de l'empreinte, sondes par plante —")
+	print("  pese 64 %% de la cellule de flore : 722 us sans elle, 2 025 avec.")
+	print("  Ce sont les quatre echantillons de champ qui coutent, et non la")
+	print("  comptabilite par colonne : les prendre en un seul `sample_patch`")
+	print("  a ete essaye le 2026-09-10 et ne change rien (2 035 us).")
 	print("")
 
 
