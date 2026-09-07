@@ -34,7 +34,7 @@ s'ouvre pas proprement. Il permet de piloter l'éditeur par MCP.
 ## Les quatre commandes qui servent tous les jours
 
 ```bash
-# La suite de validation — 407 vérifications, ~25 s. À lancer après toute
+# La suite de validation — 408 vérifications, ~25 s. À lancer après toute
 # modification du monde. C'est le filet, et il tient tous les contrats
 # inter-fichiers que rien d'autre ne tient.
 ./godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd

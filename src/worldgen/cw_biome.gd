@@ -64,31 +64,78 @@ const COUNT: int = 6
 # rend la repartition. Deplacer un seuil sans relancer cet outil, c'est deplacer
 # la composition du monde a l'aveugle.
 
-## Snowlands : « < -20 °C ». -20 °C tombe a 0,125 ; le seuil est monte a 0,22
-## pour que la toundra — la frange de Snowlands, et non un biome a elle — ait
-## de la place. En dessous, le monde n'avait presque pas de froid.
-const SNOW_T: float = 0.16
+## -- Six parts egales, et ce que ca a coute aux fourchettes d'origine --------
+##
+## Les seuils ci-dessous ne traduisent plus des degres. Ils ont ete **resolus**
+## le 2026-09-11 par `tools/biome_balance.gd` pour que les six biomes fassent
+## chacun **un sixieme du monde**, ocean compris — c'est la demande, et elle a
+## un prix qu'il faut dire :
+##
+## * **Lava Lands cesse d'etre rare.** L'alpha le donne « 30 - 40 °C, rare, loin
+##   du spawn », et la regle d'avant en faisait le coeur des regions les plus
+##   chaudes : 1,5 % des terres. A parts egales, c'en est 20 %. Ce n'est plus un
+##   accident du monde, c'est un pays ;
+## * **les degres ne se lisent plus.** `TEMP_MIN_C` / `TEMP_MAX_C` restent la
+##   convention d'affichage de l'ATH, mais un desert commence maintenant a 2 °C
+##   et une Lava Lands a 20 °C. Ce sont des **quantiles d'un champ**, pas des
+##   temperatures : le champ de climat de ce projet n'a aucune raison de remplir
+##   les fourchettes d'origine dans leurs proportions, et le fichier le disait
+##   deja avant qu'on choisisse l'egalite.
+##
+## **Ils sont la moyenne de cinq graines** (1337, 2024, 7, 99, 4242), et l'ecart
+## entre graines est faible pour le climat — SNOW_T va de 0,198 a 0,312, les
+## quatre autres tiennent dans trois centiemes. Le **niveau de la mer**, lui,
+## n'est pas stable de cette facon : voir `CWWorldParams.sea_level`.
+##
+## Les parts qui en sortent sont *mesurees*, pas supposees :
+## `tools/biome_stats.gd` balaie le champ de climat sur des zones eloignees et
+## rend la repartition, `tools/biome_balance.gd` resout les seuils qui
+## l'egalisent. Deplacer un seuil sans relancer l'un des deux, c'est deplacer la
+## composition du monde a l'aveugle.
 
-## Deserts : « 34 - 39 °C, humidite 2 - 7 % ». 34 °C tombe a 0,80. Le seuil
-## d'humidite est plus large que les 7 % releves : a 0,07 le desert n'existait
-## qu'en quelques taches, le champ d'humidite ne descendant presque jamais si
-## bas. C'est la premiere fourchette a resserrer si les deserts prennent trop
-## de place.
-const DESERT_T: float = 0.70
-const DESERT_H: float = 0.34
+## Snowlands : le froid, des deux cotes de la frontiere d'humidite. C'est le
+## premier test apres l'ocean, donc son seuil ne depend d'aucun autre.
+const SNOW_T: float = 0.28
 
-## Jungles : « ~35 °C, humidite ~90 % ». La temperature est celle du desert a
-## un cheveu pres — ce sont bien **deux biomes chauds separes par l'humidite**,
-## et c'est ce qui fait que l'humidite decide avant la temperature ici.
-const JUNGLE_T: float = 0.56
-const JUNGLE_H: float = 0.62
+## **La frontiere sec/humide, et il n'y en a qu'une.**
+##
+## -- Ce qui a change le 2026-09-11, et pourquoi c'etait structurel -----------
+##
+## Il y en avait deux : `JUNGLE_H` a 0,62 et `DESERT_H` a 0,34. Le desert etait
+## donc **plus sec que Lava Lands**, qui prenait toute la moitie seche au-dessus
+## de son seuil ; il ne restait au desert que le sec *froid*, que ce champ ne
+## produit presque pas. Le solveur l'a montre sans equivoque : `DESERT_T` est
+## descendu jusqu'a zero en ne rendant que 3 % du monde. **Ce n'etait pas un
+## seuil mal place, c'etait la forme de la regle.**
+##
+## Le monde se partage maintenant en **sec et humide**, une seule fois, et la
+## temperature fait tout le reste : Snowlands au froid, Deserts puis Lava Lands
+## se partagent le sec par temperature croissante, Jungles prend le chaud
+## humide, Greenlands garde le tempere des deux versants.
+##
+## C'est aussi ce que la mesure du champ disait depuis le debut, et qui est
+## reste ecrit plus bas : *un point chaud est soit tres sec, soit tres humide,
+## jamais entre les deux.* Une seule frontiere suffit a un champ bimodal ; deux
+## en faisaient une de trop.
+##
+## La valeur, elle, decide **de quel cote Greenlands est preleve** — pas
+## l'egalite, qui tombe juste des que le sec porte deux parts et l'humide une.
+## Elle est posee la ou le tempere se partage moitie-moitie entre les deux
+## versants.
+const HUMID_H: float = 0.65
 
-## Lava Lands : « 30 - 40 °C, rare, loin du spawn ». C'est le **coeur des
-## regions les plus chaudes**, decoupe du cote sec : au-dessus de ce seuil et
-## sous l'humidite de jungle.
+## Deserts : le sec tempere a chaud. En dessous de Lava Lands, au-dessus de la
+## prairie.
+const DESERT_T: float = 0.40
+
+## Jungles : le chaud humide. Sa temperature est plus basse que celle du desert
+## d'origine, et c'est normal — les deux ne sont plus separes par la meme
+## grandeur : le desert et la jungle sont chacun le haut de **leur** versant.
+const JUNGLE_T: float = 0.47
+
+## Lava Lands : le haut du versant sec.
 ##
 ## -- Deux essais rates avant celui-la, et ce qu'ils ont appris ----------------
-##
 ## La premiere regle prenait la bande d'humidite laissee libre entre le desert
 ## et la jungle aux hautes temperatures. Elle rendait **60 colonnes sur
 ## 147 456**, soit 0,04 % des terres. `tools/biome_stats.gd` en a donne la
@@ -118,7 +165,7 @@ const JUNGLE_H: float = 0.62
 ## monde est au centre de la carte, ou le climat est median. Le jour ou un
 ## spawn variable existera, c'est ici qu'une distance viendrait s'ajouter — et
 ## elle demanderait de passer (x, z) a `at`, ce que la regle evite aujourd'hui.
-const LAVA_T: float = 0.985
+const LAVA_T: float = 0.63
 
 ## Altitude sous le niveau de la mer a partir de laquelle une colonne est de
 ## l'ocean. Le meme -1 que l'ancienne regle de surface : au-dessus, c'est une
@@ -140,11 +187,11 @@ static func at(height: float, temperature: float, humidity: float,
 		return OCEANS
 	if temperature < SNOW_T:
 		return SNOWLANDS
-	if temperature >= LAVA_T and humidity < JUNGLE_H:
+	if temperature >= LAVA_T and humidity < HUMID_H:
 		return LAVALANDS
-	if temperature >= JUNGLE_T and humidity >= JUNGLE_H:
+	if temperature >= JUNGLE_T and humidity >= HUMID_H:
 		return JUNGLES
-	if temperature >= DESERT_T and humidity < DESERT_H:
+	if temperature >= DESERT_T and humidity < HUMID_H:
 		return DESERTS
 	return GREENLANDS
 
@@ -262,7 +309,7 @@ static func _near_edge(t: float, h: float, amplitude: Vector2) -> bool:
 		return true
 	if amplitude.y <= 0.0:
 		return false
-	return absf(h - JUNGLE_H) < amplitude.y or absf(h - DESERT_H) < amplitude.y
+	return absf(h - HUMID_H) < amplitude.y
 
 
 ## Bruit a deux frequences, dans [-1, 1]. Meme construction que

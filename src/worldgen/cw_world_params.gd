@@ -64,9 +64,31 @@ const OFFSET_COUNT: int = 32
 ## forcée en climat tempéré et en altitude positive par le générateur de sites.
 @export var start_point: Vector2i = Vector2i(WORLD_CENTRE, WORLD_CENTRE)
 
-## Niveau de la mer. Les altitudes de base océaniques sont négatives dans
-## l'original, donc y = 0 est bien la surface de l'eau.
-@export var sea_level: int = 0
+## Niveau de la mer.
+##
+## -- Pourquoi il n'est plus à zéro depuis le 2026-09-11 ----------------------
+##
+## Les altitudes de base océaniques sont négatives dans l'original, donc y = 0
+## était bien la surface de l'eau, et c'est resté vrai jusqu'à ce qu'on demande
+## **six parts égales du monde**. L'océan n'est pas un biome de climat : il se
+## décide à l'altitude, et l'égaliser veut dire déplacer le niveau de la mer.
+## À zéro il couvrait 28,9 % du monde ; à −60, il en couvre un sixième.
+##
+## > ⚠️ **C'est le seul réglage de l'égalisation qui touche au champ d'altitude,
+## > et le seul qui ne soit pas stable d'une graine à l'autre.** Les cinq seuils
+## > de climat tiennent dans trois centièmes sur cinq graines ; le niveau de la
+## > mer qui rend un sixième d'océan, lui, va de −54 à −68 selon la graine —
+## > parce qu'une graine décide où sont les continents, pas seulement leur
+## > climat. −60 est la moyenne de cinq graines, et une graine donnée s'en
+## > écartera de deux points de pourcentage.
+##
+## Ce que ça déplace, et il faut le savoir avant de toucher à autre chose :
+## toutes les côtes, toutes les îles, la porte des étangs (`pond_gate`, dont le
+## seuil est plus large au ras de la mer) et **toutes les règles de surface
+## exprimées en altitude au-dessus de la mer** — la ligne de neige, la bande de
+## roche et la plage. Les terres sont maintenant en moyenne soixante blocs plus
+## haut au-dessus de leur mer qu'avant.
+@export var sea_level: int = -60
 
 ## Facteur appliqué à l'altitude finale. 1.0 = fidèle. Sert uniquement à réduire
 ## la hauteur du monde pour des tests de streaming.

@@ -449,30 +449,57 @@ func _test_tramage() -> void:
 	# `CWBiome.fringe_amplitude` : ces deux mesures-ci veulent la frange la
 	# plus large possible, donc le plafond.
 	var plein := Vector2(CWBiome.DITHER_T, CWBiome.DITHER_H)
+	# **Le point temoin est du cote humide, et ce n'est pas indifferent.** Sur
+	# le versant sec, les trois seuils de temperature — Snowlands, Deserts, Lava
+	# Lands — se suivent de moins de 0,14, c'est-a-dire de moins de deux
+	# amplitudes de tramage : on n'y trouve plus un point qui soit loin de tous.
+	# Du cote humide il n'y en a que deux, et 0,36 est a 0,08 de l'un et 0,11 de
+	# l'autre. L'humidite, elle, est a 0,20 de sa frontiere, soit deux fois
+	# `DITHER_H` : le tramage ne peut pas faire passer la colonne du cote sec,
+	# donc les seuils du sec ne la concernent pas.
 	var loin: int = 0
 	for x in range(0, 60):
 		for z in range(0, 60):
-			if CWBiome.at_dithered(50.0, 0.45, 0.50, 0, x + 700, z + 800,
+			if CWBiome.at_dithered(50.0, 0.36, 0.85, 0, x + 700, z + 800,
 					plein) \
 					!= CWBiome.GREENLANDS:
 				loin += 1
 	_ok("loin d'un seuil, le tramage de biome ne change rien", loin == 0,
 			"%d colonnes" % loin)
 
-	var deserts: int = 0
+	# **Pile sur la frontiere sec/humide, a temperature chaude** : c'est la plus
+	# grande frontiere de matiere du monde depuis le 2026-09-11, puisqu'une
+	# seule frontiere d'humidite le partage en deux. D'un cote la jungle, de
+	# l'autre les Lava Lands.
+	var secs: int = 0
 	var total: int = 0
 	for x in range(0, 120):
 		for z in range(0, 120):
 			total += 1
-			# Pile sur le seuil d'humidite du desert, a temperature chaude.
-			if CWBiome.at_dithered(50.0, 0.80, CWBiome.DESERT_H, 0,
-					x + 4000, z + 5000, plein) == CWBiome.DESERTS:
-				deserts += 1
-	var part_d: float = float(deserts) / float(total)
-	_ok("sur le seuil, les deux biomes s'interpenetrent",
-			part_d > 0.2 and part_d < 0.8, "%.3f de desert" % part_d)
-	print("     ecotone : %.1f %% de desert exactement sur son seuil d'humidite"
+			if CWBiome.at_dithered(50.0, 0.80, CWBiome.HUMID_H, 0,
+					x + 4000, z + 5000, plein) != CWBiome.JUNGLES:
+				secs += 1
+	var part_d: float = float(secs) / float(total)
+	_ok("sur la frontiere sec/humide, les deux biomes s'interpenetrent",
+			part_d > 0.2 and part_d < 0.8, "%.3f du cote sec" % part_d)
+	print("     ecotone : %.1f %% du cote sec exactement sur la frontiere"
 			% (part_d * 100.0))
+
+	# Et la meme chose sur une frontiere de **temperature**, celle qui separe la
+	# prairie du desert : le tramage doit brouiller les deux grandeurs, pas la
+	# seule humidite. Sans cette seconde verification, un tramage qui ne
+	# toucherait que `h` passerait la precedente sans rien dire.
+	var chauds: int = 0
+	total = 0
+	for x in range(0, 120):
+		for z in range(0, 120):
+			total += 1
+			if CWBiome.at_dithered(50.0, CWBiome.DESERT_T, 0.30, 0,
+					x + 1100, z + 2200, plein) == CWBiome.DESERTS:
+				chauds += 1
+	var part_t: float = float(chauds) / float(total)
+	_ok("sur la frontiere prairie/desert, les deux biomes s'interpenetrent",
+			part_t > 0.2 and part_t < 0.8, "%.3f de desert" % part_t)
 
 	# -- La frange se borne en blocs (2026-09-09) -----------------------------
 	#
@@ -489,9 +516,9 @@ func _test_tramage() -> void:
 		for z in range(0, 60):
 			# Pile sur le seuil d'humidite du desert, la ou le tramage a le plus
 			# de prise : a amplitude nulle il ne doit pourtant rien changer.
-			if CWBiome.at_dithered(50.0, 0.80, CWBiome.DESERT_H, 0,
+			if CWBiome.at_dithered(50.0, 0.80, CWBiome.HUMID_H, 0,
 					x + 4000, z + 5000, Vector2.ZERO) \
-					!= CWBiome.at(50.0, 0.80, CWBiome.DESERT_H, 0):
+					!= CWBiome.at(50.0, 0.80, CWBiome.HUMID_H, 0):
 				fige += 1
 	_ok("climat plat : le tramage ne deplace plus rien", fige == 0,
 			"%d colonnes" % fige)

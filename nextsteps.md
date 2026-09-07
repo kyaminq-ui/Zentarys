@@ -15,7 +15,7 @@ invariants, les pièges, les décisions ouvertes.
 
 ## 0. La prochaine session — **cinq demandes, 2026-09-10 au soir**
 
-> **Les n° 1 et 2 sont faites (2026-09-11), les trois autres ne sont pas
+> **Les n° 1, 2 et 3 sont faites (2026-09-11) ; la n° 4 et la n° 5 ne sont pas
 > commencées.**
 > Le programme précédent — les quatre demandes du 2026-09-09 — est entièrement
 > traité ; ce qu'il a rendu est plus bas, et le récit est dans le journal de
@@ -157,32 +157,75 @@ aucun modèle du dépôt. Le geste est celui de `WOOD` sur le 4 et de
 feuillage, un `rocher_geant` de la roche, et une table par modèle aurait menti
 dès le premier modèle mixte.
 
-### 3. Des biomes mieux répartis, et égaux
+### 3. Des biomes mieux répartis, et égaux — **fait**
 
 *J'aimerais que les biomes soient mieux répartis et qu'ils soient égaux.*
 
-`tools/biome_stats.gd` mesure la répartition réelle, et les seuils de `CWBiome`
-sont faits pour bouger : ils ont été **recalés sur la mesure** et non sur les
-degrés, et l'en-tête du fichier le dit. Déplacer un seuil coûte une ligne et se
-vérifie en une commande. C'est donc peu cher — mais *égaux* bute sur deux choses
-qu'il faut savoir avant de commencer :
+**Fait le 2026-09-11, dans la lecture la plus chère des trois** — six parts
+égales du monde, Oceans compris, ce qui demande de déplacer le **niveau de la
+mer** et non seulement des seuils.
 
-* ⚠️ **le champ d'humidité a un trou.** Il n'y a presque rien entre **0,10 et
-  0,40** : un seuil ne peut pas se poser au milieu, il attrape l'amas 0,40-0,45
-  tout entier ou pas du tout. C'est pour cette raison que la bande d'herbe sèche
-  de Greenlands est large (`DRY_GRASS_H` à 0,46, 5,1 % du monde) : à 0,42 la
-  steppe **disparaîtrait**. Certains biomes ne sont donc pas réglables de façon
-  continue, et les rendre égaux demanderait de toucher au **champ de climat**
-  lui-même — ce qui change la carte de tous les mondes déjà explorés ;
-* ⚠️ **Oceans n'est pas un biome de climat.** Il se décide à l'altitude, sous le
-  niveau de la mer. L'égaliser veut dire déplacer le niveau de la mer ou le
-  rapport terre/mer, c'est-à-dire refaire le monde.
+| | avant | après |
+|---|---|---|
+| Greenlands | **41,0 %** | 18,5 % |
+| Jungles | 14,2 % | 18,1 % |
+| Snowlands | 9,0 % | 13,8 % |
+| Deserts | 5,9 % | 13,5 % |
+| Lava Lands | **1,1 %** | 16,6 % |
+| Oceans | 28,9 % | 19,5 % |
 
-**La bonne question à poser en premier est donc *quelle égalité*** : six parts
-strictement égales des terres émergées ? les cinq biomes de climat égaux, Oceans
-à part ? ou seulement « qu'aucun ne soit anecdotique » ? Les trois n'ont pas le
-même prix, et la mesure d'aujourd'hui — à relever avec `biome_stats` avant de
-toucher à quoi que ce soit — dira laquelle est atteignable.
+*(parts du monde, graine 1337, 144 zones. Sur la graine de la démo — 2024 — la
+dispersion est plus serrée encore : 14,7 à 18,8 %.)*
+
+**Ce qui a changé n'est pas six valeurs, c'est la forme de la règle.** Le
+solveur a trouvé la part de Snowlands, de Jungles, de Lava Lands et de l'océan,
+et **il n'a pas pu trouver celle des déserts** : `DESERT_T` est descendu jusqu'à
+zéro en ne rendant que 3 % du monde. La cause n'était pas un seuil mal placé —
+Lava Lands, testé avant le désert, prenait toute la moitié sèche au-dessus de
+son seuil, et il ne restait au désert que le sec *froid*, que ce champ ne
+produit presque pas. Il y avait **deux frontières d'humidité** (`JUNGLE_H` à
+0,62 et `DESERT_H` à 0,34), soit une de trop pour un champ bimodal.
+
+Il n'y en a plus qu'une, `HUMID_H` : le monde se partage en **sec et humide**,
+une seule fois, et la température fait tout le reste — Snowlands au froid, puis
+Deserts et Lava Lands se partagent le sec par température croissante, Jungles
+prend le chaud humide, Greenlands garde le tempéré des deux versants.
+
+**Trois choses à savoir avant de retoucher quoi que ce soit ici :**
+
+* ⚠️ **Lava Lands a cessé d'être rare, et c'était le prix annoncé.** L'alpha le
+  donne « rare, loin du spawn » ; à parts égales c'est un sixième du monde. Ce
+  n'est plus un accident, c'est un pays — et il se voit, ce qui n'était pas le
+  cas à 1,1 % ;
+* ⚠️ **les degrés ne se lisent plus.** Un désert commence maintenant à 2 °C et
+  une Lava Lands à 20 °C sur l'échelle d'affichage de l'ATH. Les seuils sont des
+  **quantiles d'un champ**, pas des températures ; `TEMP_MIN_C` / `TEMP_MAX_C`
+  ne sont plus qu'une convention d'affichage ;
+* ⚠️ **le niveau de la mer n'est pas stable d'une graine à l'autre.** Les cinq
+  seuils de climat tiennent dans trois centièmes sur cinq graines ; le niveau
+  qui rend un sixième d'océan va de **−54 à −68** selon la graine, parce qu'une
+  graine décide où sont les continents et pas seulement leur climat. **−60** est
+  la moyenne de cinq, et une graine donnée s'en écarte de deux points.
+
+**Et un effet de bord mesuré, qu'il faut regarder avant de le corriger.** Les
+règles de surface exprimées en altitude **au-dessus de la mer** — la ligne de
+neige, la bande de roche, la plage — voient maintenant des terres soixante
+blocs plus hautes. La roche nue passe de 0,3 % à 2,8 % du monde, toute dans les
+hauteurs de Lava Lands. Vu en capture : ça lit comme la calotte rocheuse d'un
+volcan, et c'est gardé. Si un jour ça gêne, c'est `CWPalette.ROCK_MIN` qu'il
+faut remonter de soixante, pas les seuils de biome.
+
+**`tools/biome_balance.gd` est le nouvel outil**, et il est fait pour être
+relancé : il échantillonne une fois, lit les seuils comme des **quantiles**, et
+rend des valeurs prêtes à recopier. Le jour où le champ de climat bougera, il
+refait la table en quinze secondes.
+
+> **Ce que le fichier annonçait ici s'est vérifié à moitié.** Le trou du champ
+> d'humidité entre 0,10 et 0,40 est bien réel — c'est lui qui rendait `DESERT_H`
+> à 0,34 impraticable, et c'est pour cette raison que la frontière unique est à
+> 0,65, dans la partie dense. Mais la conclusion qu'on en tirait — « certains
+> biomes ne sont pas réglables de façon continue » — était fausse : ils ne
+> l'étaient pas **avec deux frontières**. Avec une seule, ils le sont tous.
 
 ### 4. Le maillage
 
@@ -599,6 +642,12 @@ C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path 
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/preview_map.gd
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/preview_map.gd -- 512 512 5 2024
 
+# Les seuils de `CWBiome` et le niveau de la mer qui rendent SIX PARTS EGALES
+# du monde, resolus sur le champ reel (memes arguments que biome_stats). Il
+# echantillonne une fois puis lit les seuils comme des quantiles : c'est lui qui
+# a montre qu'avec DEUX frontieres d'humidite le desert etait insoluble.
+C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/biome_balance.gd -- 144 512
+
 # Répartition des six biomes et des matières de surface, mesurée sur le champ
 # réel (zones échantillonnées, pas de sondage, graine). C'est le garde-fou de
 # tout déplacement de seuil dans `CWBiome`.
@@ -708,7 +757,7 @@ biome, **F2** fige l'heure, **F3**/**F4** reculent ou avancent d'une heure,
 ## 3. État
 
 **Jalon 1 (le monde) : 1.1 à 1.16 sont portés, testés et vus en jeu.** Suite de
-validation : **407 vérifications, 0 échec**, ~25 s. Le détail de chaque jalon est
+validation : **408 vérifications, 0 échec**, ~25 s. Le détail de chaque jalon est
 dans `docs/ROADMAP.md` ; ce qui suit est ce qu'il faut savoir *avant de toucher
 au code*.
 
@@ -832,6 +881,8 @@ tests/sky_test.gd            le lot de nuages, la pureté du tirage, et les deux
                              accords que rien d'autre ne tient (2026-09-11)
 tools/export_palette.gd      régénère assets/palette/* depuis CWPalette
 tools/biome_stats.gd         répartition des biomes et des matières, mesurée (1.12)
+tools/biome_balance.gd       les seuils qui rendent six parts égales, résolus
+                             par quantiles (2026-09-11)
 tools/preview_features.gd    gros plan ombré, avec et sans la couche d'éléments
 tools/inspect_model.gd       inventaire d'un .vox : gabarit, index, plages, morceaux
 tools/repaint_models.gd      remet un .vox dans la palette de projet
@@ -1361,18 +1412,17 @@ docs/images/                 gabarit, carte et composition de flore, en jeu
   changer coûte une ligne, et rien dans la source ne les contraint : c'est le bon
   endroit où ajuster ce qui se voit mal en jeu.
 - **La règle des six biomes est une classification de ce projet.** La *liste*
-  vient de l'alpha 2013 et les fourchettes de climat aussi, mais la conversion
-  entre le champ normalisé de `CWTerrainField` et les degrés Celsius est une
-  convention (`CWBiome.TEMP_MIN_C` / `TEMP_MAX_C`), et les seuils ont été
-  **recalés sur la répartition mesurée** plutôt que sur les degrés. Ils sont donc
-  ajustables sans rien casser, à condition de relancer `tools/biome_stats.gd` —
-  c'est écrit dans l'en-tête du fichier, et l'annexe de `docs/ROADMAP.md` (§6.3)
-  dit pourquoi.
-- **La bande d'herbe sèche de Greenlands est large.** `DRY_GRASS_H` est à 0,46,
-  ce qui donne 5,1 % du monde ; l'alpha place Greenlands entre 30 et 70 %
-  d'humidité, ce qui la mettrait plus bas. La raison est mesurée : le champ
-  d'humidité n'a presque rien entre 0,10 et 0,40, donc le seuil ne peut pas se
-  poser au milieu — il attrape ou non l'amas 0,40-0,45 tout entier. À 0,42 la
-  steppe disparaîtrait du monde.
+  vient de l'alpha 2013, mais depuis le 2026-09-11 les seuils ne traduisent
+  plus ses fourchettes du tout : ils sont **résolus pour que les six biomes
+  fassent chacun un sixième du monde** (`tools/biome_balance.gd`). La conversion
+  en degrés (`CWBiome.TEMP_MIN_C` / `TEMP_MAX_C`) n'est plus qu'une convention
+  d'affichage, et elle ne se lit plus — un désert commence à 2 °C. Les seuils
+  restent ajustables sans rien casser, à condition de relancer l'un des deux
+  outils ; l'annexe de `docs/ROADMAP.md` (§6.3) dit pourquoi.
+- ~~**La bande d'herbe sèche de Greenlands est large.**~~ **Sans objet** :
+  `DRY_GRASS_H` n'existe plus depuis le 2026-09-06, avec le retrait de l'herbe
+  sèche et de la toundra. Ce qui reste vrai de cette note est la mesure qui la
+  portait — *le champ d'humidité n'a presque rien entre 0,10 et 0,40* —, et
+  c'est elle qui a décidé où poser `CWBiome.HUMID_H` le 2026-09-11.
 - **Oceans n'a été vu que d'au-dessus.** Voir l'annexe de `docs/ROADMAP.md`,
   §6.5.
