@@ -13,35 +13,212 @@ invariants, les pièges, les décisions ouvertes.
 
 ---
 
-## 0. Ce qui reste — **au 2026-09-11 au soir**
+## 0. La prochaine session — **cinq demandes, 2026-09-11 au soir**
 
-Le programme des cinq demandes du 2026-09-10 est traité ; le compte rendu de
-chacune est plus bas, dans son ordre d'origine. **Ce qui n'est pas fermé tient
-en six lignes**, et aucune n'est bloquante :
+> **Rien n'en est commencé.** Le programme précédent — les cinq demandes du
+> 2026-09-10 — est entièrement traité ; son compte rendu est en §0ter, et le
+> récit est dans le journal de `docs/ROADMAP.md`.
 
-| ce qui reste | où | pourquoi ça n'est pas fait |
+Les trois premières touchent au monde, les deux dernières à la carte. **Deux
+d'entre elles ferment quelque chose que la session du 2026-09-11 a ouvert**, et
+c'est dit à sa place.
+
+**Et quatre choses traînent depuis la veille, hors de ce programme.** Aucune
+n'est bloquante, et aucune ne s'oppose à ce qui suit :
+
+| ce qui traîne | où | pourquoi ça n'est pas fait |
 |---|---|---|
-| **compiler la GDExtension** | §5 | le SDK Windows n'est pas installé sur cette machine. Une commande, et c'est une modification de la machine, pas du projet |
-| **la collision des cactus** | §2 | ils sont à 4 voxels par bloc : inestampables. Ils veulent une **forme de physique**, et c'est le jalon 3.1 |
-| **la saccade au chargement** | §4 | affaire de latence, pas de débit. Aucune mesure ne la voit ; elle se juge manette en main |
-| **les quatre fichiers à mille lignes** | plus bas | la démo est rangée, le générateur pas encore |
-| **la falaise vaut-elle 12 % du chargement ?** | plus bas | ça se tranche à l'œil, pas au banc |
-| **2.6, l'apparition** | plus bas | la porte du jalon 2. Elle n'attend rien |
+| **compiler la GDExtension** | §0ter.5 | le SDK Windows n'est pas installé sur cette machine. C'est une modification de la machine, pas du projet |
+| **la collision des cactus** | §0ter.2 | ils sont à 4 voxels par bloc : inestampables. Ils veulent une forme de physique, et c'est le jalon 3.1 |
+| **la saccade au chargement** | §0ter.4 | affaire de latence, pas de débit. Aucune mesure ne la voit ; elle se juge manette en main |
+| **la gigue de taille des cinq arbres entiers** | §0ter.2 | perdue en passant en matière. La variété devra venir de variantes de modèles |
 
-Et deux choses que la session a ouvertes en passant, sans les fermer :
-
-* **la roche nue est passée de 0,3 % à 2,8 % du monde** — effet du niveau de la
-  mer qui descend de soixante blocs, les règles de surface étant exprimées en
-  altitude *au-dessus de la mer*. Vu en capture, ça lit comme la calotte d'un
-  volcan et c'est gardé ; le remède, s'il en faut un, est `CWPalette.ROCK_MIN`
-  et non les seuils de biome (§3) ;
-* **les cinq modèles d'arbre entiers ont perdu leur gigue de taille** — deux
-  pins, un sapin, l'arbre épineux et le rocher géant sortent tous à la même
-  taille depuis qu'ils sont de la matière. La variété devra venir de variantes
-  de modèles (§2).
+Plus les quatre points de fond listés en fin de §0ter — les fichiers à mille
+lignes, la falaise, le plafond du cache, et 2.6.
 
 ---
 
+### 1. Un biome, une matière — et la roche seulement en falaise
+
+*Corriger les biomes et leurs surfaces : Greenlands/herbe, Deserts/sable,
+Jungles/jungle (supprimer marais), Oceans/gravier, Lava Lands/scorie et magma.
+La surface roche sert uniquement pour les falaises.*
+
+**La moitié est déjà là, et c'est la moitié qui ne bougera pas.**
+`CWPalette._plain_of` rend déjà une matière et une seule par biome — neige,
+sable, jungle, herbe —, et l'en-tête qui la précède raconte les trois franges
+retirées le 2026-09-06 pour exactement cette raison : *un biome, une matière de
+plaine, sans exception*. La demande prolonge cette règle, elle ne la contredit
+pas.
+
+**Ce qui reste à faire, mesuré le 2026-09-11** (parts du monde) :
+
+| matière | part | d'où elle vient | ce qu'il faut |
+|---|---|---|---|
+| roche | **2,8 %** | deux sources : la falaise (voulue) **et la bande de roche de Lava Lands** | couper la seconde |
+| marais | 0,1 % | la **rive** d'un plan d'eau, en Jungles seulement | la retirer |
+| terre | 1,0 % | le **lit** des mares (`subsurface_index`) | à trancher, ce n'est pas une matière de biome |
+| sable | 18,1 % | le désert **et** la plage **et** le haut-fond | voir plus bas |
+| gravier | 15,3 % | le fond marin profond | l'étendre à tout l'océan |
+
+**Trois pièges, et le premier est un piège de suppression :**
+
+* ⚠️ **le roseau ne pousse que sur le marais.** `CWDecorRules.FAMILIES_SURFACE`
+  et `FAMILIES_SURFACE_BIOME` indexent deux rôles **par matière** et non par
+  biome — le marais en est un. Retirer la matière sans retirer son entrée laisse
+  un rôle que la surface sait choisir et que rien ne peut plus poser : la plante
+  disparaît, la densité moyenne ne bouge pas assez pour se voir, et **aucun test
+  de table ne le signale** (invariant n° 22, qui est exactement ce cas). Il faut
+  décider *où va le roseau* avant de retirer le marais, pas après ;
+* ⚠️ **la bande de roche de Lava Lands est celle qui a triplé le 2026-09-11.**
+  Elle est passée de 0,3 % à 2,8 % du monde parce que le niveau de la mer est
+  descendu de soixante blocs et que la règle est exprimée en altitude *au-dessus
+  de la mer* (§0ter.3). La couper ferme donc **deux points d'un coup** : la
+  demande d'aujourd'hui, et l'effet de bord laissé ouvert hier. C'est la branche
+  `lava_rock` / `ROCK_MIN` de `CWPalette.surface_shaded` ;
+* ⚠️ **la plage n'est pas dans la liste, et il faut trancher exprès.** Prise à la
+  lettre, « un biome une matière » retire aussi le sable de rivage — et le
+  fichier a une opinion écrite en face : *une matière qui vaut la peine est celle
+  qui nomme un endroit, pas celle qui nuance un gradient*. La plage et la rive
+  nomment un endroit ; la frange d'humidité n'en nommait pas. **Recommandation :
+  garder la plage, retirer le marais** — mais c'est une décision, pas une
+  déduction, et il vaut mieux la poser avant de commencer.
+
+Idem pour le haut-fond : l'océan mélange aujourd'hui du sable près du rivage et
+du gravier au large, sur douze blocs de fond. « Oceans/gravier » demande de le
+supprimer ; c'est la seule transition qu'on voit **à travers l'eau**, et c'est
+aussi ce qui distingue une plage d'une falaise vue de la mer.
+
+---
+
+### 2. Un biome a une taille minimum
+
+*Un biome doit faire une taille minimum, pour éviter des transitions trop
+rapides.*
+
+**Il n'existe rien pour ça aujourd'hui, et c'est structurel.** `CWBiome.at` est
+une **fonction pure d'une colonne** : elle compare le climat de ce point à des
+seuils, sans savoir ce que valent les colonnes voisines. Un biome peut donc
+faire une colonne de large partout où le climat frôle un seuil, et rien dans le
+code ne l'en empêche.
+
+> ⚠️ **Et la session du 2026-09-11 a rendu le défaut plus visible, mécaniquement.**
+> Les quatre seuils de température allaient de 0,16 à 0,985 ; ils vont maintenant
+> de 0,28 à 0,63. Ils sont donc **2,4 fois plus serrés**, sur un champ de climat
+> qui n'a pas changé de pente : à distance parcourue égale, on traverse 2,4 fois
+> plus de frontières. *L'égalisation des six parts a acheté l'égalité au prix de
+> la longueur d'onde*, et c'est très probablement ce qui se voit en jeu.
+
+**Deux routes, et elles ne coûtent pas la même chose.**
+
+1. **Lisser davantage le champ de climat.** C'est le levier le plus direct — les
+   provinces climatiques ont trois constantes réglées à l'œil sur une seule
+   graine (fréquence, largeur du cœur, décalages), et `tools/biome_stats.gd`
+   mesure ce qu'elles rendent. Élargir les provinces allonge les transitions
+   sans toucher à la règle. **Mais ça ne garantit pas une taille minimum**, ça
+   la rend seulement plus probable ;
+2. **Décider le biome au site de région, et non à la colonne.** C'est la route
+   qui garantit. `CWRegionSite` porte déjà `temperature` et `humidity`, et
+   `CWWorldMap.icon_of_zone` s'en sert déjà pour choisir son icône : un biome
+   décidé là aurait **la taille d'une région par construction**, et les
+   frontières seraient celles du diagramme de Voronoï des sites. La colonne ne
+   servirait plus qu'à l'écotone.
+
+   ⚠️ Ce qu'il faut savoir avant de la prendre : le climat d'une colonne est un
+   **mélange** de plusieurs sites (c'est ce qui fait qu'une Snowlands peut
+   toucher un désert sans que ce soit absurde). Décider au site jette ce mélange
+   pour la classification, et il faudra vérifier que le voisinage reste crédible
+   — `tools/biome_stats.gd` compte déjà les paires « neige contre désert »,
+   c'est le garde-fou tout trouvé.
+
+**Et il faut relancer `tools/biome_balance.gd` après**, quelle que soit la route :
+les seuils sont des quantiles du champ, et changer le champ change les quantiles.
+Les six parts égales ne survivront pas toutes seules.
+
+---
+
+### 3. Les nuages : la moitié basse manque, et ils sont trop petits
+
+*Régénérer les nuages : il manque la moitié basse, et il faudrait aussi les
+agrandir.*
+
+**La moitié basse ne manque pas, elle est coupée exprès** — et le remède n'est
+donc pas de la remettre telle quelle. `generer_nuages._pose` pose la masse à
+cheval sur `z = 0` et laisse la grille jeter ce qui passe dessous : c'est ce qui
+donne le **dessous plat** d'un cumulus, qui est une condensation à altitude
+constante et non une forme dessinée. Le paramètre est `coupe`, à **0,30** pour
+les deux cumulus et **0,22** pour le voile.
+
+⚠️ **À zéro, un nuage est un galet** : rond partout, sans base, et il cesse de
+lire comme un nuage vu d'en dessous — ce qui est le seul angle sous lequel on le
+voit. Ce qu'il faut n'est pas `coupe = 0` mais **plus de masse sous le plus large
+lobe** : baisser `coupe` *et* descendre l'étage bas de `_lobes`, pour que la
+coupe tombe sous le ventre au lieu de le trancher.
+
+**Pour agrandir**, deux réglages, et ils ne font pas la même chose :
+
+* `generer_nuages` — `largeur`, `profondeur`, `hauteur` des trois modèles.
+  Agrandir ici change la **forme** : plus de lobes tiennent dans la même masse ;
+* `CWClouds.ECHELLE_MIN` / `ECHELLE_MAX` (1,4 – 2,6) — agrandir ici ne coûte
+  rien à la génération et ne change pas la silhouette, seulement sa taille
+  apparente.
+
+⚠️ **L'enveloppe est vérifiée**, et c'est voulu : `NUAGE = (24, 32)` dans le
+générateur, et `tests/sky_test.gd` refuse un modèle qui la dépasse. Grandir
+demande de monter les deux ensemble — le test tombera sinon, ce qui est
+exactement son travail.
+
+---
+
+### 4. La carte ne nomme qu'une région sur deux
+
+*Corriger la carte, qui n'affiche le nom des régions que dans certaines zones.*
+
+**Deux causes, et corriger l'une ne corrige pas l'autre.** Les deux sont
+trouvées, et chacune tient en une ligne :
+
+1. **le nom voyage sur un marqueur, et une région d'océan n'en a pas.**
+   `CWWorldMap.markers` n'ajoute une entrée que `if site != null and
+   icon != ICON_NONE`, et `icon_of_zone` rend `ICON_NONE` dès que
+   `site.is_ocean()`. Une région marine est donc **sans nom par construction**,
+   et c'est un sixième du monde depuis hier ;
+2. **le nom ne se dessine qu'à partir d'un certain zoom.**
+   `map_overlay.gd`, `if m.has("name") and scale >= 2.0`. La carte s'ouvre sur
+   cinq zones (`CWDemoMap._zones`, réglable de 3 à 9 par `+`/`−`) : au-delà de
+   cinq, l'échelle passe sous deux et les noms disparaissent tous d'un coup.
+
+> Le garde-fou du zoom n'est pas absurde — un nom de onze pixels sur une carte
+> de neuf zones se chevauche avec ses voisins. Ce qu'il faut décider est
+> **quoi faire à la place** : des noms plus courts, un nom sur deux, ou un nom
+> seulement pour la région sous le curseur. C'est un choix d'affichage, et il
+> se juge sur une capture — `-- --carte` l'ouvre au démarrage sans piloter la
+> fenêtre.
+
+---
+
+### 5. La carte confond la neige et l'océan
+
+*Revoir les couleurs pour différencier un biome neige d'un biome océan.*
+
+**La cause est nommée, et c'est l'invariant n° 27 pris à l'envers.**
+`CWWorldMap.tint_of_zone` peint une région avec **la couleur du terrain** :
+`CWPalette.colors()[surface_index]`. Or la neige est `Color8(125, 181, 199)` et
+l'eau `Color8(42, 200, 252)` — deux cyans clairs. Elles se confondent parce
+qu'elles se ressemblent *vraiment*, et une carte qui recopie le sol recopie
+aussi ses confusions.
+
+⚠️ **Le remède n'est pas de repeindre la palette** : `SNOW` est un type de bloc
+écrit dans le monde, et le changer repeint toute la neige du jeu pour régler un
+problème de carte. Le remède est de **donner à la carte sa propre table**,
+indexée par **biome** et non par matière de surface — *une carte est une légende,
+pas une photographie*. Six teintes franches, choisies pour se distinguer les unes
+des autres, valent mieux que dix teintes justes qui se ressemblent.
+
+C'est aussi ce qui règle le cas où deux biomes partagent une matière : depuis le
+2026-09-11 l'océan est un sixième du monde, et il touche partout de la neige, du
+sable et de l'herbe.
+
+---
 ## 0ter. Le programme des cinq demandes, et ce qu'il a rendu
 
 L'ordre ci-dessous est celui d'exécution, et il est celui qui a été demandé : le
