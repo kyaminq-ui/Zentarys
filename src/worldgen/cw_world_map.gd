@@ -28,8 +28,8 @@ extends RefCounted
 ##   1. dalle de 64 × 64 par zone plutôt que pièce à sa boîte englobante : même
 ##      géométrie, cache qui se juxtapose sans recouvrement ;
 ##   2. teinte d'une région échantillonnée à son site ;
-##   3. mer peinte en eau — `CWPalette.surface_index` rend du sable sous le
-##      niveau de la mer, ce qui est juste pour le terrain et illisible ici.
+##   3. **la carte a sa propre table de couleurs, indexée par biome** — voir
+##      `teinte_de`. Elle recopiait celle du terrain jusqu'au 2026-09-12.
 ##
 ## -- Fils ---------------------------------------------------------------------
 ## `slab()` et `render()` échantillonnent le champ de terrain : ~9 µs par case,
@@ -335,11 +335,98 @@ func _owner_of_chunk(cx: int, cz: int) -> int:
 
 # -- Teinte et icône d'une région ---------------------------------------------
 
-## Couleur d'une région, échantillonnée à son site.
+# -- La couleur d'une région : une légende, pas une photographie --------------
+#
+# La carte peignait une région avec **la couleur de son terrain**
+# (`CWPalette.colors()[surface_index]`). C'est ce qui paraît le plus honnête, et
+# c'est ce qui a rendu la carte illisible : la neige est `(125, 181, 199)` et
+# l'eau `(42, 200, 252)`, deux cyans clairs, et une Snowlands côtière était donc
+# de la même couleur que la mer qui la borde. **Une carte qui recopie le sol
+# recopie aussi ses confusions.**
+#
+# Le remède n'était pas de repeindre la palette : `SNOW` est un type de bloc
+# écrit dans le monde, et le changer pour régler un problème de carte aurait
+# repeint toute la neige du jeu. C'est la carte qui prend sa propre table, et
+# elle l'indexe par **biome** et non par matière de surface — invariant n° 27,
+# vu du côté de la lecture : `CWBiome.at` dit *où on est*, et c'est cela qu'une
+# carte doit dire.
+#
+# Six teintes franches, choisies pour se distinguer les unes des autres, valent
+# mieux que dix teintes justes qui se ressemblent. Le couple qui décidait est
+# neige / océan : il va maintenant d'un blanc à peine bleuté à un bleu profond,
+# et aucun écran ne les confond. Le second couple à surveiller est prairie /
+# jungle, deux verts : ils sont séparés par la clarté autant que par la teinte.
+#
+# Elle règle aussi le cas où deux biomes partagent une matière — depuis le
+# 2026-09-12 la neige d'une Snowlands et sa banquise sont le même bloc — et
+# celui de l'océan, qui touche partout de la neige, du sable et de l'herbe.
+## Le vert franc de la prairie.
+const TEINTE_GREENLANDS: Color = Color8(104, 166, 84)
+## Un blanc a peine bleute. C'est le premier des deux couples a se confondre :
+## il doit rester loin de `TEINTE_OCEANS`.
+const TEINTE_SNOWLANDS: Color = Color8(232, 240, 247)
+## L'ocre du sable, plus sourd qu'en jeu : sur une carte, un jaune vif tire
+## l'oeil vers le desert et le fait paraitre plus grand qu'il n'est.
+const TEINTE_DESERTS: Color = Color8(224, 188, 106)
+## Un vert sombre et sature. Deux couples se surveillent ici, et le second n'est
+## pas celui qu'on attend : la prairie, evidemment — les deux sont separes par
+## la clarte autant que par la teinte —, mais aussi **l'ocean**, parce que deux
+## couleurs sombres se rapprochent bien plus vite que deux claires. C'est la
+## mesure de `tests/map_test.gd` qui l'a dit, pas l'oeil.
+const TEINTE_JUNGLES: Color = Color8(30, 122, 52)
+## La brique de la scorie refroidie.
+const TEINTE_LAVALANDS: Color = Color8(158, 66, 44)
+## Un bleu profond, jamais un cyan.
+const TEINTE_OCEANS: Color = Color8(32, 72, 150)
+
+
+## La teinte de carte d'un biome. Un `match` et non un tableau : une entree
+## nommee se relit, et le compilateur refuse un tableau de `Color8` en constante.
+static func teinte_de(biome: int) -> Color:
+	match biome:
+		CWBiome.GREENLANDS: return TEINTE_GREENLANDS
+		CWBiome.SNOWLANDS: return TEINTE_SNOWLANDS
+		CWBiome.DESERTS: return TEINTE_DESERTS
+		CWBiome.JUNGLES: return TEINTE_JUNGLES
+		CWBiome.LAVALANDS: return TEINTE_LAVALANDS
+		CWBiome.OCEANS: return TEINTE_OCEANS
+		_: return Color(0.5, 0.5, 0.5)
+
+## Le biome d'une région, pris **à son site** — le point dont tout son climat
+## découle, et celui qui décide son biome depuis le 2026-09-12.
 ##
-## Une seule colonne par région : c'est 74 µs, contre 4 096 fois plus si on
-## peignait chaque case. L'image d'origine ne porte de toute façon pas de
-## couleur (§4), donc rien n'est perdu en fidélité.
+## -- L'océan se lit sur la région, pas sur une colonne -----------------------
+##
+## La carte échantillonnait une colonne au site et la peignait en eau si elle
+## tombait sous le niveau de la mer. Mesure du 2026-09-12 : sur les 81 régions
+## autour du point de départ, **28 sont océaniques et aucune ne rendait de
+## l'eau**. La raison est que le champ d'altitude mélange neuf sites : au point
+## même d'un site posé à -100, les voisins et le bruit ramènent la colonne à
+## +7, +25, +2 — de la terre, à un niveau de mer de -60. Une colonne au site
+## dit ce qu'il y a *sous les pieds du site*, et non ce qu'est la région.
+##
+## Ce que la région *est*, la source le dit : `base_height < 1` la rend
+## océanique, et c'est le drapeau que `is_ocean` porte. La carte le lit donc
+## directement — c'est déjà ce que fait `icon_of_zone`, et les deux disent
+## maintenant la même chose.
+##
+## **Une carte n'est pas une photographie**, et c'est ici que ça se voit le
+## plus : une région marine porte des îles, et une île n'y sera pas peinte. Ce
+## qu'on peint est *un pays de mer*, pas la ligne de rivage — laquelle demande
+## une case par chunk, soit 4 096 fois le coût.
+func biome_of_zone(zx: int, zz: int) -> int:
+	var site: CWRegionSite = _field.sites().get_site(zx, zz)
+	if site == null or site.is_ocean():
+		return CWBiome.OCEANS
+	return CWBiome.of_climate(site.temperature, site.humidity)
+
+
+## Couleur d'une région : celle de son biome.
+##
+## Une seule lecture de site par région, mémoïsée. Elle échantillonnait encore
+## une colonne jusqu'au 2026-09-12 — 74 µs — et n'en a plus besoin : le biome
+## d'une région se lit sur son site. L'image d'origine ne porte de toute façon
+## pas de couleur (§4), donc rien n'est perdu en fidélité.
 func tint_of_zone(zx: int, zz: int) -> Color:
 	var key: int = _zone_key(zx, zz)
 	_mutex.lock()
@@ -348,20 +435,8 @@ func tint_of_zone(zx: int, zz: int) -> Color:
 	if hit != null:
 		return hit
 
-	var c := Color(0.5, 0.5, 0.5)
-	var site: CWRegionSite = _field.sites().get_site(zx, zz)
-	if site != null:
-		var sample: Vector3 = _field.sample_column(site.x, site.z)
-		var sea: int = _field.params().sea_level
-		var index: int = CWPalette.surface_index(sample.x, sample.y, sample.z, sea,
-				site.x, site.z)
-		if sample.x < float(sea):
-			# La mer est peinte en eau : `surface_index` rend du sable sous le
-			# niveau de la mer, ce qui est juste pour le terrain et illisible
-			# sur une carte.
-			index = CWPalette.water_index(float(sea) - sample.x)
-		c = CWPalette.colors()[index]
-		c.a = 1.0
+	var c: Color = teinte_de(biome_of_zone(zx, zz))
+	c.a = 1.0
 
 	_mutex.lock()
 	_tints[key] = c
@@ -513,17 +588,24 @@ func render_markers(zx0: int, zz0: int, nx: int, nz: int) -> Array:
 				out.append(e)
 			# L'icône de relief se pose au site, qui est le point dont tout le
 			# climat de la région découle.
+			#
+			# **Le nom ne dépend plus de l'icône**, et c'était la première des
+			# deux causes de « la carte ne nomme qu'une région sur deux » : une
+			# région d'océan rend `ICON_NONE`, et le `and icon != ICON_NONE` qui
+			# gardait cette ligne la laissait donc **sans nom par
+			# construction** — un sixième du monde. Un nom appartient à la
+			# région, pas à son relief ; l'icône est ce qui peut manquer.
 			var site: CWRegionSite = _field.sites().get_site(zx, zz)
-			var icon: int = icon_of_zone(zx, zz)
-			if site != null and icon != ICON_NONE:
-				out.append({
-					"icon": icon,
-					"chunk": Vector2i(chunk_of(site.x), chunk_of(site.z)),
-					"pixel": Vector2i(chunk_of(site.x) - base_cx,
-							chunk_of(site.z) - base_cz),
-					"zone": Vector2i(zx, zz),
-					"name": _names.of_zone(zx, zz),
-				})
+			if site == null:
+				continue
+			out.append({
+				"icon": icon_of_zone(zx, zz),
+				"chunk": Vector2i(chunk_of(site.x), chunk_of(site.z)),
+				"pixel": Vector2i(chunk_of(site.x) - base_cx,
+						chunk_of(site.z) - base_cz),
+				"zone": Vector2i(zx, zz),
+				"name": _names.of_zone(zx, zz),
+			})
 	return out
 
 

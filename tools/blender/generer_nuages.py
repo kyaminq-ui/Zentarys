@@ -58,7 +58,7 @@ SORTIE = os.path.join(fv.RACINE, "nuages")
 # de haut et trente-deux de rayon : au-dela, un nuage cesse d'etre un objet du
 # ciel et devient un plafond, et la gigue d'instance de `CWClouds` le porte deja
 # jusqu'a 2,6 fois.
-NUAGE = (24, 32)
+NUAGE = (40, 56)
 
 # La rampe de la plage « effets ». Voir l'en-tete.
 #
@@ -101,6 +101,21 @@ def _lobes(rng, largeur, profondeur, hauteur, n_bas, n_haut):
     donnent le chou-fleur. Les rayons de l'etage haut sont **volontairement plus
     faibles** — a rayons egaux les deux etages fusionnent en un ballon, et le
     nuage perd ses creux.
+
+    -- La rangee basse est montee le 2026-09-12, et c'est tout le sujet -------
+
+    Elle etait posee a `0,02 h`, avec un rayon de `0,34 h` : son ventre
+    descendait donc a `-0,32 h`, tres au-dessous du plan de coupe pose a
+    `+0,30 h`. La coupe ne rasait pas le dessous du nuage, **elle le tranchait
+    presque au sommet** — il ne restait de la rangee basse qu'une couronne de
+    six centiemes de hauteur, et c'est ce qu'on voyait en jeu : « il manque la
+    moitie basse ».
+
+    La rangee est maintenant a `0,34 h`. Son point le plus large est donc
+    au-dessus du plan de coupe, et ce qui passe dessous n'est plus qu'une
+    calotte. Le dessous reste plat — c'est une condensation a altitude
+    constante, et le dessiner reviendrait a le deviner —, mais il est plat
+    **sous le ventre** au lieu de l'etre au travers.
     """
     elements = []
     for i in range(n_bas):
@@ -110,26 +125,34 @@ def _lobes(rng, largeur, profondeur, hauteur, n_bas, n_haut):
         bord = 1.0 - (2.0 * t - 1.0) ** 2
         x = (t - 0.5) * largeur
         y = rng.uniform(-0.5, 0.5) * profondeur * 0.5
-        z = hauteur * (0.02 + 0.16 * bord) + rng.uniform(-0.5, 0.5)
+        z = hauteur * (0.34 + 0.14 * bord) + rng.uniform(-0.5, 0.5)
         r = hauteur * (0.34 + 0.30 * bord) * rng.uniform(0.88, 1.12)
         elements.append(((x, y, z), r, 2.0))
     for i in range(n_haut):
         t = (i + 0.5) / n_haut
         x = (t - 0.5) * largeur * 0.62 + rng.uniform(-1.5, 1.5)
         y = rng.uniform(-0.5, 0.5) * profondeur * 0.36
-        z = hauteur * rng.uniform(0.46, 0.68)
+        # L'etage haut suit la rangee basse : a l'ancienne altitude il se
+        # serait noye dedans, et le chou-fleur aurait disparu avec les creux.
+        z = hauteur * rng.uniform(0.76, 0.98)
         r = hauteur * rng.uniform(0.26, 0.38)
         elements.append(((x, y, z), r, 2.0))
     return elements
 
 
 def _pose(g, rng, largeur, profondeur, hauteur, n_bas, n_haut,
-          aplati=1.0, coupe=0.30):
+          aplati=1.0, coupe=0.12):
     """Construit la masse, l'aplatit s'il le faut, et l'echantillonne.
 
     `coupe` est la part de la hauteur qui passe **sous** `z = 0` et que la
     grille jette : c'est elle qui fait le dessous plat. A zero, le nuage est un
-    galet ; au-dela de 0,4 il ne reste qu'une croute.
+    galet — rond partout, sans base, et il cesse de lire comme un nuage vu d'en
+    dessous, qui est le seul angle sous lequel on le voit.
+
+    Elle valait 0,30 jusqu'au 2026-09-12, et c'etait trop : le plan tombait
+    au-dessus du ventre. Ce qu'il fallait n'etait pas `coupe = 0` mais **plus de
+    masse sous le plus large lobe**, et c'est la rangee basse qui a monte (voir
+    `_lobes`). La coupe, elle, n'a plus qu'a raser.
     """
     fb.scene_vide()
     elements = _lobes(rng, largeur, profondeur, hauteur, n_bas, n_haut)
@@ -155,7 +178,7 @@ def cumulus(g, rng):
     """Le nuage ordinaire. C'est celui qu'on voit le plus, donc c'est lui qui
     fixe l'echelle du ciel : une trentaine de blocs de large, une douzaine de
     haut, ce qui sous-tend cinq degres depuis le sol."""
-    return _pose(g, rng, largeur=34.0, profondeur=20.0, hauteur=24.0,
+    return _pose(g, rng, largeur=48.0, profondeur=28.0, hauteur=22.0,
                  n_bas=4, n_haut=3)
 
 
@@ -165,7 +188,7 @@ def cumulus_grand(g, rng):
     Il ne sort qu'une fois sur quatre du tirage de `CWClouds` — un ciel qui n'a
     que des gros nuages n'a plus d'echelle.
     """
-    return _pose(g, rng, largeur=56.0, profondeur=30.0, hauteur=32.0,
+    return _pose(g, rng, largeur=78.0, profondeur=42.0, hauteur=30.0,
                  n_bas=6, n_haut=4)
 
 
@@ -176,8 +199,8 @@ def voile(g, rng):
     et non par un jeu de rayons a part : deux dessins pour la meme forme
     divergeraient a la premiere retouche.
     """
-    return _pose(g, rng, largeur=76.0, profondeur=28.0, hauteur=26.0,
-                 n_bas=7, n_haut=2, aplati=0.52, coupe=0.22)
+    return _pose(g, rng, largeur=104.0, profondeur=40.0, hauteur=26.0,
+                 n_bas=8, n_haut=2, aplati=0.52, coupe=0.10)
 
 
 # =============================================================================

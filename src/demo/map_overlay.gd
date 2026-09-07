@@ -76,6 +76,7 @@ func _draw() -> void:
 
 	for m: Dictionary in markers:
 		_draw_marker(origin, scale, m)
+	_draw_names(origin, scale)
 
 	_draw_cursor(origin + player_pixel * scale, scale)
 
@@ -126,9 +127,67 @@ func _draw_marker(origin: Vector2, scale: float, m: Dictionary) -> void:
 		CWWorldMap.ICON_PLAINS:
 			draw_circle(p, s * 0.22, Color(1, 1, 1, 0.35))
 
-	if m.has("name") and scale >= 2.0:
-		_draw_text(p + Vector2(-28.0, -s * 1.4), m["name"], 11,
-				Color(1, 1, 1, 0.72))
+
+
+# -- Les noms de régions ------------------------------------------------------
+#
+# **Ils se dessinaient à partir de l'échelle 2, et pas en dessous.** La carte
+# s'ouvre sur cinq zones et se règle de 3 à 9 par `+`/`−` ; au-delà de cinq
+# l'échelle passe sous deux, et tous les noms disparaissaient d'un coup. Le
+# garde-fou n'était pas absurde — un nom de onze pixels sur une carte de neuf
+# zones se chevauche avec ses voisins — mais il réglait un problème de
+# **chevauchement** par un seuil de zoom, ce qui est en dire beaucoup plus que
+# ce qu'on sait : à neuf zones, la moitié des noms tient très bien, ce sont les
+# voisins serrés qui se marchent dessus.
+#
+# On mesure donc le chevauchement au lieu de le supposer. Chaque nom demande sa
+# boîte ; on la pose si elle est libre, on saute le nom sinon. La carte se
+# remplit d'autant de noms qu'elle peut en porter, et jamais d'un de plus.
+#
+# **L'ordre décide qui gagne, et il n'est pas indifférent** : on trie par
+# distance au curseur du joueur, de sorte que la région où l'on se trouve est
+# toujours nommée, et ses voisines juste après. C'est la seule information dont
+# on soit sûr qu'elle intéresse celui qui ouvre la carte.
+func _draw_names(origin: Vector2, scale: float) -> void:
+	if _font == null:
+		return
+	var px: int = 12 if scale >= 2.0 else 10
+	var joueur: Vector2 = origin + player_pixel * scale
+	var noms: Array = markers.filter(
+			func(m): return String(m.get("name", "")) != "")
+	noms.sort_custom(func(a, b):
+			var da: float = _ancre(origin, scale, a).distance_squared_to(joueur)
+			var db: float = _ancre(origin, scale, b).distance_squared_to(joueur)
+			return da < db)
+
+	var pris: Array[Rect2] = []
+	for m: Dictionary in noms:
+		var texte: String = m["name"]
+		var taille: Vector2 = _font.get_string_size(texte,
+				HORIZONTAL_ALIGNMENT_LEFT, -1.0, px)
+		var ancre: Vector2 = _ancre(origin, scale, m)
+		# Le nom se pose **au-dessus** de son icône et centré dessus : c'est là
+		# qu'il ne recouvre ni le symbole ni le terrain qu'il désigne.
+		var at := Vector2(ancre.x - taille.x * 0.5,
+				ancre.y - maxf(scale * 2.0, 5.0) * 1.4)
+		# Une marge d'un pixel : deux boîtes qui se touchent exactement rendent
+		# deux textes collés, ce qui se lit comme un seul mot.
+		var boite := Rect2(at - Vector2(1.0, taille.y),
+				taille + Vector2(2.0, 2.0))
+		var libre: bool = true
+		for r: Rect2 in pris:
+			if r.intersects(boite):
+				libre = false
+				break
+		if not libre:
+			continue
+		pris.append(boite)
+		_draw_text(at, texte, px, Color(1, 1, 1, 0.78))
+
+
+## Le point de la carte auquel un marqueur est attaché, en pixels d'écran.
+static func _ancre(origin: Vector2, scale: float, m: Dictionary) -> Vector2:
+	return origin + (Vector2(m["pixel"]) + Vector2(0.5, 0.5)) * scale
 
 
 func _draw_text(at: Vector2, text: String, px: int, color: Color) -> void:

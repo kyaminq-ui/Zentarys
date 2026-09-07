@@ -89,10 +89,27 @@ func _test_lot() -> void:
 
 	# L'enveloppe, dite en blocs puisque la grille vaut 1. Au-dela, un nuage
 	# cesse d'etre un objet du ciel et devient un plafond.
+	#
+	# Elle a grandi avec le lot le 2026-09-12 (24 h, 32 r auparavant), et la
+	# borne qui compte n'est pas celle-ci : c'est `CWClouds.MAILLE`, verifiee
+	# juste apres. Une enveloppe seule ne dit rien d'un plafond — deux nuages de
+	# vingt blocs poses a dix l'un de l'autre en font un.
 	for m in _modeles:
-		_ok("%s tient dans l'enveloppe (24 h, 32 r)" % m.name,
-				m.height <= 24 and m.radius <= 32,
+		_ok("%s tient dans l'enveloppe (40 h, 56 r)" % m.name,
+				m.height <= 40 and m.radius <= 56,
 				"h %d, r %d" % [m.height, m.radius])
+
+	# **Le plus grand nuage doit tenir dans sa cellule de ciel**, gigue
+	# d'instance comprise. C'est ce qui separe un ciel d'un plafond, et c'est le
+	# seul rapport du lot que la capture ne rattrape pas : un plafond de nuages
+	# reste joli sur une image et devient une chape des qu'on avance.
+	var plus_large: int = 0
+	for m in _modeles:
+		plus_large = maxi(plus_large, m.radius * 2)
+	var etendu: float = float(plus_large) * CWClouds.ECHELLE_MAX
+	_ok("le plus large nuage tient dans une cellule de ciel",
+			etendu < float(CWClouds.MAILLE),
+			"%.0f blocs pour une maille de %d" % [etendu, CWClouds.MAILLE])
 
 
 # -- La pose ------------------------------------------------------------------

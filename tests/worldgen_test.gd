@@ -677,13 +677,19 @@ func _bench() -> void:
 
 	# Deux couts a tenir a cote de celui d'une colonne.
 	#
-	#   * `climate_blend` doit rester **un ordre de grandeur** sous une colonne.
-	#     C'est toute la raison pour laquelle il existe : `climate_at` passait
-	#     par `sample_column` et payait les quinze evaluations de bruit du champ
+	#   * `climate_blend` doit rester **une fraction** d'une colonne. C'est toute
+	#     la raison pour laquelle il existe : `climate_at` passait par
+	#     `sample_column` et payait les quinze evaluations de bruit du champ
 	#     d'altitude pour deux nombres qui n'en dependent pas. Depuis le
 	#     2026-09-12 il ne decide plus rien — c'est la lecture de l'ATH — et
 	#     c'est justement pour cela qu'il doit rester bon marche : il est appele
-	#     a chaque image ;
+	#     a chaque image.
+	#
+	#     Le seuil est **la moitie**, et non le facteur cinq qu'on serait tente
+	#     d'ecrire : ce qu'on attrape est le retour du vrai defaut — la descente
+	#     dans le champ d'altitude, qui rendrait le rapport egal a un —, et un
+	#     seuil pose a 5,9 fois la mesure du jour se met a clignoter d'une
+	#     execution a l'autre sans rien dire de plus ;
 	#   * `fringe_biome`, lui, est **sur le chemin de generation** : une fois par
 	#     colonne. Il a remplace le couple `climate_gradient` + `at_dithered`, et
 	#     il coute une recherche de site de plus par colonne. C'est le prix de
@@ -702,8 +708,8 @@ func _bench() -> void:
 
 	print("     climat seul : %.1f us  biome trame : %.1f us  colonne : %.1f us"
 			% [us_blend, us_fringe, float(dt) / float(n)])
-	_ok("le climat seul coute un ordre de grandeur de moins qu'une colonne",
-			us_blend * 5.0 < float(dt) / float(n),
+	_ok("le climat seul ne descend pas dans le champ d'altitude",
+			us_blend * 2.0 < float(dt) / float(n),
 			"%.1f us contre %.1f" % [us_blend, float(dt) / float(n)])
 	_ok("le biome trame reste une fraction de la colonne",
 			us_fringe * 4.0 < float(dt) / float(n),

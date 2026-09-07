@@ -36,6 +36,7 @@ func run(runner: Object) -> void:
 	_test_persistence()
 	_test_slab()
 	_test_render()
+	_test_teintes()
 	_test_names()
 	_bench()
 
@@ -254,7 +255,9 @@ func _test_render() -> void:
 			float(us) / 1000.0, _map.slab_count()])
 
 	# Marqueurs : ils viennent des elements de tuile du jalon 1.6, et chaque
-	# region porte au moins son icone de relief.
+	# region en pose un — porteur de son nom, et de son icone de relief quand
+	# elle en a une. Une region d'ocean n'a pas d'icone et doit tout de meme
+	# etre nommee : c'est la moitie de la correction du 2026-09-12.
 	var marks: Array = _map.render_markers(zx, zz, 3, 3)
 	var icons: Dictionary = {}
 	var out_of_frame: int = 0
@@ -263,13 +266,65 @@ func _test_render() -> void:
 		var p: Vector2i = m["pixel"]
 		if p.x < -64 or p.y < -64 or p.x > 256 or p.y > 256:
 			out_of_frame += 1
-	_ok("chaque region pose son icone de relief",
+	_ok("chaque region pose son marqueur",
 			marks.size() >= 9, "%d marqueurs" % marks.size())
+	var sans_nom: int = 0
+	for m: Dictionary in marks:
+		if m.has("zone") and String(m.get("name", "")) == "":
+			sans_nom += 1
+	_ok("chaque region de la vue porte un nom", sans_nom == 0,
+			"%d region(s) sans nom" % sans_nom)
 	_ok("les marqueurs tombent dans le cadre", out_of_frame == 0,
 			"%d hors cadre" % out_of_frame)
 	_ok("les villages viennent des elements de tuile",
 			icons.has(CWWorldMap.ICON_VILLAGE),
 			str(icons))
+
+
+# -- 4bis. Les teintes de la carte --------------------------------------------
+
+func _test_teintes() -> void:
+	print("[carte : les teintes]")
+
+	# **La carte a sa propre table depuis le 2026-09-12**, indexee par biome et
+	# non par matiere de surface. Elle recopiait celle du terrain, ou la neige
+	# (125, 181, 199) et l'eau (42, 200, 252) sont deux cyans clairs : une
+	# Snowlands cotiere avait la couleur de la mer qui la borde.
+	#
+	# Ce qu'on verifie ici est **la seule chose qu'une table de legende doive
+	# tenir** : que ses entrees se distinguent les unes des autres. Aucun test
+	# ne peut dire qu'une couleur est jolie ; celui-ci dit qu'elle est lisible,
+	# et c'est ce qui a manque pendant six jours.
+	var pires: String = ""
+	var pire: float = 1e9
+	for a in CWBiome.all():
+		for b in CWBiome.all():
+			if a >= b:
+				continue
+			var ca: Color = CWWorldMap.teinte_de(a)
+			var cb: Color = CWWorldMap.teinte_de(b)
+			# Distance dans le cube RVB, ponderee comme l'oeil : le vert compte
+			# double du rouge, le bleu moitie moins. C'est la ponderation de la
+			# luminance, la plus grossiere qui ne se trompe pas de sens.
+			var d: float = sqrt(2.0 * pow(ca.r - cb.r, 2.0)
+					+ 4.0 * pow(ca.g - cb.g, 2.0) + pow(ca.b - cb.b, 2.0))
+			if d < pire:
+				pire = d
+				pires = "%s / %s" % [CWBiome.name_of(a), CWBiome.name_of(b)]
+	# 0,45 : la neige et l'eau de la palette du terrain rendaient 0,42 par cette
+	# mesure, et c'est le couple qui a motive la demande. Le seuil est donc pose
+	# juste au-dessus de ce qui ne marchait pas.
+	_ok("les six teintes de carte se distinguent deux a deux", pire > 0.45,
+			"le couple le plus proche est %s, a %.3f" % [pires, pire])
+	print("     couple le plus proche : %s, distance %.3f" % [pires, pire])
+
+	# Et le cas nomme par la demande, verifie en clair : la neige et l'ocean.
+	var neige: Color = CWWorldMap.teinte_de(CWBiome.SNOWLANDS)
+	var ocean: Color = CWWorldMap.teinte_de(CWBiome.OCEANS)
+	_ok("la neige et l'ocean ne se confondent plus",
+			absf(neige.get_luminance() - ocean.get_luminance()) > 0.4,
+			"clartes %.2f et %.2f" % [neige.get_luminance(),
+					ocean.get_luminance()])
 
 
 # -- 5. Les noms --------------------------------------------------------------

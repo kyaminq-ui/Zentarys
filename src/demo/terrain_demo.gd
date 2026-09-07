@@ -299,6 +299,15 @@ func _read_cmdline() -> void:
 			"--carte":
 				if not world_map.is_open():
 					world_map.toggle(_world_position())
+			# Le nombre de zones de la carte, de 3 a 9. C'est `+`/`-` au
+			# clavier ; l'avoir en argument est ce qui permet de capturer la
+			# carte **dense**, qui est le cas ou les noms se marchent dessus et
+			# donc le seul qui se juge.
+			"--zones":
+				if i + 1 < args.size():
+					i += 1
+					world_map.zoom(int(args[i]) - world_map.zones(),
+							_world_position())
 			# L'heure, dans [0, 1) : 0 minuit, 0,25 lever, 0,5 midi, 0,75
 			# coucher. C'est le seul moyen de capturer une aube sans attendre
 			# neuf minutes qu'elle arrive, et donc de la regler.

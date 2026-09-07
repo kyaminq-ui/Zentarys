@@ -185,6 +185,19 @@ static func at(height: float, temperature: float, humidity: float,
 		sea_level: int) -> int:
 	if height - float(sea_level) < OCEAN_DEPTH:
 		return OCEANS
+	return of_climate(temperature, humidity)
+
+
+## **Les cinq biomes de climat, sans la regle d'ocean.** Point unique de la
+## partition du carre (temperature, humidite) : `at` l'appelle apres avoir
+## tranche l'ocean sur l'altitude, et la carte l'appelle directement — elle
+## decide l'ocean autrement, sur le drapeau du site et non sur une colonne.
+##
+## Les deux ecritures existaient en une seule jusqu'au 2026-09-12, et la carte
+## devait alors passer une altitude bidon pour obtenir la moitie qui
+## l'interessait. Une altitude bidon dans un appel est ce qui finit par etre
+## lue pour de vrai.
+static func of_climate(temperature: float, humidity: float) -> int:
 	if temperature < SNOW_T:
 		return SNOWLANDS
 	if temperature >= LAVA_T and humidity < HUMID_H:

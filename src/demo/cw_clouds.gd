@@ -63,13 +63,20 @@ const LOT: Array[Dictionary] = [
 ]
 
 ## Cote d'une cellule de ciel, en blocs. C'est l'espacement moyen de deux
-## nuages : a 220 blocs pour des masses de 35 a 90, le ciel est garni sans etre
-## bouche, et l'horizon en montre une dizaine.
-const MAILLE: int = 220
+## nuages, et il suit la taille du lot : une cellule plus petite que le plus
+## grand nuage qu'elle peut porter ferait un **plafond continu**, ce qui est
+## exactement ce qu'un ciel ne doit pas etre.
+##
+## Le lot a grandi le 2026-09-12 — le voile fait 105 blocs de large au lieu de
+## 76 —, et la gigue d'instance le porte a 2,6 fois, soit 273 blocs. La maille
+## passe donc de 220 a 320 : le plus large des nuages tient dans sa cellule avec
+## de l'air autour, et le nombre de nuages a l'ecran ne change pas puisque c'est
+## la portee en *cellules* qui le fixe.
+const MAILLE: int = 320
 
-## Portee, en cellules. Onze par onze : a 1 210 blocs, un nuage passe sous le
-## `far` de la camera (2 048) et reste au-dessus du bord du terrain charge, donc
-## le ciel ne s'arrete pas la ou le sol s'arrete.
+## Portee, en cellules. Onze par onze : a 1 760 blocs depuis que la maille vaut
+## 320, un nuage passe sous le `far` de la camera (2 048) et reste au-dessus du
+## bord du terrain charge, donc le ciel ne s'arrete pas la ou le sol s'arrete.
 const PORTEE: int = 5
 
 ## Altitude de la base des nuages, en blocs, et l'etalement du tirage.
