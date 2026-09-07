@@ -1,8 +1,8 @@
 class_name CWDaylight
 extends Node3D
 
-## Le ciel, le soleil, les nuages et le brouillard — et le cycle jour/nuit qui
-## les fait tous varier ensemble.
+## Le ciel, le soleil et le brouillard — et le cycle jour/nuit qui les fait
+## varier ensemble.
 ##
 ## -- Un seul point d'entree, et c'est la seule chose a retenir -----------------
 ##
@@ -15,6 +15,15 @@ extends Node3D
 ## brouillard bleu** — et le defaut ne se verrait qu'a l'aube, c'est-a-dire
 ## rarement et tard. Toute grandeur qui depend de l'heure se calcule donc dans
 ## cette fonction, ou nulle part.
+##
+## > **Et c'est pourquoi les nuages n'apparaissent plus ici.** On y trouvait
+## > `cloud_lit`, `cloud_shade` et `cloud_cover`, du temps ou les nuages etaient
+## > un bruit fractal dans le ciel : une couleur simulee a la main devait bien
+## > se regler quelque part, et cet endroit-ci etait le bon. Depuis qu'ils sont
+## > des **modeles voxels instancies** (`CWClouds`), leur teinte est celle du
+## > soleil que cette fonction regle deja — donc la regle tient toujours, sans
+## > une ligne pour la porter. Ajouter ici un second reglage de teinte des
+## > nuages rouvrirait exactement le defaut que la regle interdit.
 ##
 ## Le repere : `0.0` minuit, `0.25` lever, `0.5` midi, `0.75` coucher.
 ##
@@ -47,10 +56,19 @@ extends Node3D
 
 const SKY_SHADER: String = "res://src/demo/cw_sky.gdshader"
 
-## Duree d'un jour complet, en secondes de jeu. Douze minutes : assez lent pour
-## qu'une partie ne clignote pas, assez rapide pour qu'on voie une aube sans
-## attendre. `--jour n` la change, `--heure h` se pose a une heure donnee.
-const DAY_LENGTH: float = 720.0
+## Duree d'un jour complet, en secondes de jeu.
+##
+## **Quarante minutes depuis le 2026-09-11, contre douze auparavant.** Douze
+## minutes etaient le reglage d'un cycle qu'on venait d'ecrire et qu'on voulait
+## voir tourner ; a l'usage, le soleil traversait le ciel le temps d'aller
+## regarder un biome, et une capture prise trois minutes apres une autre n'etait
+## plus a la meme heure. Vingt minutes de jour et vingt de nuit laissent une
+## traversee de vallee se faire a heure a peu pres constante.
+##
+## Ce que le ralentissement aurait coute sans les bascules : rien ne se regle a
+## l'oeil sur un cycle lent — attendre une aube prendrait dix minutes. C'est
+## exactement pourquoi `--heure h` et les touches F2/F3/F4 existaient avant lui.
+const DAY_LENGTH: float = 2400.0
 
 ## Pas d'un coup de touche sur l'heure : une heure de jeu sur vingt-quatre.
 ##
@@ -84,18 +102,6 @@ const HORIZON_TWILIGHT: Color = Color(0.95, 0.48, 0.26)
 const GROUND_DAY: Color = Color(0.30, 0.31, 0.33)
 const GROUND_NIGHT: Color = Color(0.04, 0.05, 0.07)
 
-const CLOUD_LIT_DAY: Color = Color(1.00, 0.98, 0.95)
-const CLOUD_LIT_NIGHT: Color = Color(0.18, 0.21, 0.30)
-const CLOUD_SHADE_DAY: Color = Color(0.55, 0.60, 0.70)
-const CLOUD_SHADE_NIGHT: Color = Color(0.07, 0.09, 0.14)
-## Les nuages prennent la couleur du soleil rasant : c'est ce qui fait un ciel
-## d'aube, bien plus que la teinte de l'horizon.
-const CLOUD_TWILIGHT: Color = Color(1.00, 0.60, 0.42)
-
-## Couverture nuageuse. Une constante pour l'instant : la faire varier demande
-## un champ de temps, qui est un autre sujet.
-@export_range(0.0, 1.0, 0.01) var cloud_cover: float = 0.45
-
 # -- L'ambiante et le brouillard ----------------------------------------------
 
 ## Ambiante prise du ciel. A 0,45 de jour, les faces detournees du soleil gardent
@@ -127,8 +133,12 @@ const FOG_DENSITY_NIGHT: float = 0.0026
 ## la meme couleur que le ciel qu'il cachait. **Un defaut qui se voit le jour et
 ## pas la nuit ressemble a un bug de shader ; c'en etait un de reglage.**
 ##
-## A 0,30, la bande d'horizon se fond encore dans le lointain — c'est tout ce
-## qu'on lui demandait — et le haut du ciel garde ses nuages.
+## A 0,18, la bande d'horizon se fond encore dans le lointain — c'est tout ce
+## qu'on lui demandait — et le haut du ciel garde son degrade.
+##
+## > C'est aussi la mesure de ce que les nuages voxels devaient echapper : le
+## > ciel ne prend que 18 % du brouillard, un objet en prendrait 100 %. D'ou
+## > `CWPalette.build_cloud_material`, et son `disable_fog`.
 const FOG_SKY_AFFECT: float = 0.18
 
 ## Diffusion du soleil dans le brouillard : le halo chaud autour de l'astre
@@ -254,12 +264,6 @@ func applique() -> void:
 		_sky_material.set_shader_parameter("horizon_color", horizon)
 		_sky_material.set_shader_parameter("ground_color",
 				GROUND_NIGHT.lerp(GROUND_DAY, jour))
-		_sky_material.set_shader_parameter("cloud_lit",
-				CLOUD_LIT_NIGHT.lerp(CLOUD_LIT_DAY, jour)
-						.lerp(CLOUD_TWILIGHT, crepuscule * 0.7))
-		_sky_material.set_shader_parameter("cloud_shade",
-				CLOUD_SHADE_NIGHT.lerp(CLOUD_SHADE_DAY, jour))
-		_sky_material.set_shader_parameter("cloud_cover", cloud_cover)
 		# Le halo suit l'energie du soleil, sinon il reste un disque blanc
 		# accroche dans un ciel de nuit.
 		_sky_material.set_shader_parameter("sun_strength",

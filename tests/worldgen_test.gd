@@ -33,6 +33,7 @@ func _initialize() -> void:
 	_test_edits()
 	_test_light()
 	_test_map()
+	_test_sky()
 	_test_palette()
 	_bench()
 	_write_previews()
@@ -410,6 +411,11 @@ func _test_light() -> void:
 
 func _test_map() -> void:
 	CWMapTest.new().run(self)
+
+
+## La couche du ciel : le lot de nuages et sa pose (2026-09-11).
+func _test_sky() -> void:
+	CWSkyTest.new().run(self)
 
 
 # -- 5. Generateur voxel : cache de colonnes et arret -------------------------

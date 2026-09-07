@@ -49,6 +49,7 @@ les donne toutes les trois.
 | **flore : herbes et fleurs** | **6** | décision de rendu, 2026-09-06 — voir ci-dessous |
 | **flore : buissons, cactus, champignons** | **4** | idem |
 | arbres, filons | **1** | structurelle : le tronc est écrit dans le terrain |
+| **nuages** | **1** | ce sont des objets du monde, pas du décor posé dessus |
 
 **La flore en a deux, et ce n'est pas un flottement.** Quatre voxels par bloc va
 bien à ce qui est une *masse* — un buisson, un cactus se lisent à n'importe
@@ -324,6 +325,28 @@ signale tout index sorti des plages autorisées.
   La plage des index, elle, ne se paramètre pas et n'a pas bougé. Le lot
   emploie en plus la rampe **148 – 155**, celle des troncs et de l'écorce, qui
   n'avait aucun usage dans la flore.
+* **Les trois nuages** (2026-09-11) sont le quatrième lot généré, sous
+  `assets/models/nuages/` : `tools/blender/generer_nuages.py`. Ils sont à la
+  grille du terrain — 1 voxel = 1 bloc — mais **ils ne sont ni estampés ni
+  posés au sol** : ils sont instanciés dans le ciel par `CWClouds`, à 420 blocs
+  d'altitude, et leur enveloppe est 24 blocs de haut sur 32 de rayon.
+
+  ```
+  "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" --background       --factory-startup --python tools/blender/generer_nuages.py
+  ```
+
+  **C'est le seul lot depuis la flore qui ait vraiment besoin de `bpy`**, et
+  c'est l'exception qui confirme la règle du paragraphe précédent : à un voxel
+  par bloc une métaballe ne rend rien pour un houppier de six blocs, mais un
+  nuage en fait cinquante de large, et une union de sphères y donnerait des
+  bosses recousues là où il faut une masse creusée entre ses lobes.
+
+  Deux points propres à ce lot. **La rampe est 240 – 243**, le haut de la plage
+  effets : c'est la seule du nuancier qui aille du blanc au bleu clair, et les
+  autres blancs — neige, glace, roche claire — sont des matières de terrain
+  qu'on ne pourrait plus régler séparément. **Le dessous est plat, et il est
+  coupé** : la masse est posée à cheval sur `z = 0` et la grille jette ce qui
+  passe dessous, ce qui donne la base d'un cumulus sans avoir à la dessiner.
 * Gabarit du `.vox` : **libre**, le plus juste possible autour de la matière.
   16³ suffit à presque tout ; un cactus de 3,5 blocs demande 48³. La matière est
   extraite au chargement et le vide jeté, donc un tampon large ne coûte rien —

@@ -15,66 +15,72 @@ invariants, les pièges, les décisions ouvertes.
 
 ## 0. La prochaine session — **cinq demandes, 2026-09-10 au soir**
 
-> **Rien n'en est commencé.** Le programme précédent — les quatre demandes du
-> 2026-09-09 — est entièrement traité ; ce qu'il a rendu est plus bas, et le
-> récit est dans le journal de `docs/ROADMAP.md`.
+> **La n° 1 est faite (2026-09-11), les quatre autres ne sont pas commencées.**
+> Le programme précédent — les quatre demandes du 2026-09-09 — est entièrement
+> traité ; ce qu'il a rendu est plus bas, et le récit est dans le journal de
+> `docs/ROADMAP.md`.
 
 L'ordre ci-dessous est celui d'exécution, et il est celui qui a été demandé : le
 C++ vient en dernier et **seulement si le maillage ne suffit pas**.
 
 ---
 
-### 1. Les nuages deviennent des modèles, et le temps ralentit
+### 1. Les nuages deviennent des modèles, et le temps ralentit — **fait**
 
 *Supprimer les nuages et les remplacer par des modèles générés par Blender via
 bpy, dessinés à la taille du terrain — 1 voxel = 1 bloc —, deux ou trois
 variantes, placés dans le ciel. Faire défiler le temps moins vite.*
 
-**Le ralentissement est une ligne** : `CWDaylight.DAY_LENGTH`, 720 s aujourd'hui.
-`--jour n` et les touches F2/F3/F4 existent justement pour qu'un cycle lent ne
-rende pas le réglage pénible.
+**Fait le 2026-09-11.** Trois modèles (`assets/models/nuages/`, 34 × 24 × 14 à
+56 × 38 × 16 blocs), un `CWClouds` qui les pose, le shader de nuages retiré, et
+`DAY_LENGTH` de 720 s à **2 400 s**. La couche de nuages en bruit fractal est
+partie entière : le fbm, ses cinq octaves, ses uniformes, et les six constantes
+`CLOUD_*` de `CWDaylight`.
 
-**Le remplacement, lui, change la nature de la chose, et c'est là qu'est le
-travail.** Les nuages actuels sont dans le **ciel** — un shader, à distance
-infinie, sans position. Des modèles voxels sont des **objets à distance finie**.
-Six conséquences, et les trois premières sont des pièges :
+**Les cinq pièges annoncés se sont tous vérifiés, et deux ont demandé une
+capture pour être vus.**
 
-* ⚠️ **le brouillard va les manger.** `fog_sky_affect` ne vaut que 0,18, donc le
-  ciel y échappe presque — mais un objet est de la géométrie, et il prend le
-  brouillard plein. À 0,0016 de densité, un nuage à quatre cents blocs est un
-  aplat gris. Il faudra soit les poser assez près, soit leur donner un matériau
-  qui ignore le brouillard, et **c'est à décider avant de dessiner quoi que ce
-  soit** ;
-* ⚠️ **ils ne doivent pas être écrits dans les données voxels.** Un nuage estampé
-  serait creusable, il casserait le chemin rapide « bloc entièrement vide » de
-  `_generate_block` sur toute la hauteur du ciel, et il faudrait le faire
-  connaître à `generated_voxel` (invariant n° 39). Ils sont **instanciés**, comme
-  la flore et les houppiers ;
-* ⚠️ **la palette est pleine.** Un modèle ne peut employer que des index
-  existants, et les générateurs refusent le reste à l'écriture. Les blancs
-  disponibles sont la neige (7), la glace (8) et le clair de la roche nue
-  (14-15). À trancher : ça suffit, ou il faut une rampe — et déplacer une
-  frontière de plage coûte une repasse de tout un lot (invariant n° 31) ;
-* **les ombres.** Le soleil porte des ombres : un nuage de géométrie en projette
-  une sur le terrain. C'est peut-être exactement ce qu'on veut — c'était noté
-  comme une suite possible du shader — ou une tache dure de quarante blocs. À
-  regarder en capture, et à couper si besoin (`cast_shadow` par instance) ;
-* **la lumière est gratuite et juste** : un nuage voxel éclairé par le soleil
-  rasant prend le liseré chaud de l'aube tout seul. C'est ce que le shader
-  simulait à la main ;
-* **où ça vit.** Pas dans `CWDaylight`, qui décide *l'heure* : un `CWClouds` à
-  part, qui pose et fait dériver les instances. `CWDaylight` continue de teinter
-  leur matériau depuis `applique` — **la règle du point d'entrée unique reste**,
-  sinon on retrouve l'aube au ciel rose et aux nuages bleus.
+* **le brouillard.** Réglé comme prévu par `disable_fog` sur le matériau
+  (`CWPalette.build_cloud_material`), et l'argument est mesuré : le ciel ne
+  prend que 18 % du brouillard, un objet en prendrait 100 %, et à 0,0016 de
+  densité un nuage à mille blocs serait un aplat gris ;
+* ⚠️ **la première capture rendait des soucoupes bleu marine**, et ce n'était
+  ni la palette ni l'éclairage. On regarde un nuage **par en dessous**, et un
+  dessous ne reçoit que l'ambiante — 0,45 d'une teinte de ciel bleue. La cause
+  est que **la matière était fausse** : un nuage est traversé par la lumière.
+  `backlight` dit exactement cela, et il le dit proportionnellement au soleil,
+  donc le nuage reste sombre la nuit — ce qu'une émission n'aurait pas fait ;
+* ⚠️ **la deuxième rendait des méduses turquoise.** La rampe 240-247 va jusqu'à
+  un bleu de ciel franc, et c'est le bas de la rampe qu'on voit d'en dessous ;
+  il se cumulait avec l'ambiante. Elle s'arrête à **243**. *Les deux défauts
+  étaient le même mécanisme vu deux fois, et aucun test ne pouvait les voir* ;
+* **la palette n'était pas pleine, et personne n'avait regardé au bon endroit.**
+  Le relevé annonçait la neige, la glace et le clair de la roche nue. Il y avait
+  mieux : `_ramp(c, 240, 8, blanc, bleu clair)`, la plage **effets**, jamais
+  peinte, et la seule du nuancier qui ne soit pas une matière. Aucune frontière
+  n'a bougé, aucun lot n'a été repassé ;
+* **les ombres sont coupées** (`CWClouds.cast_shadows`, à faux). Une tache dure
+  de quarante blocs lit comme un défaut de rendu ; la bascule reste ;
+* **la lumière est gratuite et juste, et c'est vérifié en capture.** À 6 h 28,
+  les nuages prennent le soleil rasant sur leur flanc et sortent crème sur un
+  ciel violet, sans une ligne de code de teinte. C'est ce que `CLOUD_TWILIGHT`
+  simulait à la main.
 
-> **Sur bpy, une nuance que le dépôt a déjà tranchée dans l'autre sens.** Les
-> lots à 1 voxel = 1 bloc — arbres, filons — sont en **Python pur** parce qu'à
-> cette maille Blender n'apporte rien : on dessine des disques et des dômes, pas
-> des surfaces. Mais un nuage est une masse organique, et c'est précisément là
-> que les métaballes de `flore_blender.py` avaient gagné leur place. **C'est donc
-> le premier lot depuis la flore où bpy se justifie vraiment** — à condition de
-> vérifier que la soudure tient (invariant n° 34 : un modèle est d'un seul
-> tenant, sinon les morceaux flottent).
+**Un manque d'outillage est tombé avec** : `--ici`, `--vers` et `--altitude`
+savent tous viser un point du **sol**, et rien ne savait regarder en l'air.
+`--regard d` pose l'assiette de la caméra en degrés — sans elle, cadrer une
+couche du ciel obligeait à monter la caméra à son altitude, c'est-à-dire à la
+regarder d'ailleurs que d'où on la verra.
+
+**Ce qui reste ouvert de ce côté :**
+
+- **la couverture est toujours une constante** (`CWClouds.cover`, 0,45). La
+  faire varier demande un champ de temps, qui est un autre sujet ;
+- **les nuages ne portent pas d'ombre**, et c'est l'arbitrage ci-dessus, pas un
+  manque de code : une ligne le rallume ;
+- **la dérive est une translation d'ensemble.** Deux nuages ne se croisent
+  jamais. Ça ne se voit pas, et le jour où ça se verra, ce sera une vitesse par
+  altitude.
 
 ### 2. La collision du feuillage — **tranchée : oui**
 
@@ -570,6 +576,12 @@ python tools/blender/generer_flore.py
 # 1.12 : à 1 voxel = 1 bloc, Blender n'apporte rien. Mêmes garde-fous.
 python tools/blender/generer_arbres.py
 
+# Regénération du lot de nuages (3 .vox, ~10 s). **Le seul lot qui ait vraiment
+# besoin de bpy** : à un voxel par bloc une métaballe ne rend rien pour un
+# houppier de six blocs, mais un nuage en fait cinquante de large, et c'est
+# exactement là qu'une union de sphères donne des bosses recousues.
+"C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" --background --factory-startup --python tools/blender/generer_nuages.py
+
 # Regénération des neuf filons (~1 s). Python pur : à 1 voxel = 1 bloc, Blender
 # n'apporte rien. N'importe quel Python 3 fait l'affaire, celui de Blender aussi.
 "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" --background --factory-startup --python tools/blender/generer_filons.py
@@ -583,7 +595,7 @@ python tools/blender/generer_arbres.py
 ./godot.windows.editor.double.x86_64.exe --path . scenes/terrain_demo.tscn \
     --resolution 1600x900 -- --biome 7 --shot 32 --vue 256
 #   options : --sans-arbres, --sans-flore, --sans-chemins, --sans-falaise,
-#   pour isoler une couche. Les deux dernieres servent aussi a mesurer ce
+#   --sans-nuages, pour isoler une couche. Les deux dernieres servent aussi a mesurer ce
 #   qu'elle coute au chargement. --carte ouvre la carte du monde au demarrage.
 #   --fils n force le nombre de fils de generation : c'est le reglage le plus
 #   rentable du projet, et son optimum est propre a chaque machine.
@@ -595,6 +607,10 @@ python tools/blender/generer_arbres.py
 #   --vers x z oriente la camera vers un point, --altitude n la leve : sans les
 #   deux, une capture d'un objet pose a cent blocs est une capture de ce qui se
 #   trouvait dans l'autre sens.
+#   --regard d pose l'assiette de la camera, en degres au-dessus de l'horizon.
+#   Les trois precedentes savent viser un point du **sol** ; celle-ci est la
+#   seule qui sache regarder en l'air, et c'est ce qu'il faut pour cadrer une
+#   couche du ciel depuis l'endroit d'ou on la verra jouer.
 
 # Profil du chargement, poste par poste : champ, bruit, elements, falaise,
 # chemins, dispersions. C'est l'etape 1 de toute optimisation, et le seul
@@ -649,7 +665,7 @@ biome, **F2** fige l'heure, **F3**/**F4** reculent ou avancent d'une heure,
 ## 3. État
 
 **Jalon 1 (le monde) : 1.1 à 1.16 sont portés, testés et vus en jeu.** Suite de
-validation : **379 vérifications, 0 échec**, ~25 s. Le détail de chaque jalon est
+validation : **403 vérifications, 0 échec**, ~25 s. Le détail de chaque jalon est
 dans `docs/ROADMAP.md` ; ce qui suit est ce qu'il faut savoir *avant de toucher
 au code*.
 
@@ -744,10 +760,13 @@ src/worldgen/
   cw_world_map.gd          carte : dalles de Voronoï, découverte, teintes (1.10)
   cw_region_name.gd        noms de région : deux tables de vingt syllabes (1.10)
 src/demo/terrain_demo.gd     scène de démonstration, touches 1-6 par biome
+src/demo/cw_clouds.gd        la couche de nuages : une grille de ciel, un tirage
+                             pur par cellule, une derive d'ensemble (2026-09-11)
 src/demo/cw_daylight.gd      le cycle jour/nuit : un scalaire d'heure, et une
                              seule fonction qui en déduit soleil, ciel, nuages,
                              ambiante et brouillard
-src/demo/cw_sky.gdshader     le ciel : dégradé, nuages en bruit fractal, soleil
+src/demo/cw_sky.gdshader     le ciel nu : dégradé à trois bandes et soleil. Les
+                             nuages en sont partis le 2026-09-11
 src/demo/cw_demo_map.gd      l'état de la carte du monde : rendu de fond,
                              découverte, sauvegarde (1.10)
 src/demo/scale_board.gd      gabarit d'échelle : mires, silhouette, modèles
@@ -762,6 +781,8 @@ tests/edit_test.gd           règles d'édition, requête ponctuelle, persistanc
 tests/light_test.gd          les deux passes, l'atténuation, les cases à repeindre (1.9)
 tests/map_test.gd            échelle, découverte, puzzle, rendu, noms (1.10)
 tests/relief_test.gd         chemins, levées, tramage (1.16)
+tests/sky_test.gd            le lot de nuages, la pureté du tirage, et les deux
+                             accords que rien d'autre ne tient (2026-09-11)
 tools/export_palette.gd      régénère assets/palette/* depuis CWPalette
 tools/biome_stats.gd         répartition des biomes et des matières, mesurée (1.12)
 tools/preview_features.gd    gros plan ombré, avec et sans la couche d'éléments
@@ -780,6 +801,7 @@ tools/blender/               générateurs des lots de modèles
   arbres_blocs.py              formes à la maille du bloc : disques, dômes, palmes
   generer_arbres.py            le catalogue des arbres, à 1 voxel = 1 bloc
   generer_filons.py            les 9 filons, à 1 voxel = 1 bloc
+  generer_nuages.py            les 3 nuages, à 1 voxel = 1 bloc, par métaballes
 docs/ROADMAP.md              la feuille de route, le journal, et le récit des sessions
 docs/ASSETS.md               l'échelle d'authoring et ce qu'il faut produire par biome
 docs/systems/01..05          les analyses de rétro-ingénierie
@@ -787,6 +809,7 @@ assets/palette/              palette de projet + PALETTE.md
 assets/models/flore/<biome>/   38 modèles, un dossier par biome (six)
 assets/models/arbres/<biome>/  39 modèles d'arbres, à la maille du bloc
 assets/models/filons/          9 filons, estampables (1 voxel = 1 bloc)
+assets/models/nuages/          3 nuages, instanciés dans le ciel (1 voxel = 1 bloc)
 assets/models/                 MODELS.md (échelle, palette et conventions)
 docs/images/                 gabarit, carte et composition de flore, en jeu
 ```
@@ -1148,6 +1171,21 @@ docs/images/                 gabarit, carte et composition de flore, en jeu
     ramené à **55,4 s** le 2026-09-10, et le réglage du pool à **42,0 s** le
     même jour. Toute mesure de coût citée ici porte donc sa date, et une date qui
     a plus d'une session vaut comme ordre de grandeur, pas comme référence.
+
+52. **Un nuage appartient au ciel, et c'est le seul réglage de rendu du dépôt
+    qui diverge de celui du terrain.** Tout ce qui est instancié partage le
+    matériau du terrain — même palette, même mailleur, même rugosité —, et c'est
+    la condition pour que les grilles lisent comme un seul monde. Les nuages en
+    dérogent sur **deux points, et les deux ont une raison mécanique** :
+    `disable_fog`, parce que le brouillard est réglé pour cacher le bord d'une
+    vue de 384 blocs **au sol** et qu'un objet à mille blocs y deviendrait un
+    aplat gris quand le ciel derrière lui n'en prend que 18 % ; et `backlight`,
+    parce qu'un nuage est **traversé** par la lumière et qu'un dessous qui ne
+    reçoit que l'ambiante sort bleu marine — constaté à la première capture du
+    2026-09-11. Ces deux-là suffisent, et **il ne doit pas s'en ajouter un
+    troisième** : la teinte, elle, continue de venir du soleil que
+    `CWDaylight.applique` règle pour tout le monde. `tests/sky_test.gd` compare
+    les deux matériaux terme à terme pour cette raison.
 
 ## 5. Pièges connus
 

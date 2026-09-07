@@ -34,7 +34,7 @@ s'ouvre pas proprement. Il permet de piloter l'éditeur par MCP.
 ## Les quatre commandes qui servent tous les jours
 
 ```bash
-# La suite de validation — 379 vérifications, ~25 s. À lancer après toute
+# La suite de validation — 403 vérifications, ~25 s. À lancer après toute
 # modification du monde. C'est le filet, et il tient tous les contrats
 # inter-fichiers que rien d'autre ne tient.
 ./godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd
@@ -44,6 +44,8 @@ s'ouvre pas proprement. Il permet de piloter l'éditeur par MCP.
 # --biome : 0 Greenlands, 1 Snowlands, 2 Deserts, 3 Jungles, 4 Lava Lands,
 # 5 Oceans. --shot est le délai avant la capture, le temps que le terrain
 # charge ; la session se ferme ensuite. Le PNG sort dans user://shots.
+# --regard d pose l'assiette de la caméra en degrés : c'est la seule option qui
+# sache regarder en l'air, et donc la seule qui cadre une couche du ciel.
 ./godot.windows.editor.double.x86_64.exe --path . scenes/terrain_demo.tscn \
     --resolution 1600x900 -- --biome 0 --shot 34 --vue 256
 
@@ -57,8 +59,9 @@ s'ouvre pas proprement. Il permet de piloter l'éditeur par MCP.
 # Échap pour rendre la souris puis quitter.
 ./godot.windows.editor.double.x86_64.exe --path . scenes/terrain_demo.tscn
 
-# Deux bascules qui servent souvent, et qui n'existent que pour la capture :
+# Trois bascules qui servent souvent, et qui n'existent que pour la capture :
 #   --heure h   se pose à une heure du cycle (0 minuit, 0,5 midi) et le fige
+#   --regard d  l'assiette de la caméra, en degrés au-dessus de l'horizon
 #   --fils n    force le nombre de fils de génération — le réglage le plus
 #               rentable du projet, et son optimum est propre à la machine
 ```
@@ -68,7 +71,7 @@ d'assets, aperçus de carte, générateurs de modèles — est en `nextsteps.md`
 
 ## Les cinq invariants qui coûtent le plus cher
 
-La liste complète est en `nextsteps.md` §4, et elle compte cinquante et une
+La liste complète est en `nextsteps.md` §4, et elle compte cinquante-deux
 entrées. Ces cinq-là sont ceux dont l'oubli coûte une session entière.
 
 1. **Les constantes du bruit et du LCG sont porteuses** (n° 1). Les valeurs

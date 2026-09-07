@@ -706,6 +706,45 @@ static func build_opaque_material() -> StandardMaterial3D:
 	return mat
 
 
+## Le materiau des nuages : celui du terrain, **moins le brouillard**.
+##
+## -- La seule difference, et elle est structurelle -----------------------------
+##
+## Tout ce que le projet instancie partage le materiau du terrain, et c'est la
+## condition pour que les deux grilles lisent comme un seul monde. Les nuages en
+## sont la premiere exception, et il fallait qu'elle ait une raison mecanique :
+## le brouillard est regle pour cacher le bord de la vue **au sol**, a
+## 0,0016 de densite pour 384 blocs. Un nuage vit a quatre cents blocs
+## d'altitude et jusqu'a mille deux cents de distance : il rendrait un aplat
+## gris, exactement ce que `fog_sky_affect = 0,18` epargne au ciel derriere lui.
+##
+## Le nuage est donc traite comme ce qu'il est — une piece du ciel qui a une
+## position — et non comme du relief lointain. **C'est le seul reglage de rendu
+## du depot qui diverge de celui du terrain, et il ne doit pas en appeler
+## d'autres** : la teinte, elle, continue de venir du soleil, que
+## `CWDaylight.applique` regle pour tout le monde.
+static func build_cloud_material() -> StandardMaterial3D:
+	var mat: StandardMaterial3D = build_opaque_material()
+	mat.disable_fog = true
+	# -- Et le contre-jour, qui n'est pas de la coquetterie non plus ----------
+	#
+	# La premiere capture (2026-09-11) rendait des **soucoupes bleu marine** :
+	# on regarde un nuage par en dessous, et un dessous ne recoit que
+	# l'ambiante — 0,45 d'une teinte de ciel. La face bleutee de la rampe s'y
+	# assombrissait jusqu'au navy, et la masse lisait comme un objet metallique
+	# et non comme de la vapeur.
+	#
+	# Ce n'est pas un defaut d'eclairage : c'est que **la matiere est fausse**.
+	# Un nuage est traverse par la lumiere, et son dessous est eclaire par ce
+	# qui l'a franchi. `backlight` dit exactement cela au moteur — de la lumiere
+	# ajoutee sur la face opposee a la source —, et il le dit *proportionnellement
+	# au soleil* : le nuage reste sombre la nuit, ce qu'une emission n'aurait pas
+	# fait. C'est le seul terme de ce depot qui decrive de la translucidite.
+	mat.backlight_enabled = true
+	mat.backlight = Color(0.62, 0.66, 0.74)
+	return mat
+
+
 ## Altitude sous laquelle une cuvette de Lava Lands est remplie de magma : un
 ## lac de lave au fond d'un bassin.
 ##

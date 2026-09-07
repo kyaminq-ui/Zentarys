@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://crh7x2iln11g2"
+path="res://.godot/imported/cumulus_grand.vox-77c129f2a5bf4d2caa0fb86d7217670a.tscn"
+
+[deps]
+
+source_file="res://assets/models/nuages/cumulus_grand.vox"
+dest_files=["res://.godot/imported/cumulus_grand.vox-77c129f2a5bf4d2caa0fb86d7217670a.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

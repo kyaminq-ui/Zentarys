@@ -41,6 +41,16 @@ INDEX_VALIDES = frozenset(list(range(1, 12)) + list(range(14, 32))
 # vegetal : un filon vert serait un filon d'emeraude, pas une plante.
 INDEX_FILONS = frozenset([1] + list(range(14, 20)) + list(range(32, 41)))
 
+# Plages autorisees pour un **nuage**. La rampe « effets » 240-247, et rien
+# d'autre : elle va du blanc pur (240) au bleu de ciel clair (247), elle n'etait
+# peinte par personne, et c'est la seule du projet qui ne soit pas une matiere.
+#
+# Le garde-fou vaut ici plus qu'ailleurs : les autres blancs de la palette — la
+# neige (7), la glace (8), le clair de la roche nue (14-15) — sont des matieres
+# de **terrain**. Un nuage qui y puiserait aurait la teinte exacte d'un sommet
+# enneige, et on ne pourrait plus ajuster l'un sans deplacer l'autre.
+INDEX_NUAGES = frozenset(range(240, 248))
+
 # Enveloppe verifiee par tests/flora_test.gd : 4 blocs de haut, 2 de rayon.
 #
 # **La grille du lot de flore est passee de 40/3 a 4 voxels par bloc le

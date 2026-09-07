@@ -120,6 +120,9 @@ var map_overlay: CWMapOverlay
 ## 2026-09-10 : voir `CWDemoMap`.
 var world_map: CWDemoMap
 var daylight: CWDaylight
+## La couche de nuages : des modeles voxels poses dans le ciel. Separee de
+## `CWDaylight`, qui decide l'*heure* et non ce qui flotte dedans.
+var clouds: CWClouds
 ## La recherche du biome le plus proche, derriere les touches 1 a 6 et
 ## `--biome`. Sortie d'ici le 2026-09-10 : voir `CWBiomeSearch`.
 var search: CWBiomeSearch
@@ -259,6 +262,19 @@ func _read_cmdline() -> void:
 				if i + 2 < args.size():
 					look_at_world(Vector2i(int(args[i + 1]), int(args[i + 2])))
 					i += 2
+			# L'assiette de la camera, en degres au-dessus de l'horizon.
+			#
+			# Ajoute le 2026-09-11 avec les nuages, et c'est un manque qu'on
+			# n'avait pas vu : `--ici`, `--vers` et `--altitude` savent tous
+			# viser un point du **sol**, et rien ne savait regarder en l'air.
+			# Une couche du ciel se juge sur une capture comme les autres, et la
+			# seule facon de la cadrer etait de monter la camera a son altitude,
+			# ce qui n'est pas le point de vue depuis lequel on la verra jouer.
+			"--regard":
+				if i + 1 < args.size():
+					i += 1
+					_pitch = deg_to_rad(float(args[i]))
+					camera.rotation = Vector3(_pitch, _yaw, 0.0)
 			# Les deux couches posees au-dessus du champ, isolables une a une :
 			# c'est ce qui permet de mesurer ce que chacune coute au chargement
 			# et de comparer deux captures du meme endroit.
@@ -296,11 +312,18 @@ func _read_cmdline() -> void:
 				if i + 1 < args.size():
 					i += 1
 					daylight.day_length = float(args[i])
+			# La couverture nuageuse : part des cellules de ciel qui portent un
+			# nuage. 0 degage, 1 un nuage par cellule. Elle a change de maison
+			# le 2026-09-11 — elle etait un uniforme du ciel, elle est
+			# maintenant une propriete de la couche.
 			"--nuages":
 				if i + 1 < args.size():
 					i += 1
-					daylight.cloud_cover = clampf(float(args[i]), 0.0, 1.0)
-					daylight.applique()
+					clouds.cover = float(args[i])
+			# Couper la couche, comme `--sans-arbres` : c'est ce qui permet de
+			# comparer deux captures du meme ciel.
+			"--sans-nuages":
+				clouds.enabled = false
 		i += 1
 
 
@@ -498,6 +521,18 @@ func _build_flora() -> void:
 	if terrain != null and terrain.has_method("get_voxel_tool"):
 		trees.set_terrain(terrain.get_voxel_tool())
 	add_child(trees)
+
+	# Les nuages : la troisieme couche instanciee, et la seule qui n'ait pas de
+	# sol a consulter. Elle est montee ici avec les deux autres parce que c'est
+	# le meme geste — un lot de modeles, une grille, une camera —, et pas dans
+	# `CWDaylight`, qui decide l'heure et non ce qui flotte dedans.
+	clouds = CWClouds.new()
+	clouds.name = "Clouds"
+	# Le gabarit d'echelle se lit contre des mires : un ciel garni ne le gene
+	# pas, mais la regle du depot est qu'il ne montre que ce qu'on regle.
+	clouds.enabled = not scale_board
+	clouds.setup(params.world_seed, params.world_origin, camera)
+	add_child(clouds)
 
 
 ## Pose le gabarit d'echelle au sol, devant la camera, et regarde-le.
@@ -866,6 +901,10 @@ func _update_hud() -> void:
 			var ts: Vector2i = trees.stats()
 			lines.append("arbres : %d pieces sur %d cellules de 64%s" % [
 				ts.y, ts.x, "" if trees.enabled else "   (coupee)"])
+		if clouds != null:
+			lines.append("nuages : %d sur %d cellules de %d, couverture %.0f %%%s" % [
+				clouds.count(), (CWClouds.PORTEE * 2 + 1) ** 2, CWClouds.MAILLE,
+				clouds.cover * 100.0, "" if clouds.enabled else "   (coupee)"])
 		if edits != null:
 			lines.append("editions : %d%s   pose : %s   lumiere %.1f ms" % [
 				edits.edit_count,
