@@ -56,16 +56,28 @@ d'authoring dans `docs/ASSETS.md`, et `CLAUDE.md` existe.
 *Correction des potentiels bugs et erreurs, nettoyage du projet, le rendre plus
 modulaire et facile à maintenir.*
 
-La moitié documentaire est faite ; **la moitié code ne l'est pas.** Les cibles
-sont les fichiers qui font plusieurs métiers :
+La moitié documentaire est faite ; **la moitié code est commencée.** Deux
+métiers sont sortis de `terrain_demo.gd` le 2026-09-10 — l'**environnement**
+dans `CWDaylight`, qui est l'endroit où le cycle jour/nuit du n° 3 viendra se
+poser, et la **carte du monde** dans `CWDemoMap`, un métier complet avec son
+rendu de fond et son fichier sur le disque. Le fichier passe de 1 147 à 1 008
+lignes, et une bascule `--carte` évite désormais d'éditer la scène pour
+regarder la carte sans piloter la fenêtre.
+
+Ce qui reste :
 
 | fichier | lignes | métiers mêlés |
 |---|---|---|
-| `src/demo/terrain_demo.gd` | 1 147 | arguments, terrain, environnement, carte, HUD, caméra, captures |
 | `src/worldgen/cw_terrain_field.gd` | 1 117 | altitude, climat, chenaux, étangs, profil de colonne, caches |
-| `src/worldgen/cw_palette.gd` | 1 001 | palette, matières de surface, teintes, tramage |
+| `src/demo/terrain_demo.gd` | 1 008 | arguments, terrain, ATH, caméra, recherche de biome, captures |
+| `src/worldgen/cw_palette.gd` | 1 002 | palette, matières de surface, teintes, tramage |
 | `src/worldgen/cw_path_network.gd` | 946 | graphe de zone, relaxation, profil, franchissements, règle de colonne |
-| `src/worldgen/cw_voxel_generator.gd` | 786 | chemin froid, chemin chaud, troncs estampés |
+| `src/worldgen/cw_voxel_generator.gd` | 797 | chemin froid, chemin chaud, troncs estampés |
+
+Les deux suivants sont **la recherche de biome** (quatre fonctions, six
+variables d'état, un fil du pool — même forme que la carte) et l'**ATH**. Après
+quoi `terrain_demo.gd` ne fera plus que ce que son nom dit : monter la scène et
+lire le clavier.
 
 Deux règles de découpe, et ce sont des règles, pas du goût : **un fichier, une
 décision** ; **une couche ne connaît que celle du dessous** — la chaîne va
@@ -180,9 +192,10 @@ Ce qu'il faut écrire :
 > **Ne pas régler le brouillard avant de savoir quelle distance de vue on vise**,
 > ou le faire deux fois.
 
-**Où ça vit :** pas dans `terrain_demo.gd`, qui fait déjà 1 147 lignes et sept
-métiers. Un nœud à lui — `CWDaylight` ou `CWSky` — et c'est un premier morceau du
-n° 1 ci-dessus.
+**Où ça vit : `src/demo/cw_daylight.gd`, qui existe depuis le 2026-09-10.** Le
+nœud est déjà sorti de `terrain_demo.gd` et son en-tête porte la forme visée et
+les deux pièges ci-dessus. Il ne reste qu'à y écrire le scalaire d'heure et le
+shader de ciel.
 
 > **Pourquoi cet ordre.** Le rangement du code rend les sessions suivantes moins
 > chères et bénéficie du retrait qui vient d'avoir lieu ; l'optimisation se
@@ -301,7 +314,7 @@ python tools/blender/generer_arbres.py
     --resolution 1600x900 -- --biome 7 --shot 32 --vue 256
 #   options : --sans-arbres, --sans-flore, --sans-chemins, --sans-falaise,
 #   pour isoler une couche. Les deux dernieres servent aussi a mesurer ce
-#   qu'elle coute au chargement.
+#   qu'elle coute au chargement. --carte ouvre la carte du monde au demarrage.
 #   --vers x z oriente la camera vers un point, --altitude n la leve : sans les
 #   deux, une capture d'un objet pose a cent blocs est une capture de ce qui se
 #   trouvait dans l'autre sens.
@@ -335,8 +348,7 @@ C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --path . scenes/mo
 
 # Gabarit d'échelle en jeu : mettre scale_board = true sur le nœud racine de
 # scenes/terrain_demo.tscn, puis lancer. Deux captures dans user://shots.
-# Carte ouverte au démarrage, pour une capture sans piloter la fenêtre :
-# auto_open_map = true, auto_shot_delay = 30.
+# (La carte, elle, a sa bascule en ligne de commande : `-- --carte`.)
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --path . scenes/terrain_demo.tscn
 ```
 
@@ -449,6 +461,10 @@ src/worldgen/
   cw_world_map.gd          carte : dalles de Voronoï, découverte, teintes (1.10)
   cw_region_name.gd        noms de région : deux tables de vingt syllabes (1.10)
 src/demo/terrain_demo.gd     scène de démonstration, touches 1-6 par biome
+src/demo/cw_daylight.gd      le ciel, le soleil et le brouillard — et le futur
+                             cycle jour/nuit
+src/demo/cw_demo_map.gd      l'état de la carte du monde : rendu de fond,
+                             découverte, sauvegarde (1.10)
 src/demo/scale_board.gd      gabarit d'échelle : mires, silhouette, modèles
 src/demo/model_portraits.gd  planche de validation : un modèle par capture
 src/demo/map_overlay.gd      affichage de la carte (touche M)
