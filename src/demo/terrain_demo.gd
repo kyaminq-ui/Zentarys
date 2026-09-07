@@ -23,10 +23,6 @@ const VIEW_STEP: int = 128
 ## Fils de generation, ou -1 pour le calcul automatique. Voir `_pick_threads`.
 @export var generation_threads: int = -1
 
-## Recherche de biome : rayon en zones de 16384 blocs, et pas de sondage a
-## l'interieur d'une zone (un point par tuile).
-const SEARCH_ZONE_RINGS: int = 10
-
 ## Dossier des captures prises depuis le jeu (touche F12).
 const SHOT_DIR: String = "user://shots"
 
@@ -124,6 +120,9 @@ var map_overlay: CWMapOverlay
 ## 2026-09-10 : voir `CWDemoMap`.
 var world_map: CWDemoMap
 var daylight: CWDaylight
+## La recherche du biome le plus proche, derriere les touches 1 a 6 et
+## `--biome`. Sortie d'ici le 2026-09-10 : voir `CWBiomeSearch`.
+var search: CWBiomeSearch
 var camera: Camera3D
 var hud: Label
 
@@ -149,19 +148,6 @@ var _pending_main: int = 0
 ## disque avant sa mise en file de generation. Voir docs/ROADMAP.md.
 var _pending_stream: int = 0
 
-# Recherche de biome, executee sur un fil du pool general.
-var _search_task: int = -1
-var _search_target: int = -1
-var _search_found: bool = false
-var _search_result: Vector2i = Vector2i.ZERO
-var _search_abort: bool = false
-var _search_status: String = ""
-## Point de depart de la recherche, releve sur le fil principal.
-##
-## `Node3D.get_position()` n'est pas lisible depuis un fil du pool : Godot le
-## refuse et rend Vector3.ZERO, ce qui faisait partir toutes les recherches de
-## l'origine du monde au lieu de la camera.
-var _search_from: Vector2i = Vector2i.ZERO
 
 ## Compte a rebours de la capture automatique. Negatif = pas de capture prevue.
 var _shot_countdown: float = -1.0
@@ -195,6 +181,7 @@ func _ready() -> void:
 	_build_terrain()
 	_build_camera()
 	_build_flora()
+	search = CWBiomeSearch.new(generator.field(), params.sea_level)
 	_build_hud()
 	# La carte apres l'ATH : son fond de dessin est un enfant du CanvasLayer que
 	# `_build_hud` cree.
@@ -538,83 +525,17 @@ func set_view_distance(blocks: int) -> void:
 	_hud_timer = 0.0
 
 
-# -- Carte du monde -----------------------------------------------------------
-
-## Ouvre ou ferme la carte.
-## Marque la carte au passage du joueur : decouverte sous ses pieds, connue dans
-## ce qu'il voit. Appele quand la case change, pas a chaque image — et c'est
-## aussi la seule chose qui redemande une vue quand la carte est ouverte.
-# -- Recherche de biome -------------------------------------------------------
-
-## Lance la recherche du cube de surface le plus proche du type demande.
-##
-## Le balayage tourne sur un fil du pool general : a ~60 us la colonne, une
-## recherche large depasse la seconde et figerait l'affichage. Le champ de
-## terrain est purement fonctionnel, donc l'appeler depuis un autre fil est sur.
+## Lance la recherche du biome le plus proche. Facade : la demo tient la camera
+## et la position du joueur, `CWBiomeSearch` tient le balayage et son fil.
 func start_biome_search(target: int) -> void:
-	if _search_task != -1:
-		return
-	_search_target = target
-	_search_found = false
-	_search_abort = false
-	_search_status = "recherche %s..." % CWBiome.name_of(target)
+	search.start(target, _world_position())
 	_hud_timer = 0.0
-	_search_from = _world_position()
-	_search_task = WorkerThreadPool.add_task(_run_biome_search)
-
-
-func _run_biome_search() -> void:
-	var f: CWTerrainField = generator.field()
-	var cx: int = CWWorldParams.zone_of(_search_from.x)
-	var cz: int = CWWorldParams.zone_of(_search_from.y)
-	# Anneaux de zones concentriques : on rend le resultat le plus proche.
-	for ring in SEARCH_ZONE_RINGS + 1:
-		for dz in range(-ring, ring + 1):
-			for dx in range(-ring, ring + 1):
-				if maxi(absi(dx), absi(dz)) != ring:
-					continue
-				if _search_abort:
-					return
-				if _probe_zone(f, cx + dx, cz + dz):
-					return
-
-
-## Sonde une zone : un point au centre de chacune de ses 64 tuiles.
-func _probe_zone(f: CWTerrainField, zx: int, zz: int) -> bool:
-	if zx < 0 or zz < 0 or zx >= CWWorldParams.ZONE_GRID or zz >= CWWorldParams.ZONE_GRID:
-		return false
-	@warning_ignore("integer_division")
-	var half: int = CWWorldParams.TILE_SIZE / 2
-	for tz in 8:
-		for tx in 8:
-			var x: int = zx * CWWorldParams.ZONE_SIZE + tx * CWWorldParams.TILE_SIZE + half
-			var z: int = zz * CWWorldParams.ZONE_SIZE + tz * CWWorldParams.TILE_SIZE + half
-			var c: Vector3 = f.sample_column(x, z)
-			if CWBiome.at(c.x, c.y, c.z, params.sea_level) == _search_target:
-				_search_result = Vector2i(x, z)
-				_search_found = true
-				return true
-	return false
-
-
-func _finish_biome_search() -> void:
-	WorkerThreadPool.wait_for_task_completion(_search_task)
-	_search_task = -1
-	if _search_abort:
-		_search_status = ""
-		return
-	if not _search_found:
-		_search_status = "%s introuvable a moins de %d zones" % [
-			CWBiome.name_of(_search_target), SEARCH_ZONE_RINGS]
-		return
-	place_at(_search_result)
-	_search_status = ""
 
 
 ## Pose la camera au-dessus d'un point du monde, en coordonnees **monde**.
-## C'est la seconde moitie de `_finish_biome_search`, extraite pour que `--ici`
-## et la recherche de biome posent la camera de la meme facon — deux hauteurs de
-## survol differentes donneraient deux captures qu'on ne peut pas comparer.
+## C'est la seconde moitie de la recherche de biome, extraite pour que `--ici`
+## et elle posent la camera de la meme facon — deux hauteurs de survol
+## differentes donneraient deux captures qu'on ne peut pas comparer.
 func place_at(world_xz: Vector2i) -> void:
 	var h: float = ground_top_at(world_xz)
 	camera.position = Vector3(
@@ -739,8 +660,9 @@ func _process(delta: float) -> void:
 			speed *= boost_multiplier
 		camera.position += dir.normalized() * speed * delta
 
-	if _search_task != -1 and WorkerThreadPool.is_task_completed(_search_task):
-		_finish_biome_search()
+	var trouve: Variant = search.poll()
+	if trouve != null:
+		place_at(trouve)
 
 	if world_map != null:
 		world_map.poll(_world_position(), view_distance)
@@ -831,8 +753,8 @@ func _update_hud() -> void:
 			CWTerrainField.pond_gate(c.x, c4.w, sea, biome))
 
 	var busy: String = ""
-	if _search_status != "":
-		busy = "   " + _search_status
+	if search.status() != "":
+		busy = "   " + search.status()
 	elif _pending > 0:
 		busy = "   flux %d / gen %d / maillage %d" % [
 				_pending_stream, _pending_gen, _pending_mesh]
@@ -957,10 +879,8 @@ func _shutdown() -> void:
 	if generator != null:
 		generator.request_shutdown()
 	# Une recherche en cours doit etre rejointe, sinon le pool attend sa fin.
-	_search_abort = true
-	if _search_task != -1:
-		WorkerThreadPool.wait_for_task_completion(_search_task)
-		_search_task = -1
+	if search != null:
+		search.stop()
 	if world_map != null:
 		world_map.wait()
 	if is_instance_valid(camera):
