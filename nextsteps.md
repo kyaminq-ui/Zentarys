@@ -13,28 +13,203 @@ invariants, les pièges, les décisions ouvertes.
 
 ---
 
-## 0. La prochaine session
+## 0. La prochaine session — **cinq demandes, 2026-09-10 au soir**
 
-> **Le programme du 2026-09-09 au soir — quatre demandes — est traité.** Le
-> détail est ci-dessous ; ce qui reste ouvert tient en trois points, et le
-> premier est une décision qui n'appartient pas au code :
->
-> 1. **le C++, à décider.** La mesure dit que la cible existe et qu'elle est
->    unique — `CWValueNoise.sample`, la moitié du temps de génération. Elle dit
->    aussi ce qu'on peut en attendre : **un facteur deux**, pas un facteur dix.
->    En face, le dépôt gagne une chaîne de compilation et une bibliothèque par
->    plate-forme, contre un moteur qui est un build personnalisé. *C'est le
->    genre d'arbitrage qu'on ne prend pas seul* ;
-> 2. **les quatre fichiers de `worldgen` à mille lignes.** La démo est rangée —
->    1 147 → 962 —, le générateur pas encore ;
-> 3. **la falaise vaut-elle 12 % du chargement ?** Elle en coûte autant, et
->    depuis le retrait des massifs elle n'a plus de paroi à raconter. C'est une
->    question qui se tranche à l'œil, pas au banc.
->
-> Et les deux portes d'avant, inchangées : la **collision** objet par objet, et
-> **2.6, l'apparition**, qui ouvre le jalon 2.
+> **Rien n'en est commencé.** Le programme précédent — les quatre demandes du
+> 2026-09-09 — est entièrement traité ; ce qu'il a rendu est plus bas, et le
+> récit est dans le journal de `docs/ROADMAP.md`.
 
-### Ce qui a été fait le 2026-09-10
+L'ordre ci-dessous est celui d'exécution, et il est celui qui a été demandé : le
+C++ vient en dernier et **seulement si le maillage ne suffit pas**.
+
+---
+
+### 1. Les nuages deviennent des modèles, et le temps ralentit
+
+*Supprimer les nuages et les remplacer par des modèles générés par Blender via
+bpy, dessinés à la taille du terrain — 1 voxel = 1 bloc —, deux ou trois
+variantes, placés dans le ciel. Faire défiler le temps moins vite.*
+
+**Le ralentissement est une ligne** : `CWDaylight.DAY_LENGTH`, 720 s aujourd'hui.
+`--jour n` et les touches F2/F3/F4 existent justement pour qu'un cycle lent ne
+rende pas le réglage pénible.
+
+**Le remplacement, lui, change la nature de la chose, et c'est là qu'est le
+travail.** Les nuages actuels sont dans le **ciel** — un shader, à distance
+infinie, sans position. Des modèles voxels sont des **objets à distance finie**.
+Six conséquences, et les trois premières sont des pièges :
+
+* ⚠️ **le brouillard va les manger.** `fog_sky_affect` ne vaut que 0,18, donc le
+  ciel y échappe presque — mais un objet est de la géométrie, et il prend le
+  brouillard plein. À 0,0016 de densité, un nuage à quatre cents blocs est un
+  aplat gris. Il faudra soit les poser assez près, soit leur donner un matériau
+  qui ignore le brouillard, et **c'est à décider avant de dessiner quoi que ce
+  soit** ;
+* ⚠️ **ils ne doivent pas être écrits dans les données voxels.** Un nuage estampé
+  serait creusable, il casserait le chemin rapide « bloc entièrement vide » de
+  `_generate_block` sur toute la hauteur du ciel, et il faudrait le faire
+  connaître à `generated_voxel` (invariant n° 39). Ils sont **instanciés**, comme
+  la flore et les houppiers ;
+* ⚠️ **la palette est pleine.** Un modèle ne peut employer que des index
+  existants, et les générateurs refusent le reste à l'écriture. Les blancs
+  disponibles sont la neige (7), la glace (8) et le clair de la roche nue
+  (14-15). À trancher : ça suffit, ou il faut une rampe — et déplacer une
+  frontière de plage coûte une repasse de tout un lot (invariant n° 31) ;
+* **les ombres.** Le soleil porte des ombres : un nuage de géométrie en projette
+  une sur le terrain. C'est peut-être exactement ce qu'on veut — c'était noté
+  comme une suite possible du shader — ou une tache dure de quarante blocs. À
+  regarder en capture, et à couper si besoin (`cast_shadow` par instance) ;
+* **la lumière est gratuite et juste** : un nuage voxel éclairé par le soleil
+  rasant prend le liseré chaud de l'aube tout seul. C'est ce que le shader
+  simulait à la main ;
+* **où ça vit.** Pas dans `CWDaylight`, qui décide *l'heure* : un `CWClouds` à
+  part, qui pose et fait dériver les instances. `CWDaylight` continue de teinter
+  leur matériau depuis `applique` — **la règle du point d'entrée unique reste**,
+  sinon on retrouve l'aube au ciel rose et aux nuages bleus.
+
+> **Sur bpy, une nuance que le dépôt a déjà tranchée dans l'autre sens.** Les
+> lots à 1 voxel = 1 bloc — arbres, filons — sont en **Python pur** parce qu'à
+> cette maille Blender n'apporte rien : on dessine des disques et des dômes, pas
+> des surfaces. Mais un nuage est une masse organique, et c'est précisément là
+> que les métaballes de `flore_blender.py` avaient gagné leur place. **C'est donc
+> le premier lot depuis la flore où bpy se justifie vraiment** — à condition de
+> vérifier que la soudure tient (invariant n° 34 : un modèle est d'un seul
+> tenant, sinon les morceaux flottent).
+
+### 2. La collision du feuillage — **tranchée : oui**
+
+*Ce sera oui pour les feuillages des arbres, le rocher géant et les cactus.*
+
+C'est la réponse à l'arbitrage laissé ouvert depuis le jalon 1.11, et elle ferme
+la finition du jalon 1. Ces trois-là passent donc de l'**instance** à la
+**matière**, comme le tronc en 1.11.
+
+**Ce que ça implique, et le troisième point est celui qu'on oubliera :**
+
+* **le coût annoncé est périmé.** « ×12 sur ce qu'un arbre écrit, ~+25 % de
+  chargement » date d'avant le retrait des massifs et d'avant le réglage du pool.
+  Le refaire d'abord — invariant n° 51, et `tools/profile_worldgen.gd` est là
+  pour ça ;
+* **il faut un type `LEAVES`.** La réserve terrain va de 1 à 40 ; 1-13, 30-31 et
+  32-40 sont pris. Le geste est celui du tronc — `WOOD` est l'index 4, recyclé le
+  jour même — : `CHANNEL_TYPE` dit *feuillage*, `CHANNEL_COLOR` garde la teinte
+  du modèle, ce qui donne toutes les nuances de houppier pour un seul type.
+  **Vérifier avec `tools/inspect_model.gd` quels index sont réellement employés
+  avant d'en prendre un** (invariant n° 31) ;
+* ⚠️ **`patch.highest` et le chemin rapide du haut.** Le vide au-dessus du monde
+  est borné par `patch.highest + CWTreeScatter.HAUTEUR_TRONC_MAX`. Un houppier
+  monte plus haut et déborde plus large qu'un tronc : cette constante doit
+  grandir, et **la faire grandir rend le chemin rapide moins efficace partout**,
+  pas seulement là où il y a des arbres. C'est un coût qui ne se voit pas dans le
+  compte des voxels écrits, et il peut dépasser celui de l'écriture ;
+* ⚠️ **`generated_voxel` doit les connaître.** C'est exactement le défaut du
+  2026-09-10 : le tronc était écrit d'un seul côté, et la requête ponctuelle
+  décrivait un monde sans arbres pendant quatre jalons. `CWVoxelGenerator.trunk_at`
+  devra couvrir les pièces de feuillage, et la vérification d'accord devra tomber
+  **sur un arbre**, ce que ni les 4 096 points ni l'accord sur chaussée ne
+  garantissent aujourd'hui ;
+* **rien ne se verra tant que `generate_collisions` est à faux** sur le terrain
+  de la démo. La matière est le prérequis, l'interrupteur est le jalon 3.1.
+
+### 3. Des biomes mieux répartis, et égaux
+
+*J'aimerais que les biomes soient mieux répartis et qu'ils soient égaux.*
+
+`tools/biome_stats.gd` mesure la répartition réelle, et les seuils de `CWBiome`
+sont faits pour bouger : ils ont été **recalés sur la mesure** et non sur les
+degrés, et l'en-tête du fichier le dit. Déplacer un seuil coûte une ligne et se
+vérifie en une commande. C'est donc peu cher — mais *égaux* bute sur deux choses
+qu'il faut savoir avant de commencer :
+
+* ⚠️ **le champ d'humidité a un trou.** Il n'y a presque rien entre **0,10 et
+  0,40** : un seuil ne peut pas se poser au milieu, il attrape l'amas 0,40-0,45
+  tout entier ou pas du tout. C'est pour cette raison que la bande d'herbe sèche
+  de Greenlands est large (`DRY_GRASS_H` à 0,46, 5,1 % du monde) : à 0,42 la
+  steppe **disparaîtrait**. Certains biomes ne sont donc pas réglables de façon
+  continue, et les rendre égaux demanderait de toucher au **champ de climat**
+  lui-même — ce qui change la carte de tous les mondes déjà explorés ;
+* ⚠️ **Oceans n'est pas un biome de climat.** Il se décide à l'altitude, sous le
+  niveau de la mer. L'égaliser veut dire déplacer le niveau de la mer ou le
+  rapport terre/mer, c'est-à-dire refaire le monde.
+
+**La bonne question à poser en premier est donc *quelle égalité*** : six parts
+strictement égales des terres émergées ? les cinq biomes de climat égaux, Oceans
+à part ? ou seulement « qu'aucun ne soit anecdotique » ? Les trois n'ont pas le
+même prix, et la mesure d'aujourd'hui — à relever avec `biome_stats` avant de
+toucher à quoi que ce soit — dira laquelle est atteignable.
+
+### 4. Le maillage
+
+C'est le poste que ce fichier n'a jamais mesuré, et le seul soupçon écrit est le
+mien : le ~1,1 Go observé en jeu ressemble plus à des maillages qu'à des données
+voxels. **C'est une constatation, pas un profil.**
+
+**Ce qu'on sait déjà, et qui écarte la piste la plus évidente :**
+`greedy_meshing_enabled` est **déjà à vrai** (`CWPalette.build_cubes_mesher`).
+Le gain facile est donc pris.
+
+> **Mais il y a une piste que personne n'a regardée, et elle est bonne.** Le
+> maillage glouton ne fusionne que des faces **de même couleur**. Or l'invariant
+> n° 45 donne délibérément des **teintes différentes à deux blocs de la même
+> matière** — trois tons pour une prairie, cinq marches de fondu au bord d'une
+> plage. *Le dégradé adouci du 2026-09-08 travaille donc contre le maillage
+> glouton*, et personne n'a mesuré ce qu'il lui coûte en sommets. C'est la
+> première chose à chiffrer : compter les sommets d'un pavé avec et sans le
+> tramage (`CWPalette.SHADE_STEPS`, `SHADE_TONE_STEPS`). Si l'écart est gros,
+> c'est un arbitrage *rendu contre mémoire* et il se tranche à l'œil, comme les
+> autres.
+
+Le reste de la passe : profil mémoire réel (données voxels contre maillages
+contre textures), coût du maillage par pavé, et la **saccade** — qui est une
+affaire de latence et d'ordonnancement, pas de débit, et qui ne se voit qu'en
+jeu.
+
+### 5. Le C++ — **seulement si le maillage ne suffit pas**
+
+*Si vraiment les performances n'y sont pas, la prochaine tâche sera de passer en
+C++.*
+
+La cible est connue, unique et chiffrée : `CWValueNoise.sample`, 3,08 µs,
+une quinzaine par colonne, **la moitié du temps de génération**. L'attente est
+un **facteur deux** sur le chargement (42 s → ~22 s), pas un facteur dix.
+
+Ce qu'il faut avoir en tête le jour venu :
+
+* **GDExtension plutôt que module** : le moteur est un build personnalisé
+  (double précision, Voxel Tools 1.7 compilé dedans), donc une extension doit
+  être compilée contre *exactement* ce build. Un module obligerait à
+  reconstruire et redistribuer le binaire de 190 Mo ;
+* ⚠️ **l'exactitude au bit près est un invariant, pas une préférence.**
+  `CWValueNoise` émule de l'arithmétique 32 bits pour reproduire les motifs de la
+  source, et l'invariant n° 1 dit que toute dérive change **tous les mondes déjà
+  explorés**. En natif : pas de `rcpps`/`rsqrtps` approximés, pas de contraction
+  FMA, et l'ordre des opérations conservé ;
+* **la vectorisation vient après le portage, pas avec.** GDScript → C++ scalaire
+  vaut déjà l'essentiel (l'overhead par opération domine) ; SSE2 par-dessus vaut
+  2 à 4× de plus sur un poste devenu minoritaire. Le point favorable est que
+  `sample_patch` traite un pavé de 16 × 16 d'un coup : vectoriser **entre
+  colonnes** tombe juste ;
+* **et refaire la falaise des fils après.** Un champ deux fois plus rapide
+  déplace l'optimum du pool ; les deux réglages ne sont pas indépendants.
+
+---
+
+### Ce qui reste ouvert par ailleurs, et qui n'est dans aucune des cinq
+
+- **les quatre fichiers de `worldgen` à mille lignes.** La démo est rangée
+  — 1 147 → 962 —, le générateur pas encore ;
+- **la falaise vaut-elle 12 % du chargement ?** Depuis le retrait des massifs
+  elle n'a plus de paroi à raconter. Ça se tranche à l'œil, pas au banc ;
+- ⚠️ **le plafond du cache de colonnes borne la distance de vue.** L'invariant
+  n° 5 demande `(2 × distance / 16)²` entrées ; à 1 024 blocs de vue on est
+  **exactement** au plafond de 16 384. Au-delà, le cache s'auto-évince en boucle
+  et le chargement s'effondre **sans rien signaler**. À relever avant d'augmenter
+  la distance, ce qui est l'objectif affiché ;
+- **2.6, l'apparition** — la porte du jalon 2. Elle n'attend rien.
+
+---
+
+## 0bis. Ce qui a été fait le 2026-09-10
 
 **1. Supprimer les surplombs.** *« Je n'aime pas le rendu en jeu. »* Troisième
 retrait du dépôt après la falaise et les ponts. La couche est partie entière —
@@ -66,7 +241,7 @@ d'authoring dans `docs/ASSETS.md`, et `CLAUDE.md` existe.
 
 ---
 
-### 1. Le n° 4 — le rangement du code, à moitié fait
+### Le n° 4 — le rangement du code, à moitié fait
 
 *Correction des potentiels bugs et erreurs, nettoyage du projet, le rendre plus
 modulaire et facile à maintenir.*
@@ -115,7 +290,7 @@ relecture : les ordres de recouvrement, les accords entre le chemin froid et le
 chemin chaud, et les endroits où deux copies d'une même règle ont eu le droit de
 diverger.
 
-### 2. Optimisation, et peut-être du C++
+### Le n° 3 — l'optimisation, mesurée
 
 *Objectif : distance de rendu maximale sans perte de fps ni saccade au
 chargement des chunks.*
@@ -243,7 +418,7 @@ la mesure, et c'est le premier réglage à reprendre sur un autre processeur.
 > La première est la bonne par défaut. La décision se prend avec la mesure de
 > l'étape 1 en main, pas avant.
 
-### 3. ~~Un ciel, des nuages, et un cycle jour/nuit~~ — fait le 2026-09-10
+### Le n° 2 — le ciel et le cycle jour/nuit
 
 **Tout se déduit d'un scalaire d'heure dans `[0, 1)` par la seule fonction
 `CWDaylight.applique`** — rotation, énergie et couleur du soleil ; zénith,
@@ -301,17 +476,16 @@ Trois réglages ont demandé une capture, et aucun ne se voyait dans le code :
 
 ---
 
-### Les portes déjà ouvertes, inchangées
+### Les portes déjà ouvertes
 
-1. **La collision, objet par objet** — la fin du jalon 1 côté finition. Le
-   tableau est fait dans l'annexe de `docs/ROADMAP.md` : cinq modèles entiers à
-   passer en matière (une ligne chacun), le branchage et les filons déjà réglés,
-   et **un seul vrai arbitrage**, le feuillage — matière (×12 sur ce qu'un arbre
-   écrit, soit ~+25 % de chargement) ou volume approché au jalon 3.1. Rien ne se
-   voit tant que `generate_collisions` est à faux sur le terrain de la démo.
-2. **2.6, l'apparition** — l'autre porte, et elle mène au jalon 2. Elle n'attend
-   rien : la fonction est lue, les constantes de pose extraites, la couche
-   d'éléments existe depuis 1.6 et la carte sait les afficher.
+1. ~~**La collision, objet par objet.**~~ **L'arbitrage est tranché le
+   2026-09-10 : le feuillage passe en matière**, avec le rocher géant et les
+   cactus. C'est devenu la demande n° 2 du programme ci-dessus ; le tableau des
+   cinq modèles à passer reste dans l'annexe de `docs/ROADMAP.md`, et le
+   branchage comme les filons étaient déjà réglés.
+2. **2.6, l'apparition** — la porte qui reste, et elle mène au jalon 2. Elle
+   n'attend rien : la fonction est lue, les constantes de pose extraites, la
+   couche d'éléments existe depuis 1.6 et la carte sait les afficher.
 
 **Quatre petites choses laissées ouvertes**, aucune bloquante :
 
@@ -326,7 +500,9 @@ Trois réglages ont demandé une capture, et aucun ne se voyait dans le code :
 - **les provinces climatiques ont trois constantes réglées à l'œil sur une seule
   graine** : fréquence, largeur du cœur, décalages de graine.
   `tools/biome_stats.gd` mesure ce qu'elles rendent — répartition et voisinage —,
-  donc les bouger est cheap et vérifiable. Elles n'ont pas été balayées ;
+  donc les bouger est cheap et vérifiable. Elles n'ont pas été balayées, et
+  **c'est un levier de la demande n° 3** : la répartition des biomes dépend
+  autant de la forme des provinces que des seuils de `CWBiome` ;
 - **les chemins ignorent les biomes** : même gravier de chaussée partout. Une
   ligne dans `CWPalette`.
 
