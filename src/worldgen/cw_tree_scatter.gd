@@ -338,13 +338,8 @@ func _build_cell(cx: int, cz: int) -> Array:
 					else _candidats(cx + dx, cz + dz)
 
 	var sea: int = _field.params().sea_level
-	# La fenetre de surplombs de la cellule, prise une fois. Une cellule
-	# d'arbres fait 64 blocs et une cellule de surplombs 512 : le voisinage
-	# 3 x 3 du centre couvre tout candidat, rayon maximum compris.
 	@warning_ignore("integer_division")
 	var mid: int = cell_size / 2
-	var mesas: Array[CWMesa] = _field.mesas().mesas_at(
-			(cx << cell_shift) + mid, (cz << cell_shift) + mid, _field)
 	var road_zone: CWPathNetwork.Zone = _field.paths().zone_at(
 			(cx << cell_shift) + mid, (cz << cell_shift) + mid, _field)
 	var road_cells: PackedInt32Array = road_zone.index.get(
@@ -362,51 +357,38 @@ func _build_cell(cx: int, cz: int) -> Array:
 		var biome_c: int = CWBiome.at(col.x, col.y, col.z, sea)
 		var prof: Vector3i = CWTerrainField.column_profile(
 				col.x, col.w, sea, biome_c)
-		# Le surplomb (jalon 1.15) : un arbre pousse **sur le chapeau**, jamais
-		# sur le sol qu'il couvre. C'est ce que montrent les captures du jeu
-		# d'origine — une mesa porte ses arbres sur le dos, et son ombre est nue.
-		var rel: Vector4i = Vector4i(1, 0, 1, 0)
-		if not mesas.is_empty():
-			rel = CWMesaGrid.relief(mesas, x, z, prof.x)
-		var on_cap: bool = rel.y >= rel.x
 		var surface: int = CWPalette.surface_of(
 				CWBiome.at_dithered(col.x, col.y, col.z, sea, x, z,
 						CWBiome.fringe_amplitude(_field.climate_gradient(x, z))),
 				col.x - float(sea), col.y, col.z, x, z)
-		if on_cap:
-			surface = CWVoxelGenerator.standing_surface(rel, surface, biome_c,
-					col.y, col.z, x, z, sea)
-		else:
-			# Un arbre les pieds dans l'eau n'existe pas ici : le sol humide est
-			# une matiere a part, au-dessus du niveau de la mer.
-			if col.x < float(sea):
-				continue
-			# Ni dans une mare (jalon 1.14). Un arbre est estampe dans le
-			# terrain depuis le jalon 1.11 : un tronc pose au niveau d'avant
-			# creusement traverserait l'eau sur toute sa hauteur, et il est
-			# ecrit dans la matiere, donc rien ne le retirerait ensuite.
-			if prof.y <= prof.z:
-				continue
-			if CWVoxelGenerator.cave_breaks(rel, prof.x):
-				continue
+		# Un arbre les pieds dans l'eau n'existe pas ici : le sol humide est
+		# une matiere a part, au-dessus du niveau de la mer.
+		if col.x < float(sea):
+			continue
+		# Ni dans une mare (jalon 1.14). Un arbre est estampe dans le terrain
+		# depuis le jalon 1.11 : un tronc pose au niveau d'avant creusement
+		# traverserait l'eau sur toute sa hauteur, et il est ecrit dans la
+		# matiere, donc rien ne le retirerait ensuite.
+		if prof.y <= prof.z:
+			continue
 		# Le chemin (jalon 1.16). Rien ne pousse sur la chaussee — c'est ce qui
 		# la rend lisible de loin —, et l'accotement suit le terrain **remodele**
 		# par le chemin, sans quoi la premiere touffe de bord de route flotte ou
 		# s'enterre de trois blocs. Meme piege qu'au creusement des etangs.
-			if not road_cells.is_empty():
-				var road: Vector2 = CWPathNetwork.nearest(
-						road_zone, road_cells, float(x), float(z))
-				if CWPathNetwork.on_roadway(road):
-					continue
-				# Le franchissement compte autant que la chaussee : sur une
-				# levee, l'accotement est un flanc de remblai, et une touffe
-				# posee sur le lit de la riviere serait a dix blocs sous lui.
-				prof.x = CWPathNetwork.shaped_top(prof.x, road,
-						CWPathNetwork.causeway_at(road_zone, float(x),
-								float(z)),
-						CWTerrainField.free_water(prof, sea))
-			surface = CWVoxelGenerator.pond_surface(surface, biome_c, prof,
-					CWTerrainField.pond_gate(col.x, col.w, sea, biome_c))
+		if not road_cells.is_empty():
+			var road: Vector2 = CWPathNetwork.nearest(
+					road_zone, road_cells, float(x), float(z))
+			if CWPathNetwork.on_roadway(road):
+				continue
+			# Le franchissement compte autant que la chaussee : sur une
+			# levee, l'accotement est un flanc de remblai, et une touffe
+			# posee sur le lit de la riviere serait a dix blocs sous lui.
+			prof.x = CWPathNetwork.shaped_top(prof.x, road,
+					CWPathNetwork.causeway_at(road_zone, float(x),
+							float(z)),
+					CWTerrainField.free_water(prof, sea))
+		surface = CWVoxelGenerator.pond_surface(surface, biome_c, prof,
+				CWTerrainField.pond_gate(col.x, col.w, sea, biome_c))
 		# La matiere exacte du point est verifiee, comme pour la flore : le
 		# biome dit ou l'on est, la matiere dit si ca porte quelque chose. Un
 		# bosquet ne pousse ni sur la scorie d'une Lava Lands, ni sur une plage,
@@ -419,7 +401,7 @@ func _build_cell(cx: int, cz: int) -> Array:
 		# Le sol est celui **d'apres** creusement : sur la rive d'une mare, la
 		# colonne a ete tranchee, et un arbre pose a la hauteur brute du champ
 		# flotterait de quelques blocs.
-		var ground: int = CWVoxelGenerator.standing_top(rel, prof.x) + 1
+		var ground: int = prof.x + 1
 		if not _supported(x, z, ground):
 			continue
 
@@ -434,7 +416,7 @@ func _build_cell(cx: int, cz: int) -> Array:
 			var ech: float = ECHELLE_MIN 					+ float(c["jitter"]) * (ECHELLE_MAX - ECHELLE_MIN)
 			var r: int = ceili(float(fut.radius_blocks) * ech)
 			if r > 0:
-				var a: Vector2i = _assiette(x, z, r, sea, mesas, road_zone,
+				var a: Vector2i = _assiette(x, z, r, sea, road_zone,
 						road_cells)
 				if a.y - a.x > ASSIETTE_MAX:
 					continue

@@ -291,26 +291,22 @@ func set_edits(edits: CWWorldEdits) -> void:
 ## une assiette fausse dans un sens ou dans l'autre. La boucle principale ne
 ## passe pas par ici parce qu'elle a besoin des valeurs intermediaires
 ## (`prof`, `rel`, la matiere) que celle-ci jette.
-func _sol_pose(x: int, z: int, sea: int, mesas: Array[CWMesa],
-		road_zone: CWPathNetwork.Zone,
+func _sol_pose(x: int, z: int, sea: int, road_zone: CWPathNetwork.Zone,
 		road_cells: PackedInt32Array) -> int:
 	var c: Vector4 = _field.sample_column_full(x, z)
 	var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
 	var prof: Vector3i = CWTerrainField.column_profile(c.x, c.w, sea, biome)
-	var rel: Vector4i = Vector4i(1, 0, 1, 0)
-	if not mesas.is_empty():
-		rel = CWMesaGrid.relief(mesas, x, z, prof.x)
-	if rel.y < rel.x and not road_cells.is_empty():
+	if not road_cells.is_empty():
 		prof.x = CWPathNetwork.shaped_top(prof.x, CWPathNetwork.nearest(
 				road_zone, road_cells, float(x), float(z)),
 				CWPathNetwork.causeway_at(road_zone, float(x), float(z)),
 				CWTerrainField.free_water(prof, sea))
-	return CWVoxelGenerator.standing_top(rel, prof.x) + 1
+	return prof.x + 1
 
 
 ## L'assiette des quatre coins d'une empreinte de rayon `r` : le plus bas et le
 ## plus haut. Voir la note de `ASSIETTE_MAX`.
-func _assiette(x: int, z: int, r: int, sea: int, mesas: Array[CWMesa],
+func _assiette(x: int, z: int, r: int, sea: int,
 		road_zone: CWPathNetwork.Zone,
 		road_cells: PackedInt32Array) -> Vector2i:
 	var bas: int = 0x7FFFFFFF
@@ -318,8 +314,7 @@ func _assiette(x: int, z: int, r: int, sea: int, mesas: Array[CWMesa],
 	for i in 4:
 		var dx: int = r if (i & 1) == 0 else -r
 		var dz: int = r if (i & 2) == 0 else -r
-		var y: int = _sol_pose(x + dx, z + dz, sea, mesas, road_zone,
-				road_cells)
+		var y: int = _sol_pose(x + dx, z + dz, sea, road_zone, road_cells)
 		bas = mini(bas, y)
 		haut = maxi(haut, y)
 	return Vector2i(bas, haut)
@@ -447,15 +442,8 @@ func _build_cell(cx: int, cz: int) -> Array:
 	@warning_ignore("integer_division")
 	var mid: int = cell_size / 2
 	var centre: Vector3 = _field.sample_column(base_x + mid, base_z + mid)
-	# La fenetre de surplombs de la cellule, prise une fois. Une cellule de
-	# dispersion est bien plus petite qu'une cellule de surplombs (16 blocs
-	# contre 512), donc le voisinage 3 x 3 du centre couvre tout candidat de la
-	# cellule — le rayon maximum d'un surplomb, 176 blocs, y tient largement.
-	var mesas: Array[CWMesa] = _field.mesas().mesas_at(
-			base_x + mid, base_z + mid, _field)
-	# Le reseau de chemins, une fois par cellule pour la meme raison : une
-	# cellule d'index fait 256 unites, une cellule de dispersion 16, et les deux
-	# sont alignees.
+	# Le reseau de chemins, une fois par cellule : une cellule d'index fait
+	# 256 unites, une cellule de dispersion 16, et les deux sont alignees.
 	var road_zone: CWPathNetwork.Zone = _field.paths().zone_at(
 			base_x + mid, base_z + mid, _field)
 	var road_cells: PackedInt32Array = road_zone.index.get(
@@ -521,46 +509,30 @@ func _build_cell(cx: int, cz: int) -> Array:
 		# niveau de la mer ne dit plus rien ici, une mare etant au-dessus de
 		# lui.
 		var prof: Vector3i = CWTerrainField.column_profile(c.x, c.w, sea, biome)
-		# Le surplomb (jalon 1.15). Quand la colonne est sous un chapeau, la
-		# plante pousse **sur le chapeau** et non sur le sol qu'il ensevelit ou
-		# qu'il ombrage : l'eau, la plage et la rive de la colonne ne la
-		# concernent plus, elle est quatre-vingts blocs plus haut.
-		var rel: Vector4i = Vector4i(1, 0, 1, 0)
-		if not mesas.is_empty():
-			rel = CWMesaGrid.relief(mesas, x, z, prof.x)
-		var on_cap: bool = rel.y >= rel.x
-		if on_cap:
-			surface = CWVoxelGenerator.standing_surface(rel, surface, biome,
-					c.y, c.z, x, z, sea)
-		else:
-			if prof.y <= prof.z:
-				continue
-			# Une grotte qui perce le sol emporte le bloc qui aurait porte la
-			# plante.
-			if CWVoxelGenerator.cave_breaks(rel, prof.x):
-				continue
+		if prof.y <= prof.z:
+			continue
 		# Le chemin (jalon 1.16). Rien ne pousse sur la chaussee — c'est ce qui
 		# la rend lisible de loin —, et l'accotement suit le terrain **remodele**
 		# par le chemin, sans quoi la premiere touffe de bord de route flotte ou
 		# s'enterre de trois blocs. Meme piege qu'au creusement des etangs.
-			if not road_cells.is_empty():
-				var road: Vector2 = CWPathNetwork.nearest(
-						road_zone, road_cells, float(x), float(z))
-				if CWPathNetwork.on_roadway(road):
-					continue
-				# Le franchissement compte autant que la chaussee : sur une
-				# levee, l'accotement est un flanc de remblai, et une touffe
-				# posee sur le lit de la riviere serait a dix blocs sous lui.
-				prof.x = CWPathNetwork.shaped_top(prof.x, road,
-						CWPathNetwork.causeway_at(road_zone, float(x),
-								float(z)),
-						CWTerrainField.free_water(prof, sea))
-			# Sous l'eau, seul le fond marin se garnit : le reste de la flore
-			# n'aurait pas de sens et se verrait de loin a travers l'eau.
-			if c.x < float(sea) and surface != CWPalette.GRAVEL:
+		if not road_cells.is_empty():
+			var road: Vector2 = CWPathNetwork.nearest(
+					road_zone, road_cells, float(x), float(z))
+			if CWPathNetwork.on_roadway(road):
 				continue
-			surface = CWVoxelGenerator.pond_surface(surface, biome, prof,
-					CWTerrainField.pond_gate(c.x, c.w, sea, biome))
+			# Le franchissement compte autant que la chaussee : sur une
+			# levee, l'accotement est un flanc de remblai, et une touffe
+			# posee sur le lit de la riviere serait a dix blocs sous lui.
+			prof.x = CWPathNetwork.shaped_top(prof.x, road,
+					CWPathNetwork.causeway_at(road_zone, float(x),
+							float(z)),
+					CWTerrainField.free_water(prof, sea))
+		# Sous l'eau, seul le fond marin se garnit : le reste de la flore
+		# n'aurait pas de sens et se verrait de loin a travers l'eau.
+		if c.x < float(sea) and surface != CWPalette.GRAVEL:
+			continue
+		surface = CWVoxelGenerator.pond_surface(surface, biome, prof,
+				CWTerrainField.pond_gate(c.x, c.w, sea, biome))
 		# Scorie, coulee de lave, neige hors Snowlands : rien n'y pousse. C'est
 		# le filtre qui remplace l'ancienne table par matiere — voir
 		# `CWDecorRules.decor_allowed`.
@@ -583,7 +555,7 @@ func _build_cell(cx: int, cz: int) -> Array:
 		# Le sol est celui **d'apres** creusement (jalon 1.14) : sur la rive
 		# d'une mare, la colonne a ete tranchee de quelques blocs, et une plante
 		# posee a la hauteur brute du champ y flotterait.
-		var ground: int = CWVoxelGenerator.standing_top(rel, prof.x) + 1
+		var ground: int = prof.x + 1
 		if not _supported(x, z, ground):
 			continue
 
@@ -603,8 +575,7 @@ func _build_cell(cx: int, cz: int) -> Array:
 		# d'un seul bloc n'a rien a sonder. Voir `ASSIETTE_MAX`.
 		var r: int = p.radius_blocks()
 		if r > 0:
-			var a: Vector2i = _assiette(x, z, r, sea, mesas, road_zone,
-					road_cells)
+			var a: Vector2i = _assiette(x, z, r, sea, road_zone, road_cells)
 			if a.y - a.x > ASSIETTE_MAX:
 				continue
 			p.y = mini(p.y, a.x)

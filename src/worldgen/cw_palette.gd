@@ -318,20 +318,15 @@ const SHADE_TONE_OFFSET_Z: float = 90011.0
 
 # -- La falaise, deuxieme tentative -------------------------------------------
 #
-# Elle a ete portee le 2026-09-06 au matin et retiree le soir meme, et la note
-# qui l'accompagnait disait a quelle condition elle pourrait revenir : *il
-# faudrait que le champ d'altitude produise d'abord des parois*. C'est fait —
-# le jalon 1.15 pose une couche de surplombs dont les bords sont des parois
-# verticales taillees, et non peintes.
+# Elle a ete portee le 2026-09-06 au matin et retiree le soir meme, parce qu'une
+# plaque grise sur un flanc vert lisait comme une tache. Elle est revenue le
+# 2026-09-07 avec la couche de surplombs, dont ses parois faisaient echo.
 #
-# Ce qui revient ici est donc **la seconde moitie du travail** : habiller de
-# roche les flancs raides du terrain lui-meme. Deux choses ont change depuis le
-# retrait, et ce sont elles qui rendent la regle defendable :
+# **Cette couche est partie le 2026-09-10, et la falaise lui survit** : elle
+# mesure la pente du *champ d'altitude*, qui n'a jamais rien su des surplombs.
+# Ce qui la tient encore est le second des deux arguments d'alors, et c'etait
+# deja le plus fort :
 #
-#   * **la roche n'est plus seule.** Une plaque grise sur un flanc vert lisait
-#     comme une tache parce qu'elle etait le seul accident du paysage. Elle est
-#     desormais la meme matiere que les parois des surplombs qui la dominent :
-#     le flanc pierreux *raconte* la mesa, il ne surgit plus de nulle part ;
 #   * **la frontiere est trames.** C'est la demande du 2026-09-07, et c'est ce
 #     qui manquait le plus. Au lieu d'une ligne de niveau qui separe l'herbe de
 #     la roche, les deux s'interpenetrent sur toute la bande de pente : la roche

@@ -89,7 +89,6 @@ const LIFT_RADIUS_MARGIN: float = 256.0
 var _p: CWWorldParams
 var _sites: CWRegionSiteGrid
 var _features: CWTileFeatureGrid
-var _mesas: CWMesaGrid
 var _paths: CWPathNetwork
 
 ## Cache du gradient de climat, une entree par cellule de `CLIMATE_GRAD_CELL`.
@@ -102,7 +101,6 @@ func _init(world_params: CWWorldParams, site_grid: CWRegionSiteGrid = null) -> v
 	_p = world_params
 	_sites = site_grid if site_grid != null else CWRegionSiteGrid.new(world_params)
 	_features = CWTileFeatureGrid.new(world_params)
-	_mesas = CWMesaGrid.new(world_params)
 	_paths = CWPathNetwork.new(world_params)
 
 
@@ -113,12 +111,6 @@ func sites() -> CWRegionSiteGrid:
 func features() -> CWTileFeatureGrid:
 	return _features
 
-
-## La grille de surplombs (jalon 1.15). Posee **au-dessus** du champ, jamais
-## dedans : rien de ce qui suit ne la consulte, et c'est ce qui la dispense de
-## la garde de reentrance de `CWTileFeatureGrid`.
-func mesas() -> CWMesaGrid:
-	return _mesas
 
 
 ## Le reseau de chemins (jalon 1.16). Pose lui aussi **au-dessus** du champ :

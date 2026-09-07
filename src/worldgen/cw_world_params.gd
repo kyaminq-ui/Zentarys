@@ -80,14 +80,6 @@ const OFFSET_COUNT: int = 32
 ## champ : les éléments ne s'appliquent qu'en fin de chaîne.
 @export var tile_features: bool = true
 
-## Active la couche de **surplombs** (jalon 1.15) : mesas, parois taillees,
-## abris sous roche et grottes.
-##
-## Bascule conservee pour la meme raison que `tile_features` : comparer un meme
-## monde avec et sans, et isoler une regression. La desactiver ne change rien au
-## champ d'altitude — cette couche est posee au-dessus de lui, jamais dedans.
-@export var overhangs: bool = true
-
 ## Active le **reseau de chemins** (jalon 1.16) et ses levees.
 @export var road_network: bool = true
 

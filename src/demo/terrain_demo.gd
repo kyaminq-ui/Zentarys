@@ -274,18 +274,15 @@ func _read_cmdline() -> void:
 					camera.position.y += float(args[i])
 			# Viser un objet plutot que le hasard de l'orientation par defaut.
 			# `--ici` pose la camera, `--vers` la tourne : sans les deux, une
-			# capture d'un surplomb pose a cent blocs de la est une capture de
+			# capture d'un objet pose a cent blocs de la est une capture de
 			# ce qui se trouvait dans l'autre sens.
 			"--vers":
 				if i + 2 < args.size():
 					look_at_world(Vector2i(int(args[i + 1]), int(args[i + 2])))
 					i += 2
-			# Les trois couches posees au-dessus du champ, isolables une a une :
+			# Les deux couches posees au-dessus du champ, isolables une a une :
 			# c'est ce qui permet de mesurer ce que chacune coute au chargement
 			# et de comparer deux captures du meme endroit.
-			"--sans-surplombs":
-				params.overhangs = false
-				generator.clear_caches()
 			"--sans-chemins":
 				params.road_network = false
 				generator.clear_caches()
@@ -745,28 +742,14 @@ func place_at(world_xz: Vector2i) -> void:
 			float(world_xz.y - params.world_origin.y))
 
 
-## Dessus **praticable** d'une colonne, en coordonnees monde : le dessus du
-## chapeau quand un surplomb la couvre, le sol sinon.
-##
-## Sans cela, se poser sous une mesa met la camera **dans la roche** : le socle
-## d'un surplomb monte jusqu'a son chapeau, et `sample_column` ne connait que le
-## champ d'altitude, qui ignore tout de la couche posee au-dessus de lui.
+## Dessus d'une colonne, en coordonnees monde.
 func ground_top_at(world_xz: Vector2i) -> float:
-	var f: CWTerrainField = generator.field()
-	var h: float = f.sample_column(world_xz.x, world_xz.y).x
-	if not params.overhangs:
-		return h
-	var rel: Vector4i = CWMesaGrid.relief(
-			f.mesas().mesas_at(world_xz.x, world_xz.y, f),
-			world_xz.x, world_xz.y, floori(h))
-	if rel.y >= rel.x:
-		return maxf(h, float(rel.y))
-	return h
+	return generator.field().sample_column(world_xz.x, world_xz.y).x
 
 
 ## Tourne la camera vers un point du monde, en coordonnees **monde**. La visee
-## se fait sur le sol du point, remonte de vingt blocs : viser le sol exact d'un
-## surplomb mettrait la moitie du cadre dans l'herbe du premier plan.
+## se fait sur le sol du point, remonte de vingt blocs : viser le sol exact
+## mettrait la moitie du cadre dans l'herbe du premier plan.
 func look_at_world(world_xz: Vector2i) -> void:
 	var h: float = ground_top_at(world_xz)
 	var target := Vector3(

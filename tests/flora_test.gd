@@ -312,16 +312,6 @@ func _test_scatter() -> void:
 				var prof: Vector3i = CWTerrainField.column_profile(
 						c.x, c4.w, p.sea_level,
 						CWBiome.at(c.x, c.y, c.z, p.sea_level))
-				# **Et le massif, depuis le jalon 1.15** : quand une masse de
-				# roche couvre la colonne, la plante pousse sur *son* dessus et
-				# non sur le sol qu'elle ensevelit. Comparer au sol brut faisait
-				# sortir 83 plantes « flottantes » qui sont parfaitement posees,
-				# trente blocs plus haut. C'est le meme piege que le creusement
-				# des etangs, pris une seconde fois — et c'est pour cela que le
-				# dessus praticable d'une colonne a un point unique,
-				# `CWVoxelGenerator.standing_top` (invariant n. 42).
-				var rel: Vector4i = CWMesaGrid.relief(
-						f.mesas().mesas_at(pl.x, pl.z, f), pl.x, pl.z, prof.x)
 				# **Et l'assiette, depuis le 2026-09-09** : une plante dont
 				# l'empreinte fait plusieurs blocs se pose sur le **minimum**
 				# des quatre coins de celle-ci, donc au niveau de sa colonne ou
@@ -333,15 +323,13 @@ func _test_scatter() -> void:
 				# Ce qui reste interdit est donc **au-dessus**, et un
 				# enfouissement de plus de `CWScatter.ASSIETTE_MAX` — au-dela,
 				# le candidat aurait du etre ecarte, pas enterre.
-				var sol: int = CWVoxelGenerator.standing_top(rel, prof.x) + 1
+				var sol: int = prof.x + 1
 				if pl.y > sol or sol - pl.y > CWScatter.ASSIETTE_MAX:
 					off_ground += 1
 				if pl.y < sol:
 					assises += 1
 				# Et l'autre moitie de la meme regle : aucune plante dans l'eau.
-				# Sous un massif la question ne se pose pas : la plante est sur
-				# la roche, pas dans la mare qu'elle recouvre.
-				if prof.y <= prof.z and rel.y < rel.x:
+				if prof.y <= prof.z:
 					noyees += 1
 				var biome: int = CWBiome.at(c.x, c.y, c.z, p.sea_level)
 				if not sc.library().for_biome(biome).has(pl.model):

@@ -62,32 +62,19 @@ class ColumnPatch extends RefCounted:
 	## couleur du type** : c'est celle que `CWPalette.surface_shaded` a calculee
 	## pour *cette* colonne, et deux blocs de la meme matiere n'ont pas la meme.
 	var surface_colors: PackedInt32Array
-	## Idem pour le dessus d'un surplomb. Alloue seulement si le bloc en porte.
-	var cap_colors: PackedInt32Array
 	## Deux entiers par colonne : l'intervalle d'eau d'etang, borne haute
 	## **incluse**. `bas > haut` — le cas courant — veut dire pas d'eau.
 	## L'ocean n'est pas ici : il se deduit du niveau de la mer.
 	var ponds: PackedInt32Array
-	## Deux entiers par colonne : l'intervalle de matiere ajoute par la couche
-	## de surplombs (jalon 1.15), borne haute **incluse**. `bas > haut` — le cas
-	## de la quasi-totalite du monde — veut dire pas de surplomb.
-	var slabs: PackedInt32Array
-	## Deux entiers par colonne : l'intervalle d'air creuse par une grotte.
-	var caves: PackedInt32Array
 	## Deux entiers par colonne : l'intervalle d'air degage **au-dessus d'un
-	## chemin**. Distinct de celui des grottes, et il doit le rester — voir
-	## `road_shape`.
+	## chemin**, borne haute **incluse**. `bas > haut` veut dire pas de chemin.
 	var roads: PackedInt32Array
-	## Matiere du **dessus du chapeau** d'un surplomb, qui n'est pas celle du
-	## sol de la meme colonne : elle se decide a l'altitude du chapeau, et sur
-	## une surface plate. Un octet par colonne, comme `surfaces`.
-	var cap_surfaces: PackedByteArray
-	## Plus bas point de matiere continue. Prend en compte le **plancher des
-	## grottes** : sans lui, le chemin rapide « bloc entierement plein » boucherait
-	## une grotte sans qu'aucun test ne le voie, puisqu'il ne regarde pas les
-	## intervalles.
+	## Plus bas point de matiere continue. Prend en compte le **plancher du
+	## degagement d'un chemin** : sans lui, le chemin rapide « bloc entierement
+	## plein » reboucherait une tranchee sans qu'aucun test ne le voie, puisqu'il
+	## ne regarde pas les intervalles.
 	var lowest: float = INF
-	## Plus haut point de matiere ou d'eau, **chapeau de surplomb compris**.
+	## Plus haut point de matiere ou d'eau.
 	var highest: float = -INF
 
 
@@ -214,33 +201,19 @@ func clear_caches() -> void:
 ## `top` est ici le sol **apres creusement** (`CWTerrainField.column_profile`),
 ## pas la sortie brute du champ ; les deux consommateurs doivent lui passer la
 ## meme valeur, et c'est ce que la verification des 4 096 points compare.
-## `[slab_lo, slab_hi]` est le chapeau de surplomb du jalon 1.15, borne haute
-## **incluse**, et `[cave_lo, cave_hi]` le tube de grotte qui le perce. Les deux
-## sont vides — `bas > haut` — sur la quasi-totalite du monde, et leurs valeurs
-## par defaut disent exactement cela : un appelant qui ne connait pas la couche
-## de surplombs decrit le monde d'avant elle, ce qui est ce que veulent les
-## verifications de la regle nue.
+## `[road_lo, road_hi]` est le degagement creuse au-dessus d'un chemin (jalon
+## 1.16), borne haute **incluse**. Il est vide — `bas > haut` — sur la
+## quasi-totalite du monde, et ses valeurs par defaut disent exactement cela :
+## un appelant qui ne connait pas la couche de chemins decrit le monde d'avant
+## elle, ce qui est ce que veulent les verifications de la regle nue.
 ##
-## **L'ordre complet des recouvrements est donc : grotte, surplomb, etang,
-## terrain.** La grotte passe en premier parce qu'elle est de l'air et que l'air
-## efface tout — c'est elle qui traverse le socle d'un surplomb *et* le terrain
-## qui le porte. Le surplomb vient ensuite : une dalle de roche recouvre l'eau
-## d'une mare comme le sol qu'elle surplombe.
+## **L'ordre complet des recouvrements est donc : chemin, etang, terrain.** Le
+## chemin passe en premier parce qu'il est de l'air et que l'air efface tout.
 static func voxel_of(y: int, top: int, surface: int, subsurface: int,
 		sea: int, pond_lo: int, pond_hi: int,
-		slab_lo: int = 1, slab_hi: int = 0, cap_surface: int = 0,
-		cave_lo: int = 1, cave_hi: int = 0,
 		road_lo: int = 1, road_hi: int = 0) -> int:
-	if y >= cave_lo and y <= cave_hi:
-		return CWPalette.AIR
 	if y >= road_lo and y <= road_hi:
 		return CWPalette.AIR
-	if y >= slab_lo and y <= slab_hi:
-		if y == slab_hi:
-			return cap_surface
-		if y > slab_hi - subsurface:
-			return CWPalette.subsurface_index(cap_surface)
-		return CWPalette.STONE
 	if y >= pond_lo and y <= pond_hi:
 		return CWPalette.water_index(float(pond_hi - y))
 	if y == top:
@@ -254,6 +227,36 @@ static func voxel_of(y: int, top: int, surface: int, subsurface: int,
 	return CWPalette.STONE
 
 
+## Vrai si un tronc estampe occupe ce point, en coordonnees **monde**.
+##
+## -- Pourquoi cette fonction existe -------------------------------------------
+##
+## `_stamp_trunks` ecrit les troncs **dans les donnees du monde**, mais du seul
+## cote de `_generate_block`. La requete ponctuelle les ignorait, et les deux
+## ecritures de la regle decrivaient donc deux mondes differents sur chaque
+## colonne qui porte un arbre : le bloc genere rend du bois, la requete rendait
+## de l'air. C'est l'invariant n. 18 en defaut, et il n'etait pas visible parce
+## que les deux balayages qui le tiennent — les 4 096 points du jalon 1.8 et
+## l'accord de `tests/relief_test.gd` — tombaient l'un sur un bloc sans arbre,
+## l'autre sur le coeur d'un massif. Releve le 2026-09-10, en repointant le
+## second sur une chaussee apres le retrait des massifs.
+##
+## Ce que ca coute : une consultation de la grille d'arbres, soit une a quatre
+## cellules, toutes en cache apres la premiere. C'est du chemin **froid** —
+## `_generate_block` ne passe pas par ici, il a sa propre boucle.
+func trunk_at(wx: int, y: int, wz: int) -> bool:
+	var trees: CWTreeScatter = tree_scatter_grid()
+	if trees == null:
+		return false
+	for pl in trees.trunks_in(wx, wz, 1, 1):
+		if y < pl.y or y >= pl.y + pl.hauteur:
+			continue
+		for v in CWTreeScatter.trunk_voxels(pl):
+			if v.x == wx and v.y == y and v.z == wz:
+				return true
+	return false
+
+
 ## Bloc genere en un point, en coordonnees de scene. Ne consulte aucune edition :
 ## c'est le monde tel que le champ le decrit.
 ##
@@ -265,6 +268,12 @@ func generated_voxel(x: int, y: int, z: int) -> int:
 	var p: CWWorldParams = f.params()
 	var wx: int = p.world_origin.x + x
 	var wz: int = p.world_origin.y + z
+	# Le tronc estampe (jalon 1.11) passe **avant tout le reste**, parce que
+	# `_stamp_trunks` ecrit apres tous les remplissages de `_generate_block` :
+	# il recouvre ce qui precede, et l'ordre des tests d'ici est celui des
+	# recouvrements, a l'envers (invariant n. 39).
+	if trunk_at(wx, y, wz):
+		return CWPalette.WOOD
 	var c: Vector4 = f.sample_column_full(wx, wz)
 	var sea: int = p.sea_level
 	var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
@@ -276,19 +285,6 @@ func generated_voxel(x: int, y: int, z: int) -> int:
 			c.x - float(sea), c.y, c.z, wx, wz, slope)
 	surface = pond_surface(surface, biome, prof,
 			CWTerrainField.pond_gate(c.x, c.w, sea, biome))
-	var rel := Vector4i(1, 0, 1, 0)
-	if p.overhangs:
-		rel = CWMesaGrid.relief(f.mesas().mesas_at(wx, wz, f), wx, wz, prof.x)
-	var cap: int = 0
-	if rel.y >= rel.x:
-		# Meme regle qu'au chemin chaud : la matiere du dessus d'un massif se
-		# decide a son altitude **et sur son epaisseur**. Voir `_get_patch`.
-		cap = CWPalette.blended(
-				CWPalette.surface_of(biome, float(rel.y - sea), c.y, c.z,
-						wx, wz, 0.0),
-				CWPalette.STONE,
-				clampf((float(rel.y - prof.x) - CWMesa.SKIN_GRASS)
-						/ CWMesa.SKIN_ROCK, 0.0, 1.0), wx, wz)
 	var zone: CWPathNetwork.Zone = f.paths().empty_zone()
 	if p.road_network:
 		zone = f.paths().zone_at(wx, wz, f)
@@ -298,7 +294,7 @@ func generated_voxel(x: int, y: int, z: int) -> int:
 	var shape := Vector3i(prof.x, 1, 0)
 	if not cells.is_empty():
 		road = CWPathNetwork.nearest(zone, cells, float(wx), float(wz))
-		shape = road_shape(road, prof.x, rel.y,
+		shape = road_shape(road, prof.x,
 				CWPathNetwork.causeway_at(zone, float(wx), float(wz)),
 				CWTerrainField.free_water(prof, sea))
 		prof.x = shape.x
@@ -310,7 +306,7 @@ func generated_voxel(x: int, y: int, z: int) -> int:
 				clampf((road.x - CWPathNetwork.HALF_WIDTH)
 						/ CWPathNetwork.ROAD_FADE, 0.0, 1.0), wx, wz)
 	return voxel_of(y, prof.x, surface, subsurface_depth, sea, prof.y, prof.z,
-			rel.x, rel.y, cap, rel.z, rel.w, shape.y, shape.z)
+			shape.y, shape.z)
 
 
 ## Matiere de surface d'une colonne, une fois l'etang pris en compte.
@@ -352,36 +348,6 @@ static func pond_surface(surface: int, biome: int, prof: Vector3i,
 	return surface
 
 
-## Dessus **praticable** d'une colonne : le dessus du chapeau quand un surplomb
-## la couvre, le sol du terrain sinon.
-##
-## C'est le point unique ou les trois poseurs d'objets — les deux dispersions et
-## le generateur — se mettent d'accord sur *ou est le sol*. Depuis le jalon
-## 1.15, une colonne en a deux : celui du terrain, qui peut etre enseveli sous
-## le socle d'un surplomb ou se trouver a l'ombre de son chapeau, et le dessus
-## plat du chapeau lui-meme. **C'est le second qui porte la vegetation** — c'est
-## ce qu'on voit sur les captures du jeu d'origine, ou une mesa porte ses arbres
-## sur le dos et rien dessous.
-static func standing_top(rel: Vector4i, ground_top: int) -> int:
-	return rel.y if rel.y >= rel.x else ground_top
-
-
-## Matiere de ce dessus praticable. Le dessus d'un chapeau est **plat et haut** :
-## sa matiere ne se decide ni a l'altitude du sol qu'il domine, ni sur sa pente.
-static func standing_surface(rel: Vector4i, ground_surface: int, biome: int,
-		temperature: float, humidity: float, x: int, z: int, sea: int) -> int:
-	if rel.y < rel.x:
-		return ground_surface
-	return CWPalette.surface_of(biome, float(rel.y - sea), temperature,
-			humidity, x, z, 0.0)
-
-
-## Vrai si une grotte perce le sol de cette colonne : rien ne peut s'y poser,
-## le bloc qui devrait porter l'objet ayant ete creuse.
-static func cave_breaks(rel: Vector4i, ground_top: int) -> bool:
-	return rel.w >= rel.z and ground_top >= rel.z and ground_top <= rel.w
-
-
 ## Ce qu'un chemin fait a une colonne : `Vector3i(dessus, air_bas, air_haut)`.
 ##
 ## Trois cas :
@@ -391,94 +357,24 @@ static func cave_breaks(rel: Vector4i, ground_top: int) -> bool:
 ##   * **sur la terre** : la colonne est tranchee a l'altitude du chemin — au
 ##     moins un bloc sous le terrain, sur toute la largeur du ruban — et la
 ##     tranche de `CLEARANCE` blocs au-dessus est **effacee**. C'est cet
-##     effacement qui fait qu'un chemin traverse le socle d'un surplomb au lieu
-##     de buter dessus, et qu'il en sort un tunnel quand le socle est plus haut
-##     que le degagement ;
+##     effacement qui debarrasse la chaussee de ce qui la surplombe de trop
+##     pres ;
 ##   * **au-dessus de l'eau** : la colonne est **remblayee** jusqu'a la levee.
 ##     Cette branche n'est pas ici — elle est dans `CWPathNetwork.shaped_top`,
 ##     avec le reste de la regle de dessus, parce que les deux dispersions en
 ##     ont besoin autant que le generateur. Ici, seul le degagement change : une
 ##     levee se degage comme une chaussee.
 ##
-## L'intervalle d'air du chemin est **distinct de celui des grottes**, et il
-## faut qu'il le reste : reunir les deux en un seul intervalle creuserait tout
-## ce qui les separe, c'est-a-dire un puits de plusieurs dizaines de blocs le
-## jour ou un chemin passe au-dessus d'une grotte.
-static func road_shape(road: Vector2, ground_top: int,
-		slab_hi: int = -0x7FFFFFFF, span: float = NAN,
+## Hors chaussee, un chemin ne creuse rien : l'accotement se contente d'epouser
+## le profil, et l'intervalle rendu est vide.
+static func road_shape(road: Vector2, ground_top: int, span: float = NAN,
 		libre: int = CWTerrainField.NO_WATER) -> Vector3i:
 	if road.x >= CWPathNetwork.reach():
 		return Vector3i(ground_top, 1, 0)
 	var top: int = CWPathNetwork.shaped_top(ground_top, road, span, libre)
-	# Le dessus de la **chaussee**, meme hors d'elle : c'est le centre du cercle
-	# de l'alesage, et il ne depend pas de la colonne qu'on regarde.
-	var road_top: int = CWPathNetwork.shaped_top(ground_top,
-			Vector2(0.0, road.y), span, libre)
-	var arche: int = tunnel_arch(top, road_top, slab_hi, road.x)
-
 	if not CWPathNetwork.on_roadway(road):
-		# Hors chaussee, un chemin ne creuse rien — **sauf sous une masse**, ou
-		# la voute du tunnel deborde le ruban. Sans ce debordement, un tunnel
-		# reste la fente rectangulaire que le reproche du 2026-09-08 visait.
-		if arche <= 0:
-			return Vector3i(top, 1, 0)
-		return Vector3i(top, top + 1, top + arche)
-	return Vector3i(top, top + 1,
-			top + maxi(CWPathNetwork.CLEARANCE, arche))
-
-
-## -- L'alesage d'un tunnel : un rayon, pas une hauteur -----------------------
-##
-## La premiere version rendait une **hauteur** : le chemin creusait une tranche
-## rectangulaire au-dessus de sa chaussee, de largeur constante. Sous quarante
-## blocs de roche, ca donne une fente, pas une arche — et c'est le reproche du
-## 2026-09-08, *« un degagement proportionnel, avec un diametre, sans couper la
-## montagne en deux »*.
-##
-## Le tunnel a donc un **rayon**, et sa section est un cercle centre sur l'axe de
-## la chaussee a hauteur de celle-ci. Le degagement au point de distance `d` vaut
-## `sqrt(R² - d²)` : maximal sur l'axe, nul au piedroit. La voute deborde la
-## chaussee des que `R > HALF_WIDTH`, ce qui est le cas sous toute masse un peu
-## haute — c'est ce debordement qui fait la difference entre une arche et une
-## fente.
-##
-## **Et il garde un toit.** Au moins `TUNNEL_ROOF_MIN` blocs de matiere au-dessus
-## de la voute, sinon le chemin ne perce plus le massif : il le **coupe en deux**
-## et laisse une tranchee a ciel ouvert la ou on attendait une arche. C'est la
-## seconde moitie du reproche, et elle etait deja tenue.
-
-## Rayon de l'alesage sous une masse, en blocs, ou zero s'il n'y a pas de masse
-## a percer.
-static func tunnel_bore(road_top: int, slab_hi: int) -> int:
-	var mass: int = slab_hi - road_top
-	if mass < CWPathNetwork.CLEARANCE + CWPathNetwork.TUNNEL_ROOF_MIN:
-		return 0
-	return maxi(CWPathNetwork.CLEARANCE,
-			mini(int(float(mass) * CWPathNetwork.TUNNEL_SHARE),
-					mass - CWPathNetwork.TUNNEL_ROOF_MIN))
-
-
-## Degagement au-dessus de la colonne, a la distance laterale `d` de l'axe.
-##
-## Rend zero hors de l'alesage. `top` est le dessus de **cette** colonne une fois
-## le chemin passe, `road_top` celui de la chaussee : la voute se mesure depuis
-## la chaussee — c'est un cercle, il a un centre — et le degagement se compte
-## depuis la colonne, qui est plus haute des qu'on quitte le ruban.
-static func tunnel_arch(top: int, road_top: int, slab_hi: int, d: float) -> int:
-	var r: int = tunnel_bore(road_top, slab_hi)
-	if r <= 0 or d >= float(r):
-		return 0
-	var voute: int = road_top + floori(sqrt(float(r * r) - d * d))
-	return maxi(0, voute - top)
-
-
-## Hauteur degagee au-dessus de la chaussee, sur l'axe.
-##
-## A ciel ouvert, c'est `CLEARANCE` : de quoi effacer ce qui traine au-dessus du
-## chemin. Sous un massif, c'est le rayon de l'alesage — la fleche de la voute,
-## qui est maximale la.
-static func tunnel_height(road_top: int, slab_hi: int) -> int:
-	return maxi(CWPathNetwork.CLEARANCE, tunnel_bore(road_top, slab_hi))
+		return Vector3i(top, 1, 0)
+	return Vector3i(top, top + 1, top + CWPathNetwork.CLEARANCE)
 
 
 func _get_used_channels_mask() -> int:
@@ -527,10 +423,8 @@ func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: i
 		out_buffer.fill(CWPalette.raw_of(CWPalette.STONE), CWPalette.CHANNEL_COLOR)
 		return
 
-	# Les cinq tableaux rares sont testes **une fois par bloc** et non une fois
-	# par colonne : ils sont vides dans la quasi-totalite des blocs.
-	var has_slabs: bool = not patch.slabs.is_empty()
-	var has_caves: bool = not patch.caves.is_empty()
+	# Le tableau rare est teste **une fois par bloc** et non une fois par
+	# colonne : il est vide dans la quasi-totalite des blocs.
 	var has_roads: bool = not patch.roads.is_empty()
 
 	var i: int = 0
@@ -541,15 +435,8 @@ func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: i
 			var pond_lo: int = patch.ponds[i * 2]
 			var pond_hi: int = patch.ponds[i * 2 + 1]
 			var col: int = (patch.surface_colors[i] << 8) | 0xFF
-			var slab_lo: int = patch.slabs[i * 2] if has_slabs else 1
-			var slab_hi: int = patch.slabs[i * 2 + 1] if has_slabs else 0
-			var cave_lo: int = patch.caves[i * 2] if has_caves else 1
-			var cave_hi: int = patch.caves[i * 2 + 1] if has_caves else 0
 			var road_lo: int = patch.roads[i * 2] if has_roads else 1
 			var road_hi: int = patch.roads[i * 2 + 1] if has_roads else 0
-			var cap: int = patch.cap_surfaces[i] if has_slabs else 0
-			var cap_col: int = ((patch.cap_colors[i] << 8) | 0xFF) \
-					if has_slabs else 0
 			i += 1
 			var top: int = floori(h)
 
@@ -584,25 +471,9 @@ func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: i
 			_fill_run(out_buffer, lx, lz, y_min, y_max, stride,
 					pond_lo, pond_hi, CWPalette.WATER)
 
-			# Le surplomb (jalon 1.15), qui recouvre tout ce qui precede :
-			# roche, puis la couche meuble et le sol de son dessus plat. C'est
-			# l'ordre que `voxel_of` reproduit en le testant avant l'etang.
-			if slab_hi >= slab_lo:
-				_fill_run(out_buffer, lx, lz, y_min, y_max, stride,
-						slab_lo, slab_hi - subsurface_depth, CWPalette.STONE)
-				if subsurface_depth > 0:
-					_fill_run(out_buffer, lx, lz, y_min, y_max, stride,
-							maxi(slab_lo, slab_hi - subsurface_depth + 1),
-							slab_hi - 1, CWPalette.subsurface_index(cap))
-				_fill_run(out_buffer, lx, lz, y_min, y_max, stride,
-						slab_hi, slab_hi, cap, cap_col)
-
-			# La grotte, puis le degagement du chemin : c'est de l'air, et
-			# l'air efface tout — le socle du surplomb comme le terrain qui le
-			# porte. Deux intervalles et non un : voir `road_shape`.
-			if cave_hi >= cave_lo:
-				_fill_run(out_buffer, lx, lz, y_min, y_max, stride,
-						cave_lo, cave_hi, CWPalette.AIR)
+			# Le degagement du chemin, en dernier : c'est de l'air, et l'air
+			# efface tout — l'eau que la levee comble comme le terrain que la
+			# chaussee tranche.
 			if road_hi >= road_lo:
 				_fill_run(out_buffer, lx, lz, y_min, y_max, stride,
 						road_lo, road_hi, CWPalette.AIR)
@@ -718,11 +589,10 @@ func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,
 	patch.surfaces.resize(n)
 	patch.surface_colors.resize(n)
 	patch.ponds.resize(n * 2)
-	# Les cinq tableaux qui suivent decrivent des accidents rares — un surplomb,
-	# une grotte, un chemin, une levee — et restent **vides** dans les blocs qui
-	# n'en portent pas, c'est-a-dire l'immense majorite. Les allouer d'office
-	# ferait passer une carte de hauteurs de 4,4 a 12 Ko, et le cache en garde
-	# seize mille.
+	# `roads` decrit un accident rare — une tranchee, une levee — et reste
+	# **vide** dans les blocs qui n'en portent pas, c'est-a-dire l'immense
+	# majorite. L'allouer d'office ferait grossir de moitie une carte de
+	# hauteurs, et le cache en garde seize mille.
 	# Le reseau de chemins (jalon 1.16), consulte **une fois par bloc**. Une
 	# cellule d'index fait 256 unites et un bloc de terrain 16, tous deux
 	# alignes : les 256 colonnes tombent dans la meme cellule, et l'index a deja
@@ -748,10 +618,6 @@ func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,
 	var raw: PackedFloat32Array = f.sample_patch(ox, oz, rx, size.z + ring,
 			stride)
 	var step_f: float = float(stride)
-	var mesas: CWMesaGrid = f.mesas()
-	var win: Array[CWMesa] = []
-	var last_mcx: int = 0x7FFFFFFF
-	var last_mcz: int = 0x7FFFFFFF
 	# L'amplitude de l'ecotone, prise une fois par cellule de climat traversee
 	# et non une fois par colonne : le gradient du champ de climat est une
 	# grandeur regionale, et sa lecture prend un verrou. Meme economie que celle
@@ -792,30 +658,7 @@ func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,
 		var biome: int = CWBiome.at(h, raw[j + 1], raw[j + 2], sea)
 		var prof: Vector3i = CWTerrainField.column_profile(h, chan, sea, biome)
 
-		# Le massif (jalon 1.15), **apres** le profil : sa hauteur se mesure
-		# depuis le sol de *cette* colonne, sans quoi son contour est une marche
-		# de la hauteur du relief qu'il traverse. Voir `CWMesa.slab_from_shape`.
-		#
-		# La fenetre est prise une fois par cellule de 512 traversee et non une
-		# fois par colonne : les 256 colonnes d'un bloc tombent dans une ou deux
-		# cellules, et la consultation prend un verrou. Meme economie que celle
-		# de `sample_patch` sur la fenetre de sites.
-		var rel := Vector4i(1, 0, 1, 0)
-		if p.overhangs:
-			var mcx: int = CWMesaGrid.cell_of(cx)
-			var mcz: int = CWMesaGrid.cell_of(cz)
-			if mcx != last_mcx or mcz != last_mcz:
-				win = mesas.get_window(mcx, mcz, f)
-				last_mcx = mcx
-				last_mcz = mcz
-			if not win.is_empty():
-				rel = CWMesaGrid.relief(win, cx, cz, prof.x)
 
-		# Le sol **avant** le chemin : c'est celui sur lequel le massif s'est
-		# pose, donc celui dont son epaisseur se mesure. Le prendre apres ferait
-		# grossir la masse de la profondeur de la tranchee, et la teinte de son
-		# dessus ne serait plus la meme des deux cotes de l'invariant n. 18.
-		var sol0: int = prof.x
 
 		# Le chemin, en dernier : il tranche la colonne que tout le reste vient
 		# de decrire.
@@ -824,7 +667,7 @@ func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,
 		if not road_cells.is_empty():
 			road = CWPathNetwork.nearest(road_zone, road_cells,
 					float(cx), float(cz))
-			shape = road_shape(road, prof.x, rel.y,
+			shape = road_shape(road, prof.x,
 					CWPathNetwork.causeway_at(road_zone, float(cx), float(cz)),
 					CWTerrainField.free_water(prof, sea))
 			prof.x = shape.x
@@ -868,53 +711,16 @@ func _get_patch(f: CWTerrainField, p: CWWorldParams, origin_in_voxels: Vector3i,
 		patch.surfaces[i] = surf
 		patch.surface_colors[i] = (col >> 8) & 0xFFFFFF
 
-		if rel.y >= rel.x:
-			patch.slabs = _spans(patch.slabs, n)
-			patch.slabs[i * 2] = rel.x
-			patch.slabs[i * 2 + 1] = rel.y
-			# Le dessus d'un massif se decide a **son** altitude : une masse de
-			# quatre-vingts blocs de haut au-dessus d'une plage n'a pas de sable
-			# sur le dos.
-			#
-			# **Et il se decide aussi sur son epaisseur.** Sans cela, une masse
-			# rocheuse arrondie sort couverte d'herbe sur toute sa surface et se
-			# lit comme une colline de plus : le relief qu'elle ajoute est
-			# invisible. La regle de falaise ne peut pas l'aider — elle mesure
-			# la pente du **champ**, qui ignore tout de cette couche. On prend
-			# donc l'epaisseur : la frange, ou la masse affleure de deux ou
-			# trois blocs, garde l'herbe du pre qu'elle traverse ; le coeur, ou
-			# elle fait dix blocs et plus, est de la roche nue. C'est un
-			# affleurement, et c'est ce que montrent les captures du jeu.
-			var ep: float = float(rel.y - sol0)
-			var cs: Vector2i = CWPalette.surface_shaded(biome,
-					float(rel.y - sea), raw[j + 1], raw[j + 2], cx, cz, 0.0)
-			cs = CWPalette.blended_shaded(cs.x, CWPalette.STONE,
-					clampf((ep - CWMesa.SKIN_GRASS)
-							/ CWMesa.SKIN_ROCK, 0.0, 1.0), cx, cz)
-			if patch.cap_surfaces.is_empty():
-				patch.cap_surfaces.resize(n)
-				patch.cap_colors.resize(n)
-			patch.cap_surfaces[i] = cs.x
-			patch.cap_colors[i] = (cs.y >> 8) & 0xFFFFFF
-		if rel.w >= rel.z:
-			patch.caves = _spans(patch.caves, n)
-			patch.caves[i * 2] = rel.z
-			patch.caves[i * 2 + 1] = rel.w
-
 		patch.lowest = minf(patch.lowest, ph)
 		if shape.z >= shape.y:
+			# Le plancher du degagement d'un chemin est le point d'air le plus
+			# bas de la colonne : sans lui, le chemin rapide « bloc entierement
+			# plein » reboucherait la tranchee, et rien ne le signalerait.
 			patch.lowest = minf(patch.lowest, float(shape.y))
-		if rel.w >= rel.z:
-			# Le plancher d'une grotte est le point d'air le plus bas de la
-			# colonne : sans lui, le chemin rapide « bloc entierement plein »
-			# reboucherait la grotte, et rien ne le signalerait.
-			patch.lowest = minf(patch.lowest, float(rel.z))
 		# `highest` borne le vide au-dessus du monde : c'est la **surface libre**
-		# qui compte, eau et chapeau de surplomb compris, sinon le chemin rapide
-		# du haut rendrait de l'air a la place du dessus d'une mare ou d'une mesa.
+		# qui compte, l'eau comprise, sinon le chemin rapide du haut rendrait de
+		# l'air a la place du dessus d'une mare.
 		patch.highest = maxf(patch.highest, maxf(ph, float(prof.z)))
-		if rel.y >= rel.x:
-			patch.highest = maxf(patch.highest, float(rel.y))
 
 	_patch_mutex.lock()
 	if _patches.size() >= HEIGHTMAP_CACHE_CAP:
