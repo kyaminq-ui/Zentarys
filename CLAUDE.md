@@ -34,7 +34,7 @@ s'ouvre pas proprement. Il permet de piloter l'éditeur par MCP.
 ## Les quatre commandes qui servent tous les jours
 
 ```bash
-# La suite de validation — 408 vérifications, ~25 s. À lancer après toute
+# La suite de validation — 407 vérifications, ~25 s. À lancer après toute
 # modification du monde. C'est le filet, et il tient tous les contrats
 # inter-fichiers que rien d'autre ne tient.
 ./godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd
@@ -59,9 +59,12 @@ s'ouvre pas proprement. Il permet de piloter l'éditeur par MCP.
 # Échap pour rendre la souris puis quitter.
 ./godot.windows.editor.double.x86_64.exe --path . scenes/terrain_demo.tscn
 
-# Trois bascules qui servent souvent, et qui n'existent que pour la capture :
+# Cinq bascules qui servent souvent, et qui n'existent que pour la capture :
 #   --heure h   se pose à une heure du cycle (0 minuit, 0,5 midi) et le fige
 #   --regard d  l'assiette de la caméra, en degrés au-dessus de l'horizon
+#   --carte     ouvre la carte du monde au démarrage
+#   --zones n   sa densité, de 3 à 9. À neuf, les noms se disputent la place :
+#               c'est le seul cas où l'évitement de collision se juge
 #   --fils n    force le nombre de fils de génération — le réglage le plus
 #               rentable du projet, et son optimum est propre à la machine
 ```
@@ -71,7 +74,7 @@ d'assets, aperçus de carte, générateurs de modèles — est en `nextsteps.md`
 
 ## Les cinq invariants qui coûtent le plus cher
 
-La liste complète est en `nextsteps.md` §4, et elle compte cinquante-deux
+La liste complète est en `nextsteps.md` §4, et elle compte cinquante-quatre
 entrées. Ces cinq-là sont ceux dont l'oubli coûte une session entière.
 
 1. **Les constantes du bruit et du LCG sont porteuses** (n° 1). Les valeurs
@@ -101,8 +104,21 @@ entrées. Ces cinq-là sont ceux dont l'oubli coûte une session entière.
 
 4. **Un biome n'est pas une matière de surface** (n° 27). `CWBiome.at` dit *où on
    est* ; `CWPalette.surface_of` dit *de quoi c'est fait*. Les tables de contenu
-   — `DENSITY`, `ROLES`, `SPECIES`, `FAMILIES` — sont indexées par **biome**.
-   Les confondre fait pousser des bleuets sur la roche nue.
+   — `DENSITY`, `ROLES`, `SPECIES`, `FAMILIES` — sont indexées par **biome**, et
+   depuis le 2026-09-12 **sans une seule exception**. Les confondre fait pousser
+   des bleuets sur la roche nue.
+
+   Depuis ce jour-là, **chaque biome a une matière et une seule** — Lava Lands
+   deux, la scorie et le magma, parce que c'est ce qui a été demandé. Il n'en
+   reste qu'une hors des six, la roche de falaise, qui est une règle de *pente*.
+   Toute nouvelle matière doit passer la question : *qu'est-ce qu'elle nomme que
+   le biome ne nomme pas ?* La plage, le haut-fond et le marais ne l'ont pas
+   passée.
+
+   Et **le biome se classe au site de région** (n° 53) : une cellule de Voronoï,
+   seize mille blocs de côté par construction. `CWTerrainField.climate_blend`
+   rend toujours le climat *mélangé*, mais il ne décide plus rien — c'est
+   l'aiguille de l'ATH, et un seuil réglé en la regardant serait faux.
 
 5. **Il y a quatre grilles de dessin, et le modèle porte la sienne** (n° 28).
    Arbres et filons à **1** voxel par bloc, flore à **4 ou 6**, personnage et

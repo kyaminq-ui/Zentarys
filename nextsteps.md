@@ -13,867 +13,319 @@ invariants, les pièges, les décisions ouvertes.
 
 ---
 
-## 0. La prochaine session — **cinq demandes, 2026-09-11 au soir**
+## 0. La prochaine session — **rien n'est demandé**
 
-> **Rien n'en est commencé.** Le programme précédent — les cinq demandes du
-> 2026-09-10 — est entièrement traité ; son compte rendu est en §0ter, et le
-> récit est dans le journal de `docs/ROADMAP.md`.
+> Le programme précédent — les cinq demandes du 2026-09-11 au soir — est
+> entièrement traité. Son compte rendu est en §0ter ; le récit, mesures et
+> impasses comprises, est dans le journal de `docs/ROADMAP.md`.
 
-Les trois premières touchent au monde, les deux dernières à la carte. **Deux
-d'entre elles ferment quelque chose que la session du 2026-09-11 a ouvert**, et
-c'est dit à sa place.
-
-**Et quatre choses traînent depuis la veille, hors de ce programme.** Aucune
-n'est bloquante, et aucune ne s'oppose à ce qui suit :
+**Ce qui suit n'est pas un programme, c'est un état de dette.** Rien n'y est
+bloquant, rien n'y est urgent, et l'ordre n'engage personne. La seule chose qui
+compte au moment de reprendre est de savoir ce qui traîne, et pourquoi ça
+traîne — parce que la plupart de ces points ont une raison de ne pas être faits,
+et la redécouvrir coûte une demi-session.
 
 | ce qui traîne | où | pourquoi ça n'est pas fait |
 |---|---|---|
-| **compiler la GDExtension** | §0ter.5 | le SDK Windows n'est pas installé sur cette machine. C'est une modification de la machine, pas du projet |
-| **la collision des cactus** | §0ter.2 | ils sont à 4 voxels par bloc : inestampables. Ils veulent une forme de physique, et c'est le jalon 3.1 |
-| **la saccade au chargement** | §0ter.4 | affaire de latence, pas de débit. Aucune mesure ne la voit ; elle se juge manette en main |
-| **la gigue de taille des cinq arbres entiers** | §0ter.2 | perdue en passant en matière. La variété devra venir de variantes de modèles |
-
-Plus les quatre points de fond listés en fin de §0ter — les fichiers à mille
-lignes, la falaise, le plafond du cache, et 2.6.
+| **compiler la GDExtension** | §0ter, en fin | le SDK Windows n'est pas installé sur cette machine. C'est une modification de la machine, pas du projet |
+| **la collision des cactus** | §0ter, en fin | ils sont à 4 voxels par bloc : inestampables. Ils veulent une forme de physique, et c'est le jalon 3.1 |
+| **la saccade au chargement** | §0ter, en fin | affaire de latence, pas de débit. Aucune mesure ne la voit ; elle se juge manette en main |
+| **la gigue de taille des cinq arbres entiers** | §0ter, en fin | perdue en passant en matière. La variété devra venir de variantes de modèles |
+| **les fichiers de `worldgen` à mille lignes** | ci-dessous | c'est la dette de découpe, et elle ne fait mal à personne aujourd'hui |
+| **le plafond du cache de colonnes** | invariant n° 5 | il borne la vue à 1 024 blocs, et il faudra le lever *avant* d'augmenter la distance |
 
 ---
 
-### 1. Un biome, une matière — et la roche seulement en falaise
+### Les quatre points de fond, et ce qu'il faut savoir avant d'y toucher
+
+**1. Les gros fichiers.** `cw_terrain_field.gd` (1 040 lignes),
+`cw_palette.gd` (1 040), `terrain_demo.gd` (1 080), `cw_path_network.gd` (946)
+et `cw_voxel_generator.gd` (900) font chacun plusieurs métiers. La démo a déjà
+été rangée une fois — 1 147 → 962 lignes, puis remontée — et l'exercice a donné
+sa propre leçon : *l'ATH ne sortira pas de `terrain_demo.gd`, il lit dix-sept
+morceaux d'état de la démo, et un affichage qui est une vue sur tout n'est pas
+une couche.* Le générateur, lui, se découpe : le chemin en masse, la requête
+ponctuelle et l'estampage d'arbres sont trois métiers distincts qui ne
+partagent que `pond_surface`.
+
+**2. La falaise vaut-elle 12 % du chargement ?** Depuis le retrait des massifs,
+elle n'a plus de paroi à raconter — le plus grand dénivelé d'un bloc au suivant
+est de 0,65 bloc. Elle coûte une colonne de plus sur chaque axe du pochoir, soit
++12,9 % d'échantillonnage, **payé partout**. Ça se tranche à l'œil sur une
+capture, pas au banc. ⚠️ Et depuis le 2026-09-12 elle est **la seule matière du
+monde qui ne soit pas celle d'un biome** : la retirer retirerait la roche de la
+surface entièrement.
+
+**3. Le plafond du cache de colonnes borne la distance de vue.** L'invariant
+n° 5 demande `(2 × distance / 16)²` entrées ; à 1 024 blocs de vue on est
+**exactement** au plafond de 16 384. Au-delà, le cache s'auto-évince en boucle
+et le chargement s'effondre **sans rien signaler**. Le prix est chiffré et non
+plus estimé : **6,4 Ko l'entrée**, donc 105 Mo au plafond actuel et autant par
+doublement (`CWVoxelGenerator.PATCH_BYTES`).
+
+**4. 2.6, l'apparition** — la porte du jalon 2. Elle n'attend rien.
+
+---
+
+### Trois choses que la session du 2026-09-12 a laissées ouvertes
+
+Elles ne sont pas des défauts, ce sont des conséquences assumées de ses cinq
+réponses. Chacune se referme en une demi-heure le jour où elle gêne.
+
+* **la carte peint des pays de mer, pas une ligne de rivage.** Une région dont
+  le site est noyé est bleue en entier, îles comprises — et une région terrestre
+  reste peinte en terre même si un tiers de sa surface est sous l'eau. Peindre
+  le rivage demande une case par chunk au lieu d'une par région, soit **4 096
+  fois le coût** ; la dalle passerait de 46 ms à trois minutes. La route, si on
+  la prend un jour, est de peindre à la case *l'altitude* et non le biome, et de
+  ne garder la teinte de région que pour la terre ;
+* **la couverture nuageuse est toujours une constante** (`CWClouds.cover`,
+  0,45), et les nuages ne portent pas d'ombre (`cast_shadows`, à faux — une
+  tache dure de quarante blocs lit comme un défaut de rendu). La dérive est une
+  translation d'ensemble : deux nuages ne se croisent jamais. Ça ne se voit pas,
+  et le jour où ça se verra, ce sera une vitesse par altitude ;
+* ⚠️ **le climat affiché par l'ATH ne décide plus rien**, et c'est un piège de
+  lecture pour qui reprend le projet. Depuis que le biome se classe au site,
+  `climate_blend` est une aiguille d'instrument : on peut lire « 12 °C » à un
+  endroit dont le biome a été décidé sur un tout autre chiffre, celui du site.
+  Les deux ne se contredisent pas — l'un est le climat du lieu, l'autre celui
+  du pays — mais un réglage de seuil fait en regardant l'ATH serait faux.
+
+---
+
+## 0ter. Le programme des cinq demandes du 2026-09-11 au soir
+
+Traité en entier le 2026-09-12. Ce qui suit n'est que le **résultat** ; le
+raisonnement et les mesures sont dans le journal de `docs/ROADMAP.md`.
+
+---
+
+### 1. Un biome, une matière — et la roche seulement en falaise — **fait**
 
 *Corriger les biomes et leurs surfaces : Greenlands/herbe, Deserts/sable,
 Jungles/jungle (supprimer marais), Oceans/gravier, Lava Lands/scorie et magma.
 La surface roche sert uniquement pour les falaises.*
 
-**La moitié est déjà là, et c'est la moitié qui ne bougera pas.**
-`CWPalette._plain_of` rend déjà une matière et une seule par biome — neige,
-sable, jungle, herbe —, et l'en-tête qui la précède raconte les trois franges
-retirées le 2026-09-06 pour exactement cette raison : *un biome, une matière de
-plaine, sans exception*. La demande prolonge cette règle, elle ne la contredit
-pas.
+**Fait, et pris à la lettre** — c'est la décision qui a été demandée avant de
+commencer, et elle emporte plus que la liste : **la plage et le haut-fond
+partent aussi**. Ils nommaient bien un endroit, ce qui les avait sauvés deux
+fois, mais ils le nommaient de la même façon dans trois pays, et le rivage était
+devenu le seul lieu du monde où les biomes se ressemblent. Une Snowlands se
+termine maintenant dans l'eau **en neige**, une Jungles en herbe de jungle.
 
-**Ce qui reste à faire, mesuré le 2026-09-11** (parts du monde) :
+Mesure, en parts du monde :
 
-| matière | part | d'où elle vient | ce qu'il faut |
+| matière | avant | après | d'où elle vient maintenant |
 |---|---|---|---|
-| roche | **2,8 %** | deux sources : la falaise (voulue) **et la bande de roche de Lava Lands** | couper la seconde |
-| marais | 0,1 % | la **rive** d'un plan d'eau, en Jungles seulement | la retirer |
-| terre | 1,0 % | le **lit** des mares (`subsurface_index`) | à trancher, ce n'est pas une matière de biome |
-| sable | 18,1 % | le désert **et** la plage **et** le haut-fond | voir plus bas |
-| gravier | 15,3 % | le fond marin profond | l'étendre à tout l'océan |
+| roche | 2,8 % | **0,4 %** | la falaise, et rien d'autre |
+| marais | 0,1 % | **0** | plus rien ne la produit |
+| terre | 1,0 % | 1,0 % | le lit des mares — c'est le sous-sol, pas une surface |
+| sable | 18,1 % | **13,4 %** | Deserts, exactement |
+| gravier | 15,3 % | **19,5 %** | Oceans, exactement |
+| herbe / jungle / neige | — | 18,0 / 17,6 / 13,4 % | leurs biomes, exactement |
+| magma + scorie | — | 2,9 + 13,8 % | Lava Lands, exactement |
 
-**Trois pièges, et le premier est un piège de suppression :**
+**Trois retraits, et le troisième est celui qui coûtait le plus cher à voir
+venir.**
 
-* ⚠️ **le roseau ne pousse que sur le marais.** `CWDecorRules.FAMILIES_SURFACE`
-  et `FAMILIES_SURFACE_BIOME` indexent deux rôles **par matière** et non par
-  biome — le marais en est un. Retirer la matière sans retirer son entrée laisse
-  un rôle que la surface sait choisir et que rien ne peut plus poser : la plante
-  disparaît, la densité moyenne ne bouge pas assez pour se voir, et **aucun test
-  de table ne le signale** (invariant n° 22, qui est exactement ce cas). Il faut
-  décider *où va le roseau* avant de retirer le marais, pas après ;
-* ⚠️ **la bande de roche de Lava Lands est celle qui a triplé le 2026-09-11.**
-  Elle est passée de 0,3 % à 2,8 % du monde parce que le niveau de la mer est
-  descendu de soixante blocs et que la règle est exprimée en altitude *au-dessus
-  de la mer* (§0ter.3). La couper ferme donc **deux points d'un coup** : la
-  demande d'aujourd'hui, et l'effet de bord laissé ouvert hier. C'est la branche
-  `lava_rock` / `ROCK_MIN` de `CWPalette.surface_shaded` ;
-* ⚠️ **la plage n'est pas dans la liste, et il faut trancher exprès.** Prise à la
-  lettre, « un biome une matière » retire aussi le sable de rivage — et le
-  fichier a une opinion écrite en face : *une matière qui vaut la peine est celle
-  qui nomme un endroit, pas celle qui nuance un gradient*. La plage et la rive
-  nomment un endroit ; la frange d'humidité n'en nommait pas. **Recommandation :
-  garder la plage, retirer le marais** — mais c'est une décision, pas une
-  déduction, et il vaut mieux la poser avant de commencer.
+* la **bande de roche de Lava Lands** part : c'est elle qui avait triplé toute
+  seule quand la mer est descendue de soixante blocs, parce qu'elle était
+  exprimée en altitude au-dessus de la mer. Ça ferme aussi l'effet de bord que
+  la session du 2026-09-11 avait laissé ouvert ;
+* le **haut-fond** part avec la plage : c'était la seule transition de matière
+  qu'on voyait *à travers l'eau*, et elle mettait du sable de désert au pied
+  d'une Snowlands ;
+* ⚠️ le **marais** part, **et le roseau avec lui**. C'était le piège annoncé, et
+  il s'est vérifié : le roseau ne poussait que sur cette matière, et la retirer
+  seule aurait fait disparaître la plante sans qu'aucune densité ne bouge
+  (invariant n° 22). Les deux tables par matière — `FAMILIES_SURFACE` et
+  `FAMILIES_SURFACE_BIOME` — disparaissent avec, et `role_at` ne consulte plus
+  qu'une table indexée par biome. Le jour où une matière méritera de nouveau sa
+  propre composition, il faudra réécrire les deux tables **et** le garde-fou de
+  `tests/decor_test.gd` : ce retrait le rend inutile plutôt qu'il ne le casse.
 
-Idem pour le haut-fond : l'océan mélange aujourd'hui du sable près du rivage et
-du gravier au large, sur douze blocs de fond. « Oceans/gravier » demande de le
-supprimer ; c'est la seule transition qu'on voit **à travers l'eau**, et c'est
-aussi ce qui distingue une plage d'une falaise vue de la mer.
+**Ce qui reste, et qu'il ne faut pas confondre avec une exception :**
+
+* **la falaise**, seule matière hors biome. C'est une règle de *pente*, pas
+  d'altitude, et c'est la seule qui survive à la question « qu'est-ce que cette
+  bande ajoute que le biome ne dise déjà » ;
+* **le lit d'une mare**, qui garde la couche meuble. Ce n'est pas une matière de
+  surface : c'est le sous-sol vu en coupe, exactement ce qu'on voit en creusant
+  soi-même, et `subsurface_index` est le point unique qui le dit dans les deux
+  cas. **La rive**, elle, garde sa forme — une berge sèche entre l'eau et le
+  terrain — et prend la couleur de son pays : ce qu'elle dessinait était de la
+  géométrie, et la géométrie ne dépendait pas de la couleur.
 
 ---
 
-### 2. Un biome a une taille minimum
+### 2. Un biome a une taille minimum — **fait, en classant au site**
 
 *Un biome doit faire une taille minimum, pour éviter des transitions trop
 rapides.*
 
-**Il n'existe rien pour ça aujourd'hui, et c'est structurel.** `CWBiome.at` est
-une **fonction pure d'une colonne** : elle compare le climat de ce point à des
-seuils, sans savoir ce que valent les colonnes voisines. Un biome peut donc
-faire une colonne de large partout où le climat frôle un seuil, et rien dans le
-code ne l'en empêche.
+**Le diagnostic n'était pas celui que ce fichier annonçait.** Il disait qu'un
+biome pouvait faire une colonne de large partout où le climat frôle un seuil.
+La mesure dit autre chose : le champ de climat est un **plateau parfaitement
+plat au cœur de chaque région** — le mélange n'y retient qu'un site —, coupé de
+transitions **étroites**, deux cents blocs. Un biome faisait donc déjà la taille
+d'une région sur l'immense majorité du monde. Ce qui n'allait pas était le
+bord : deux cents blocs pour passer d'un climat à l'autre, et jusqu'à **quatre
+seuils traversés** en chemin. Quatre pays en deux cents pas.
 
-> ⚠️ **Et la session du 2026-09-11 a rendu le défaut plus visible, mécaniquement.**
-> Les quatre seuils de température allaient de 0,16 à 0,985 ; ils vont maintenant
-> de 0,28 à 0,63. Ils sont donc **2,4 fois plus serrés**, sur un champ de climat
-> qui n'a pas changé de pente : à distance parcourue égale, on traverse 2,4 fois
-> plus de frontières. *L'égalisation des six parts a acheté l'égalité au prix de
-> la longueur d'onde*, et c'est très probablement ce qui se voit en jeu.
+**La route prise est la garantie**, et elle a été choisie explicitement :
+`CWBiome.of_site` classe sur le climat du **site de région le plus proche**. Un
+biome est donc une cellule du diagramme de Voronoï des sites — 16 384 unités de
+côté, par construction, et il n'y a plus rien à régler pour que ce soit vrai.
+Les bandes intermédiaires ne se resserrent pas : elles n'existent plus.
 
-**Deux routes, et elles ne coûtent pas la même chose.**
+**Ce que ça ne casse pas, et il fallait le vérifier.** Le voisinage reste
+crédible parce que ce qui l'assurait n'était pas le mélange mais les
+**provinces climatiques** de `CWRegionSiteGrid`, qui adoucissent un climat
+extrême vers le tempéré au bord de sa province. Cette règle est au niveau du
+site, donc elle survit telle quelle. Les six parts n'ont pas bougé d'un dixième
+de point, et `tools/biome_balance.gd` relancé le confirme.
 
-1. **Lisser davantage le champ de climat.** C'est le levier le plus direct — les
-   provinces climatiques ont trois constantes réglées à l'œil sur une seule
-   graine (fréquence, largeur du cœur, décalages), et `tools/biome_stats.gd`
-   mesure ce qu'elles rendent. Élargir les provinces allonge les transitions
-   sans toucher à la règle. **Mais ça ne garantit pas une taille minimum**, ça
-   la rend seulement plus probable ;
-2. **Décider le biome au site de région, et non à la colonne.** C'est la route
-   qui garantit. `CWRegionSite` porte déjà `temperature` et `humidity`, et
-   `CWWorldMap.icon_of_zone` s'en sert déjà pour choisir son icône : un biome
-   décidé là aurait **la taille d'une région par construction**, et les
-   frontières seraient celles du diagramme de Voronoï des sites. La colonne ne
-   servirait plus qu'à l'écotone.
+**L'écotone a changé de nature, et c'est le vrai gain de forme.** Il brouillait
+le **climat**, ce qui ne dit rien de la largeur de la frange en blocs — celle-ci
+valant l'amplitude divisée par la pente locale, et infinie là où le champ est
+plat. Il fallait mesurer le gradient du champ, le mémoïser par cellule de 16, en
+déduire une amplitude bornée, et sortir tôt là où elle tombait à zéro. Il
+brouille maintenant **le point** : `CWTerrainField.fringe_point` déplace la
+colonne d'au plus `FRINGE_BLOCKS` avant de chercher son site. *Une frontière
+dans l'espace se brouille dans l'espace* — un déplacement se compte en blocs par
+construction, il n'a ni pente à diviser ni plateau à redouter, et les trois
+mécanismes qui bornaient l'ancien sont partis.
 
-   ⚠️ Ce qu'il faut savoir avant de la prendre : le climat d'une colonne est un
-   **mélange** de plusieurs sites (c'est ce qui fait qu'une Snowlands peut
-   toucher un désert sans que ce soit absurde). Décider au site jette ce mélange
-   pour la classification, et il faudra vérifier que le voisinage reste crédible
-   — `tools/biome_stats.gd` compte déjà les paires « neige contre désert »,
-   c'est le garde-fou tout trouvé.
+| | avant | après |
+|---|---|---|
+| colonnes en frange, fenêtre de frontière | 3,4 % | **4,4 %** |
+| incursion moyenne | 7,6 blocs | **13,3 blocs** |
+| fréquence fine du tramage | 0,10 | **0,34** — celle du reste du dépôt |
 
-**Et il faut relancer `tools/biome_balance.gd` après**, quelle que soit la route :
-les seuils sont des quantiles du champ, et changer le champ change les quantiles.
-Les six parts égales ne survivront pas toutes seules.
+⚠️ **La fréquence fine a pu revenir à celle des autres tramages du dépôt**, et
+c'est la conséquence la moins évidente : un brouillage de climat ne pouvait pas
+se permettre une fréquence de bloc — au cœur d'une région il aurait tiré à pile
+ou face sur chaque colonne d'un pays entier —, un déplacement de point le peut,
+puisque loin d'une arête il ne change simplement pas de site.
+
+**Le climat mélangé n'est plus qu'une aiguille.** `sample_column` rend
+maintenant le climat **du site**, ce qui économise une passe sur neuf sites par
+colonne — et paie la recherche tramée, si bien que la colonne ne coûte pas plus
+cher. `climate_blend` reste, élargi à ~1 500 blocs
+(`CLIMATE_WEIGHT_SCALE` : 5e-07 → 2e-08), et il ne sert plus qu'à l'ATH et aux
+outils.
 
 ---
 
-### 3. Les nuages : la moitié basse manque, et ils sont trop petits
+### 3. Les nuages : la moitié basse manque, et ils sont trop petits — **fait**
 
 *Régénérer les nuages : il manque la moitié basse, et il faudrait aussi les
 agrandir.*
 
-**La moitié basse ne manque pas, elle est coupée exprès** — et le remède n'est
-donc pas de la remettre telle quelle. `generer_nuages._pose` pose la masse à
-cheval sur `z = 0` et laisse la grille jeter ce qui passe dessous : c'est ce qui
-donne le **dessous plat** d'un cumulus, qui est une condensation à altitude
-constante et non une forme dessinée. Le paramètre est `coupe`, à **0,30** pour
-les deux cumulus et **0,22** pour le voile.
+**La cause n'était pas la coupe, c'était ce qu'il y avait dessous.** La rangée
+basse des métaballes était posée à `0,02 h` avec un rayon de `0,34 h` : son
+ventre descendait donc à `−0,32 h` quand le plan de coupe était à `+0,30 h`. La
+coupe ne rasait pas le dessous du nuage, **elle tranchait la rangée basse
+presque à son sommet** — il n'en restait qu'une couronne de six centièmes de
+hauteur.
 
-⚠️ **À zéro, un nuage est un galet** : rond partout, sans base, et il cesse de
-lire comme un nuage vu d'en dessous — ce qui est le seul angle sous lequel on le
-voit. Ce qu'il faut n'est pas `coupe = 0` mais **plus de masse sous le plus large
-lobe** : baisser `coupe` *et* descendre l'étage bas de `_lobes`, pour que la
-coupe tombe sous le ventre au lieu de le trancher.
+Le remède n'était donc pas `coupe = 0` — à zéro, un nuage est un galet, rond
+partout, et il cesse de lire comme un nuage vu d'en dessous, qui est le seul
+angle sous lequel on le voit. C'est **plus de masse sous le plus large lobe** :
 
-**Pour agrandir**, deux réglages, et ils ne font pas la même chose :
+* la rangée basse monte de `0,02 h` à **`0,34 h`** ;
+* l'étage haut suit, de `0,46-0,68` à **`0,76-0,98`** — sinon il se noie dans la
+  rangée basse et le chou-fleur disparaît avec les creux ;
+* la coupe descend de `0,30` à **`0,12`**, et n'a plus qu'à raser.
 
-* `generer_nuages` — `largeur`, `profondeur`, `hauteur` des trois modèles.
-  Agrandir ici change la **forme** : plus de lobes tiennent dans la même masse ;
-* `CWClouds.ECHELLE_MIN` / `ECHELLE_MAX` (1,4 – 2,6) — agrandir ici ne coûte
-  rien à la génération et ne change pas la silhouette, seulement sa taille
-  apparente.
+**Pour agrandir**, c'est la géométrie qui a bougé et non la gigue d'instance :
+34 → 48 blocs de large pour le cumulus, 56 → 78 pour le gros temps, 76 → 105
+pour le voile. L'enveloppe vérifiée passe de `(24, 32)` à `(40, 56)`.
 
-⚠️ **L'enveloppe est vérifiée**, et c'est voulu : `NUAGE = (24, 32)` dans le
-générateur, et `tests/sky_test.gd` refuse un modèle qui la dépasse. Grandir
-demande de monter les deux ensemble — le test tombera sinon, ce qui est
-exactement son travail.
+⚠️ **Et la maille du ciel a dû suivre**, ce qui n'était pas dans la demande :
+`CWClouds.MAILLE` passe de 220 à **320**. Le voile fait 105 blocs, la gigue
+d'instance le porte à 2,6 fois — 273 blocs —, et une cellule plus petite que le
+nuage qu'elle porte fait un **plafond continu**. C'est le seul rapport du lot
+qu'une capture ne rattrape pas : un plafond de nuages reste joli sur une image
+et devient une chape dès qu'on avance. `tests/sky_test.gd` le vérifie
+maintenant, en plus de l'enveloppe.
 
 ---
 
-### 4. La carte ne nomme qu'une région sur deux
+### 4. La carte ne nomme qu'une région sur deux — **fait**
 
 *Corriger la carte, qui n'affiche le nom des régions que dans certaines zones.*
 
-**Deux causes, et corriger l'une ne corrige pas l'autre.** Les deux sont
-trouvées, et chacune tient en une ligne :
+**Les deux causes annoncées étaient les bonnes, et chacune est corrigée sur son
+propre plan.**
 
-1. **le nom voyage sur un marqueur, et une région d'océan n'en a pas.**
-   `CWWorldMap.markers` n'ajoute une entrée que `if site != null and
-   icon != ICON_NONE`, et `icon_of_zone` rend `ICON_NONE` dès que
-   `site.is_ocean()`. Une région marine est donc **sans nom par construction**,
-   et c'est un sixième du monde depuis hier ;
-2. **le nom ne se dessine qu'à partir d'un certain zoom.**
-   `map_overlay.gd`, `if m.has("name") and scale >= 2.0`. La carte s'ouvre sur
-   cinq zones (`CWDemoMap._zones`, réglable de 3 à 9 par `+`/`−`) : au-delà de
-   cinq, l'échelle passe sous deux et les noms disparaissent tous d'un coup.
+1. **le nom voyageait sur l'icône de relief**, qu'une région marine n'a pas :
+   `markers` n'ajoutait une entrée que `if icon != ICON_NONE`. Un nom appartient
+   à la région, pas à son relief ; c'est l'icône qui peut manquer. Un test
+   vérifie maintenant qu'aucune région d'une vue n'est sans nom ;
+2. **le seuil de zoom est remplacé par une mesure du chevauchement.** Il réglait
+   un problème de collision par un seuil de densité, ce qui est en dire plus
+   qu'on ne sait : à neuf zones, la moitié des noms tient très bien. Chaque nom
+   demande donc sa boîte, on la pose si elle est libre, on saute le nom sinon.
+   **L'ordre décide qui gagne** : les plus proches du curseur du joueur passent
+   en premier, de sorte que la région où l'on se trouve est toujours nommée.
 
-> Le garde-fou du zoom n'est pas absurde — un nom de onze pixels sur une carte
-> de neuf zones se chevauche avec ses voisins. Ce qu'il faut décider est
-> **quoi faire à la place** : des noms plus courts, un nom sur deux, ou un nom
-> seulement pour la région sous le curseur. C'est un choix d'affichage, et il
-> se juge sur une capture — `-- --carte` l'ouvre au démarrage sans piloter la
-> fenêtre.
+`--zones n` a été ajouté pour la capture : la carte dense est le seul cas qui se
+juge, et rien ne savait l'ouvrir sans piloter la fenêtre.
 
 ---
 
-### 5. La carte confond la neige et l'océan
+### 5. La carte confond la neige et l'océan — **fait, et un défaut plus gros
+trouvé en chemin**
 
 *Revoir les couleurs pour différencier un biome neige d'un biome océan.*
 
-**La cause est nommée, et c'est l'invariant n° 27 pris à l'envers.**
-`CWWorldMap.tint_of_zone` peint une région avec **la couleur du terrain** :
-`CWPalette.colors()[surface_index]`. Or la neige est `Color8(125, 181, 199)` et
-l'eau `Color8(42, 200, 252)` — deux cyans clairs. Elles se confondent parce
-qu'elles se ressemblent *vraiment*, et une carte qui recopie le sol recopie
-aussi ses confusions.
+**Le remède était bien celui qui était écrit** : la carte prend sa propre table,
+indexée par **biome** et non par matière de surface — *une carte est une
+légende, pas une photographie*. Six teintes franches, et un test qui vérifie
+qu'elles se distinguent deux à deux dans un cube RVB pondéré comme l'œil.
 
-⚠️ **Le remède n'est pas de repeindre la palette** : `SNOW` est un type de bloc
-écrit dans le monde, et le changer repeint toute la neige du jeu pour régler un
-problème de carte. Le remède est de **donner à la carte sa propre table**,
-indexée par **biome** et non par matière de surface — *une carte est une légende,
-pas une photographie*. Six teintes franches, choisies pour se distinguer les unes
-des autres, valent mieux que dix teintes justes qui se ressemblent.
+⚠️ **C'est ce test qui a trouvé que le couple le plus proche n'était pas celui
+qu'on croyait.** La neige et l'océan une fois séparés, le minimum est tombé sur
+**la jungle et l'océan** — deux couleurs sombres, à 0,402 quand le seuil est à
+0,45. Deux sombres se rapprochent bien plus vite que deux claires, et c'est
+exactement le genre de chose que l'œil ne voit pas sur une palette mais voit sur
+une carte.
 
-C'est aussi ce qui règle le cas où deux biomes partagent une matière : depuis le
-2026-09-11 l'océan est un sixième du monde, et il touche partout de la neige, du
-sable et de l'herbe.
-
----
-## 0ter. Le programme des cinq demandes, et ce qu'il a rendu
-
-L'ordre ci-dessous est celui d'exécution, et il est celui qui a été demandé : le
-C++ venait en dernier et **seulement si le maillage ne suffisait pas**. Il ne
-suffisait pas — c'est la mesure de la n° 4 qui l'a dit.
+**Et la carte ne montrait aucune mer**, ce qui n'était dans aucune des cinq
+demandes. Elle échantillonnait une colonne au site et la peignait en eau si elle
+tombait sous le niveau de la mer : sur les 81 régions autour du point de départ,
+**28 sont océaniques et pas une ne rendait d'eau**. La raison est que le champ
+d'altitude mélange neuf sites — au point même d'un site posé à −100, les voisins
+et le bruit ramènent la colonne à +7, +25, +2, pour un niveau de mer à −60.
+*Une colonne au site dit ce qu'il y a sous les pieds du site, et non ce qu'est
+la région.* La carte lit maintenant le drapeau `is_ocean`, ce que
+`icon_of_zone` faisait déjà — les deux disent enfin la même chose.
 
 ---
 
-### 1. Les nuages deviennent des modèles, et le temps ralentit — **fait**
+### Ce qui reste ouvert, et qui n'était dans aucune des cinq
 
-*Supprimer les nuages et les remplacer par des modèles générés par Blender via
-bpy, dessinés à la taille du terrain — 1 voxel = 1 bloc —, deux ou trois
-variantes, placés dans le ciel. Faire défiler le temps moins vite.*
-
-**Fait le 2026-09-11.** Trois modèles (`assets/models/nuages/`, 34 × 24 × 14 à
-56 × 38 × 16 blocs), un `CWClouds` qui les pose, le shader de nuages retiré, et
-`DAY_LENGTH` de 720 s à **2 400 s**. La couche de nuages en bruit fractal est
-partie entière : le fbm, ses cinq octaves, ses uniformes, et les six constantes
-`CLOUD_*` de `CWDaylight`.
-
-**Les cinq pièges annoncés se sont tous vérifiés, et deux ont demandé une
-capture pour être vus.**
-
-* **le brouillard.** Réglé comme prévu par `disable_fog` sur le matériau
-  (`CWPalette.build_cloud_material`), et l'argument est mesuré : le ciel ne
-  prend que 18 % du brouillard, un objet en prendrait 100 %, et à 0,0016 de
-  densité un nuage à mille blocs serait un aplat gris ;
-* ⚠️ **la première capture rendait des soucoupes bleu marine**, et ce n'était
-  ni la palette ni l'éclairage. On regarde un nuage **par en dessous**, et un
-  dessous ne reçoit que l'ambiante — 0,45 d'une teinte de ciel bleue. La cause
-  est que **la matière était fausse** : un nuage est traversé par la lumière.
-  `backlight` dit exactement cela, et il le dit proportionnellement au soleil,
-  donc le nuage reste sombre la nuit — ce qu'une émission n'aurait pas fait ;
-* ⚠️ **la deuxième rendait des méduses turquoise.** La rampe 240-247 va jusqu'à
-  un bleu de ciel franc, et c'est le bas de la rampe qu'on voit d'en dessous ;
-  il se cumulait avec l'ambiante. Elle s'arrête à **243**. *Les deux défauts
-  étaient le même mécanisme vu deux fois, et aucun test ne pouvait les voir* ;
-* **la palette n'était pas pleine, et personne n'avait regardé au bon endroit.**
-  Le relevé annonçait la neige, la glace et le clair de la roche nue. Il y avait
-  mieux : `_ramp(c, 240, 8, blanc, bleu clair)`, la plage **effets**, jamais
-  peinte, et la seule du nuancier qui ne soit pas une matière. Aucune frontière
-  n'a bougé, aucun lot n'a été repassé ;
-* **les ombres sont coupées** (`CWClouds.cast_shadows`, à faux). Une tache dure
-  de quarante blocs lit comme un défaut de rendu ; la bascule reste ;
-* **la lumière est gratuite et juste, et c'est vérifié en capture.** À 6 h 28,
-  les nuages prennent le soleil rasant sur leur flanc et sortent crème sur un
-  ciel violet, sans une ligne de code de teinte. C'est ce que `CLOUD_TWILIGHT`
-  simulait à la main.
-
-**Un manque d'outillage est tombé avec** : `--ici`, `--vers` et `--altitude`
-savent tous viser un point du **sol**, et rien ne savait regarder en l'air.
-`--regard d` pose l'assiette de la caméra en degrés — sans elle, cadrer une
-couche du ciel obligeait à monter la caméra à son altitude, c'est-à-dire à la
-regarder d'ailleurs que d'où on la verra.
-
-**Ce qui reste ouvert de ce côté :**
-
-- **la couverture est toujours une constante** (`CWClouds.cover`, 0,45). La
-  faire varier demande un champ de temps, qui est un autre sujet ;
-- **les nuages ne portent pas d'ombre**, et c'est l'arbitrage ci-dessus, pas un
-  manque de code : une ligne le rallume ;
-- **la dérive est une translation d'ensemble.** Deux nuages ne se croisent
-  jamais. Ça ne se voit pas, et le jour où ça se verra, ce sera une vitesse par
-  altitude.
-
-### 2. La collision du feuillage — **faite, sauf les cactus**
-
-*Ce sera oui pour les feuillages des arbres, le rocher géant et les cactus.*
-
-**Fait le 2026-09-11 pour les deux premiers.** Toutes les pièces d'un arbre —
-houppiers, dômes, palmes, et les cinq modèles entiers dont le rocher géant —
-sont désormais écrites dans les données voxels par
-`CWVoxelGenerator._stamp_trees`. La couche d'instances d'arbres a disparu avec
-elles : elle ne posait plus rien.
-
-**Les cactus sont le seul morceau qui ne se fasse pas, et la raison est
-structurelle, pas un manque de temps.** Ils sont à **4 voxels par bloc** —
-quatre fois plus fins que la grille du terrain — et l'invariant n° 12 dit
-pourquoi la flore n'y entre jamais. Les deux façons de forcer le passage sont
-toutes deux mauvaises, et le dépôt les a déjà écartées une fois :
-
-* **les redessiner à 1 voxel = 1 bloc** ferait d'un cactus de quatre blocs une
-  pile de quatre cubes. C'est exactement ce qui a fait retirer `cactus_geant` le
-  2026-09-06 — « à un voxel par bloc un saguaro n'a ni cannelure ni épine » ;
-* **estamper un volume approché** (`CWVoxelModel.reduced(4)` existe pour ça)
-  mettrait un pâté de blocs *visible* à l'intérieur du modèle fin, qui continue
-  d'être instancié. Deux cactus au même endroit, dont un moche.
-
-**Ce que le cactus veut vraiment, c'est une forme de physique**, et c'est ce que
-l'annexe de `docs/ROADMAP.md` (§3) proposait déjà : `Placement` porte position,
-rayon et hauteur, un cylindre par cactus coûte zéro voxel. Ça se pose au jalon
-3.1 avec le contrôleur — **et rien de tout ceci ne se voit avant lui**, puisque
-`generate_collisions` est à faux.
-
-**Ce que la mesure a corrigé, et c'est le vrai résultat de la passe :**
-
-| | vue de 384 blocs |
-|---|---|
-| avant (fût seul, borne du chemin rapide à 48) | **26,1 s** |
-| après (arbre entier, borne à 72) | **27,5 s** |
-| après, avec `--sans-arbres` — coupe l'écriture, **pas** la borne | 27,1 s |
-
-* **+5,4 %, là où ce fichier annonçait +25 %.** L'estimation datait d'avant le
-  retrait des massifs et d'avant le réglage du pool, et c'est l'invariant n° 51
-  une fois de plus ;
-* ⚠️ **et le poste dominant n'est pas celui qu'on écrit.** Écrire douze fois
-  plus de voxels coûte **0,4 s** ; faire reculer `HAUTEUR_TRONC_MAX` de 48 à 72
-  en coûte **1,0**, et cette seconde dépense se paie **partout**, y compris
-  au-dessus d'un désert sans un arbre. C'était annoncé comme le piège qu'on
-  oublierait ; il est le plus cher des deux.
-
-**Trois choses que seule la mise en œuvre a montrées.**
-
-1. ⚠️ **Une couronne recouvre le fût qui la porte, et l'ordre des deux listes
-   les départageait.** Le bloc rendait du feuillage là où la requête ponctuelle
-   rendait du bois — invariant n° 18 en défaut, dès la première exécution. La
-   règle qui referme le cas est écrite des deux côtés : **le feuillage ne
-   recouvre que le vide**. C'est la seule couche du monde qui ait cette forme —
-   un fût, un chemin, un étang recouvrent ce qu'ils traversent ;
-2. **la marge se mesure sur les espèces, pas sur ce qui pousse autour du
-   départ.** Le premier relevé donnait 12 blocs d'étalement et 31 de haut ; en
-   montant chaque espèce de chaque biome aux deux extrêmes de la gigue, c'est
-   **21 et 57** — le pire cas est un dôme de cerisier au bout d'une branche, et
-   le houppier de l'arbre géant. La prairie du point de départ n'a ni palmier,
-   ni baobab, ni arbre géant ;
-3. **les cinq modèles entiers perdent leur gigue de taille.** Un modèle entier
-   est estampé tel quel : le rééchantillonner étirerait une **silhouette**, et
-   la flèche d'un conifère a déjà demandé trois reprises en trois jours au jalon
-   1.12. Deux pins, un sapin, l'arbre épineux et le rocher géant sortent donc
-   tous à la même taille. La variété devra venir de variantes de modèles.
-
-**Et une entrée de palette de plus, sans qu'une frontière bouge** :
-`LEAVES = 19`, dernier ton de la rampe de roche nue et la seule que ne peignait
-aucun modèle du dépôt. Le geste est celui de `WOOD` sur le 4 et de
-`MAGMA`/`SCORIA` sur 30 et 31. **Le type se lit sur la palette du voxel**
-(`CWPalette.matiere_de`) et non sur la pièce — un `pin` porte du bois et du
-feuillage, un `rocher_geant` de la roche, et une table par modèle aurait menti
-dès le premier modèle mixte.
-
-### 3. Des biomes mieux répartis, et égaux — **fait**
-
-*J'aimerais que les biomes soient mieux répartis et qu'ils soient égaux.*
-
-**Fait le 2026-09-11, dans la lecture la plus chère des trois** — six parts
-égales du monde, Oceans compris, ce qui demande de déplacer le **niveau de la
-mer** et non seulement des seuils.
-
-| | avant | après |
-|---|---|---|
-| Greenlands | **41,0 %** | 18,5 % |
-| Jungles | 14,2 % | 18,1 % |
-| Snowlands | 9,0 % | 13,8 % |
-| Deserts | 5,9 % | 13,5 % |
-| Lava Lands | **1,1 %** | 16,6 % |
-| Oceans | 28,9 % | 19,5 % |
-
-*(parts du monde, graine 1337, 144 zones. Sur la graine de la démo — 2024 — la
-dispersion est plus serrée encore : 14,7 à 18,8 %.)*
-
-**Ce qui a changé n'est pas six valeurs, c'est la forme de la règle.** Le
-solveur a trouvé la part de Snowlands, de Jungles, de Lava Lands et de l'océan,
-et **il n'a pas pu trouver celle des déserts** : `DESERT_T` est descendu jusqu'à
-zéro en ne rendant que 3 % du monde. La cause n'était pas un seuil mal placé —
-Lava Lands, testé avant le désert, prenait toute la moitié sèche au-dessus de
-son seuil, et il ne restait au désert que le sec *froid*, que ce champ ne
-produit presque pas. Il y avait **deux frontières d'humidité** (`JUNGLE_H` à
-0,62 et `DESERT_H` à 0,34), soit une de trop pour un champ bimodal.
-
-Il n'y en a plus qu'une, `HUMID_H` : le monde se partage en **sec et humide**,
-une seule fois, et la température fait tout le reste — Snowlands au froid, puis
-Deserts et Lava Lands se partagent le sec par température croissante, Jungles
-prend le chaud humide, Greenlands garde le tempéré des deux versants.
-
-**Trois choses à savoir avant de retoucher quoi que ce soit ici :**
-
-* ⚠️ **Lava Lands a cessé d'être rare, et c'était le prix annoncé.** L'alpha le
-  donne « rare, loin du spawn » ; à parts égales c'est un sixième du monde. Ce
-  n'est plus un accident, c'est un pays — et il se voit, ce qui n'était pas le
-  cas à 1,1 % ;
-* ⚠️ **les degrés ne se lisent plus.** Un désert commence maintenant à 2 °C et
-  une Lava Lands à 20 °C sur l'échelle d'affichage de l'ATH. Les seuils sont des
-  **quantiles d'un champ**, pas des températures ; `TEMP_MIN_C` / `TEMP_MAX_C`
-  ne sont plus qu'une convention d'affichage ;
-* ⚠️ **le niveau de la mer n'est pas stable d'une graine à l'autre.** Les cinq
-  seuils de climat tiennent dans trois centièmes sur cinq graines ; le niveau
-  qui rend un sixième d'océan va de **−54 à −68** selon la graine, parce qu'une
-  graine décide où sont les continents et pas seulement leur climat. **−60** est
-  la moyenne de cinq, et une graine donnée s'en écarte de deux points.
-
-**Et un effet de bord mesuré, qu'il faut regarder avant de le corriger.** Les
-règles de surface exprimées en altitude **au-dessus de la mer** — la ligne de
-neige, la bande de roche, la plage — voient maintenant des terres soixante
-blocs plus hautes. La roche nue passe de 0,3 % à 2,8 % du monde, toute dans les
-hauteurs de Lava Lands. Vu en capture : ça lit comme la calotte rocheuse d'un
-volcan, et c'est gardé. Si un jour ça gêne, c'est `CWPalette.ROCK_MIN` qu'il
-faut remonter de soixante, pas les seuils de biome.
-
-**`tools/biome_balance.gd` est le nouvel outil**, et il est fait pour être
-relancé : il échantillonne une fois, lit les seuils comme des **quantiles**, et
-rend des valeurs prêtes à recopier. Le jour où le champ de climat bougera, il
-refait la table en quinze secondes.
-
-> **Ce que le fichier annonçait ici s'est vérifié à moitié.** Le trou du champ
-> d'humidité entre 0,10 et 0,40 est bien réel — c'est lui qui rendait `DESERT_H`
-> à 0,34 impraticable, et c'est pour cette raison que la frontière unique est à
-> 0,65, dans la partie dense. Mais la conclusion qu'on en tirait — « certains
-> biomes ne sont pas réglables de façon continue » — était fausse : ils ne
-> l'étaient pas **avec deux frontières**. Avec une seule, ils le sont tous.
-
-### 4. Le maillage — **mesuré, et le soupçon était faux**
-
-**Fait le 2026-09-11.** Deux outils, et un résultat qui retourne la prémisse.
-
-> Ce fichier disait : *« le ~1,1 Go observé en jeu ressemble plus à des
-> maillages qu'à des données voxels. C'est une constatation, pas un profil. »*
-> C'en est un maintenant, et **les maillages font 57 Mo sur 1,09 Go**, soit
-> cinq pour cent. Le gigaoctet était bien réel ; il n'était pas là.
-
-**Le profil mémoire, vue de 384 blocs, graine 2024, éditeur fermé.** Il sort
-tout seul à la ligne « stabilisée en » de la démo, et il est aussi dans l'ATH
-détaillé (F1) :
-
-| poste | 128 blocs | 256 | 384 |
-|---|---|---|---|
-| statique (processeur) | 143 Mo | 226 Mo | **347 Mo** |
-| vidéo | 267 Mo | 486 Mo | **745 Mo** |
-| dont **maillages** | 32 Mo | 42 Mo | **57 Mo** |
-| dont textures | 110 Mo | 110 Mo | 110 Mo |
-| cache de colonnes | — | — | 2 500 entrées, **15 Mo** |
-
-* **les textures ne bougent pas** — 110 Mo à toutes les distances, dans un
-  projet qui n'a pas une seule texture. C'est le décor du moteur : cartes
-  d'ombres et cibles de rendu. Il ne borne rien, et il ne se règle pas ici ;
-* **les maillages croissent lentement** : 32 → 57 Mo quand l'aire est
-  multipliée par neuf. Ils ne borneront pas la distance de vue ;
-* **le reste du statique est la donnée voxel**, et c'est le poste qui grandit
-  vraiment — de l'ordre de 190 Mo à 384 blocs. C'est inhérent à un monde de
-  voxels, et le seul levier connu est le LOD, qui est éteint pour une autre
-  raison (§5).
-
-**La piste qu'on désignait comme bonne l'était, mais elle est bon marché.**
-`tools/profile_mesh.gd` compte les sommets d'un pavé de trois façons :
-
-| | sommets par pavé | écart |
-|---|---|---|
-| le monde tel qu'il est (tramé, glouton) | **214** | — |
-| couleur plate par type (glouton) | 178 | **−17 %** |
-| tramé, sans fusion gloutonne | 1 457 | +580 % |
-
-* **le tramage coûte 17 % des sommets**, soit une dizaine de mégaoctets à
-  384 blocs. L'arbitrage *rendu contre mémoire* est donc tranché, et il l'est
-  dans le sens du rendu : **on garde le dégradé**. Trois tons pour une prairie
-  valent dix mégaoctets ;
-* **le maillage glouton achète un facteur 6,8**, et c'est ce qui rend le rendu
-  en cubes praticable. Le gain facile était déjà pris, et il est gros ;
-* **le maillage coûte 0,07 ms par pavé.** Sur les ~7 000 pavés d'une vue de
-  384 blocs, c'est une demi-seconde de fil pour un chargement de 27,5 s. Le
-  mailleur n'est pas le verrou.
-
-**Et une correction de commentaire qui vaut une mesure.** `HEIGHTMAP_CACHE_CAP`
-annonçait « ~1,3 Ko l'entrée, 16 384 entrées tiennent dans ~21 Mo ». Une entrée
-porte 256 colonnes et **cinq** tableaux : elle fait **6,4 Ko**, le plafond
-autorise donc 105 Mo, et deux générations coexistent. Le chiffre est maintenant
-calculé (`CWVoxelGenerator.PATCH_BYTES`) et affiché, pas estimé.
-
-**Ce qui reste ouvert, et pourquoi ça ne se ferme pas au banc :**
-
-- **la saccade.** C'est une affaire de *latence et d'ordonnancement*, pas de
+- **compiler la GDExtension.** `native/` est complet et `CWValueNoise` a deux
+  corps ; il manque le SDK Windows sur cette machine. La marche à suivre, la
+  ligne de commande de l'installateur et les **quatre vérifications à faire dans
+  l'ordre** le jour où elle compilera sont dans le journal de
+  `docs/ROADMAP.md`, entrée du 2026-09-11. L'attente est un **facteur deux** sur
+  le chargement, pas un facteur dix ;
+- **la collision des cactus.** À 4 voxels par bloc, ils sont inestampables : les
+  redessiner à la grille du terrain en ferait une pile de cubes, et en estamper
+  un volume approché mettrait un pâté visible dans le modèle fin. Ce qu'un
+  cactus veut est **une forme de physique** — un cylindre par instance, zéro
+  voxel —, et ça se pose au jalon 3.1 avec le contrôleur ;
+- **la saccade au chargement.** Affaire de latence et d'ordonnancement, pas de
   débit : un mailleur deux fois plus rapide qui rend ses pavés au même moment
-  saccade toujours. Elle ne se juge qu'en jouant, manette en main, et aucune
-  des mesures ci-dessus ne la voit ;
-- **le plafond du cache borne toujours la vue à 1 024 blocs** (invariant n° 5),
-  et c'est maintenant le seul plafond chiffré du projet. Le lever coûte 105 Mo
-  par doublement — ce qui, à côté des 347 Mo de données voxels, est acceptable.
-
-### 5. Le C++ — **écrit et prêt, mais pas compilable sur cette machine**
-
-*Si vraiment les performances n'y sont pas, la prochaine tâche sera de passer en
-C++.*
-
-**La condition est remplie**, et c'est la mesure de la n° 4 qui la remplit : le
-maillage coûte 0,5 s sur un chargement de 27,5 s, donc il ne reste rien à
-gagner de ce côté. Le champ reste 83 % du temps, et le bruit la moitié du champ.
-
-**Ce qui est fait, et qui est dans le dépôt :**
-
-* `native/` — une GDExtension complète : `CWNoiseNative`, son `SConstruct`, son
-  manifeste, son script de construction et son `README.md`. La route est la
-  **GDExtension** et non le module, pour la raison écrite ici depuis le début :
-  le moteur est un build personnalisé, et un module obligerait à reconstruire
-  et redistribuer les 190 Mo ;
-* **`CWValueNoise` a deux corps**, et il choisit. `sample` passe au natif quand
-  il est là, `sample_gd` reste la référence lisible et testée ;
-* ⚠️ **et il ne lui fait pas confiance parce qu'elle est là.** L'exactitude au
-  bit près est un invariant (n° 1) : une bibliothèque compilée ailleurs, par un
-  autre compilateur, avec une autre `libm`, peut différer d'un ulp sur le
-  cosinus sans que rien ne le signale — et le défaut ne se verrait que le jour
-  où deux machines compareraient deux captures du même endroit.
-  `_natif_accorde` la fait donc **passer un examen au chargement** et la refuse
-  si elle ne rend pas exactement les mêmes bits. La suite refait la preuve sur
-  20 000 points et **dit laquelle des deux tourne** ;
-* le manifeste `.gdextension` est **posé par la construction**, pas versionné :
-  Godot lit tout `.gdextension` qu'il trouve, et un manifeste sans bibliothèque
-  fait une erreur à chaque démarrage pour tout le monde. Sans construction, le
-  dépôt est silencieux et le monde identique — seulement plus lent.
-
-**Ce qui bloque, et ce n'est pas du code.** Cette machine a MSVC (14.44 et
-14.51) et SCons, mais **pas le SDK Windows** : `C:\Program Files (x86)\Windows
-Kits\10` n'a ni `Include` ni `Lib`, donc `cl.exe` ne trouve pas `stddef.h`. La
-compilation part, génère les liaisons de godot-cpp, et s'arrête là. Installer un
-SDK de plusieurs gigaoctets est une modification de la machine, pas du projet :
-elle n'a pas été faite.
-
-```
-# Le composant qui manque, par l'installateur de Visual Studio :
-#   Modifier -> Développement Desktop en C++ -> cocher « SDK Windows 11 »
-"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe" modify ^
-    --installPath "C:\Program Files\Microsoft Visual Studio\2022\Community" ^
-    --add Microsoft.VisualStudio.Component.Windows11SDK.22621 --passive
-# puis
-native\build.bat template_release
-```
-
-**Ce qu'il faudra vérifier le jour où elle compilera, dans cet ordre :**
-
-1. **la suite passe, et elle dit « bruit natif : ACTIF ».** Si elle dit
-   « absent » alors que la bibliothèque est là, c'est que l'examen l'a refusée —
-   et c'est un vrai défaut, pas un réglage ;
-2. **`tools/profile_worldgen.gd` chiffre le gain** : il mesure maintenant les
-   deux corps côte à côte et affiche le rapport, frontière d'appel comprise.
-   L'attente est un **facteur deux** sur le chargement (27,5 s → ~17 s), pas un
-   facteur dix ;
-3. ⚠️ **refaire la falaise des fils.** Un champ deux fois plus rapide déplace
-   l'optimum du pool ; les deux réglages ne sont pas indépendants. `-- --fils n`
-   refait la mesure ;
-4. **puis, seulement si ça ne suffit pas, porter `_height_from`.**
-   `CWNoiseNative.sample_octaves` est déjà là pour ça : il évalue N octaves en
-   **un seul passage de frontière**, ce qui est la moitié de l'enjeu — un appel
-   de méthode depuis GDScript coûte une fraction de microseconde et
-   `_height_from` en fait quinze par colonne. Il n'est encore appelé par
-   personne.
-
-### Ce qui reste ouvert par ailleurs, et qui n'est dans aucune des cinq
-
-- **les quatre fichiers de `worldgen` à mille lignes.** La démo est rangée
-  — 1 147 → 962 —, le générateur pas encore ;
-- **la falaise vaut-elle 12 % du chargement ?** Depuis le retrait des massifs
-  elle n'a plus de paroi à raconter. Ça se tranche à l'œil, pas au banc ;
-- ⚠️ **le plafond du cache de colonnes borne la distance de vue.** L'invariant
-  n° 5 demande `(2 × distance / 16)²` entrées ; à 1 024 blocs de vue on est
-  **exactement** au plafond de 16 384. Au-delà, le cache s'auto-évince en boucle
-  et le chargement s'effondre **sans rien signaler**. À relever avant d'augmenter
-  la distance, ce qui est l'objectif affiché — et le prix est maintenant chiffré
-  et non plus estimé : **6,4 Ko l'entrée**, donc 105 Mo au plafond actuel et
-  autant par doublement (§4, `CWVoxelGenerator.PATCH_BYTES`) ;
-- **2.6, l'apparition** — la porte du jalon 2. Elle n'attend rien.
+  saccade toujours. Aucune des mesures du 2026-09-11 ne la voit ;
+- **la gigue de taille des cinq arbres entiers**, perdue en passant en matière.
+  Un modèle entier est estampé tel quel : le rééchantillonner étirerait une
+  silhouette, et la flèche d'un conifère a déjà demandé trois reprises en trois
+  jours. La variété devra venir de variantes de modèles.
 
 ---
-
-## 0bis. Ce qui a été fait le 2026-09-10
-
-**1. Supprimer les surplombs.** *« Je n'aime pas le rendu en jeu. »* Troisième
-retrait du dépôt après la falaise et les ponts. La couche est partie entière —
-`CWMesa`, `CWMesaGrid`, les grottes, le porche, les tunnels de chemin, le terme
-de masse du coût de tracé, trois outils, deux suites de vérification. **−2 240
-lignes.** La falaise survit — elle mesure la pente du champ, qui n'a jamais rien
-su de cette couche — et le réseau de chemins aussi.
-
-Trois choses en sont sorties, et elles comptent pour la suite :
-
-* **le chargement à 384 blocs passe de 107,7 s à 55,4 s.** Ce fichier annonçait
-  28,5 s ; c'était la mesure du 2026-09-08, et deux passes sur les massifs
-  l'avaient quadruplée sans que personne la refasse. *La couche de massifs était
-  le premier poste du chargement, pas `sample_column`* — ce qui change la
-  prémisse de la demande n° 3 ;
-* **le coût par colonne descend de 88,4 à 75,8 µs**, soit le coût du champ seul ;
-* **un vrai défaut est tombé avec elle.** En repointant l'accord des deux
-  écritures de la règle sur une chaussée — sa place était le cœur d'un massif —,
-  la vérification a trouvé que `generated_voxel` **ignorait les troncs
-  estampés** : le bloc généré rendait du bois, la requête ponctuelle de l'air, et
-  `CWWorldEdits` interrogeait donc un monde sans arbres. Défaut depuis le jalon
-  1.11, invisible parce que les deux balayages qui tiennent l'invariant n° 18
-  tombaient l'un sur un bloc sans arbre, l'autre sur une mesa. Corrigé
-  (`CWVoxelGenerator.trunk_at`).
-
-**4a. La moitié documentaire du rangement.** Ce fichier passe de 4 196 lignes à
-~700 ; le récit des sessions est en annexe de `docs/ROADMAP.md`, la référence
-d'authoring dans `docs/ASSETS.md`, et `CLAUDE.md` existe.
-
----
-
-### Le n° 4 — le rangement du code, à moitié fait
-
-*Correction des potentiels bugs et erreurs, nettoyage du projet, le rendre plus
-modulaire et facile à maintenir.*
-
-La moitié documentaire est faite ; **la moitié code est commencée.** Deux
-métiers sont sortis de `terrain_demo.gd` le 2026-09-10 — l'**environnement**
-dans `CWDaylight`, qui est l'endroit où le cycle jour/nuit du n° 3 viendra se
-poser, et la **carte du monde** dans `CWDemoMap`, un métier complet avec son
-rendu de fond et son fichier sur le disque. Le fichier passe de 1 147 à 1 008
-lignes, et une bascule `--carte` évite désormais d'éditer la scène pour
-regarder la carte sans piloter la fenêtre.
-
-Ce qui reste :
-
-| fichier | lignes | métiers mêlés |
-|---|---|---|
-| `src/worldgen/cw_terrain_field.gd` | 1 117 | altitude, climat, chenaux, étangs, profil de colonne, caches |
-| `src/demo/terrain_demo.gd` | 962 | arguments, terrain, ATH, caméra, captures, persistance |
-| `src/worldgen/cw_palette.gd` | 1 002 | palette, matières de surface, teintes, tramage |
-| `src/worldgen/cw_path_network.gd` | 946 | graphe de zone, relaxation, profil, franchissements, règle de colonne |
-| `src/worldgen/cw_voxel_generator.gd` | 797 | chemin froid, chemin chaud, troncs estampés |
-
-**La recherche de biome est sortie aussi** (`CWBiomeSearch`, même forme que la
-carte) : 1 008 → 928 lignes.
-
-> **L'ATH, lui, ne sort pas, et c'est une décision.** `_update_hud` lit
-> **dix-sept** morceaux d'état de la démo — les trois files d'attente, la
-> caméra, les éditions, les deux dispersions, la carte, la recherche, la
-> palette du bloc posé… L'extraire demanderait soit dix-sept arguments, soit
-> une référence arrière vers la démo. La seconde casse la règle *une couche ne
-> connaît que celle du dessous* ; la première est une signature que personne ne
-> maintiendra. **Un affichage qui est une vue sur tout n'est pas une couche**,
-> et le sortir coûterait plus qu'il ne rapporte. Relevé le 2026-09-10 pour
-> qu'on ne le repropose pas.
-
-Deux règles de découpe, et ce sont des règles, pas du goût : **un fichier, une
-décision** ; **une couche ne connaît que celle du dessous** — la chaîne va
-aujourd'hui `chemins → champ` et ne revient pas, ce qui est exactement ce qu'il
-faut généraliser.
-
-**Et la partie « bugs » n'est pas rhétorique** — le défaut du tronc vient de le
-montrer. La suite passe 379 vérifications, mais elle vérifie de la
-**géométrie**, jamais du rendu, et les quatre systèmes retirés par ce dépôt
-passaient tous leurs tests. Ce qu'elle ne peut pas voir, et qui vaut une
-relecture : les ordres de recouvrement, les accords entre le chemin froid et le
-chemin chaud, et les endroits où deux copies d'une même règle ont eu le droit de
-diverger.
-
-### Le n° 3 — l'optimisation, mesurée
-
-*Objectif : distance de rendu maximale sans perte de fps ni saccade au
-chargement des chunks.*
-
-> **L'objectif contient deux problèmes qui n'ont pas le même remède, et les
-> mélanger coûtera une journée.**
->
-> * **le débit** — combien de colonnes par seconde. C'est lui qui fixe la
->   distance de vue atteignable, et c'est là que le C++ jouerait ;
-> * **la saccade** — un à-coup quand un pavé arrive. C'est une affaire de
->   *latence* et d'ordonnancement, pas de débit : un générateur deux fois plus
->   rapide qui rend toujours ses pavés au même moment saccade toujours.
-
-**Les étapes 1 et 2 sont faites le 2026-09-10.** Chargement d'une vue de
-384 blocs : **107,7 s** la veille, **55,4 s** après le retrait des massifs,
-**42,0 s** après le réglage du pool ci-dessous. Le profil par poste vient de
-`tools/profile_worldgen.gd`, écrit pour ça et à relancer après toute
-modification du champ — graine de la démo, éditeur fermé :
-
-| poste | coût | part |
-|---|---|---|
-| **génération d'un pavé, tout allumé** | **93,7 µs/colonne** | 100 % |
-| dont le **champ nu**, les trois couches éteintes | **77,6 µs** | **83 %** |
-| dont la falaise | 11,5 µs | 12 % |
-| dont les chemins | 5,1 µs | 5 % |
-| dont les éléments de tuile | 4,9 µs | 5 % |
-| — | | |
-| une colonne isolée (`sample_column_full`) | 81,4 µs | |
-| **dont ~15 échantillons de `CWValueNoise`** | **46 µs** | **~49 % du total** |
-| dont les éléments de tuile | 14,9 µs | |
-| le climat seul (`climate_blend`) | 13,0 µs | |
-| — | | |
-| flore : une cellule de 16 × 16 | 2,03 ms | 7,9 µs/colonne |
-| **dont l'assiette (les quatre coins)** | **1,30 ms** | **64 %** |
-| arbres : une cellule de 64 × 64 | 1,66 ms | 0,41 µs/colonne |
-
-**Trois choses en sortent, et elles décident la suite.**
-
-1. **Le champ est bien le poste dominant — 83 %** —, et *à l'intérieur du champ,
-   c'est le bruit* : `CWValueNoise.sample` coûte **3,08 µs** l'échantillon, et
-   une colonne en fait une quinzaine. **La moitié du temps de génération est
-   passée dans une seule fonction de vingt lignes**, qui émule de l'arithmétique
-   32 bits que GDScript n'a pas. C'est la cible du C++, et elle est unique ;
-2. **La falaise coûte 12 %**, deux fois plus que les chemins ou les éléments.
-   C'est cohérent avec les +12,9 % d'échantillonnage annoncés (invariant n° 44),
-   donc ce n'est pas une régression — mais c'est cher pour une règle de surface,
-   et la question « la falaise vaut-elle 12 % » se pose maintenant qu'elle n'a
-   plus de massif à raconter ;
-3. **L'assiette a presque triplé le coût de la dispersion de flore** — 722 µs la
-   cellule avant, 2 025 après —, et personne ne l'avait mesuré. Vérifié en la
-   désactivant.
-
-   > **Et ce n'est pas un défaut d'écriture, c'est le prix de la chose.** La
-   > première idée était que les quatre coins, pris un par un par
-   > `sample_column_full`, repayaient la comptabilité par colonne que
-   > `sample_patch` ne paie qu'une fois — les quatre forment exactement une
-   > grille 2 × 2 de pas 2r. **Essayé, mesuré, faux** : 2 035 µs contre 2 025,
-   > et la suite passe des deux côtés, donc les deux chemins disent bien la
-   > même chose. Ce que coûte l'assiette, ce sont **les quatre échantillons de
-   > champ eux-mêmes**, c'est-à-dire le bruit — le même poste que partout
-   > ailleurs. Elle ne deviendra moins chère que si le champ le devient.
-   >
-   > Reste donc une **question de conception, pas d'optimisation** : quatre
-   > colonnes de plus par plante posée valent-elles qu'aucun caillou n'ait un
-   > bord en l'air ? Elle se tranche à l'œil, et la dispersion tourne sur un fil
-   > du pool, donc elle ne borne pas forcément le chargement.
-
-**Et un gain gratuit, trouvé en cherchant les réglages : le pool était trop
-grand.** Le nombre de fils de génération valait la moitié des processeurs
-logiques — huit ici — depuis le 2026-09-05, où le ramener de quatorze à sept
-avait doublé la vitesse. Personne n'avait cherché l'optimum. Il est plus bas :
-
-| fils | 4 | 5 | **6** | 7 | 8 (l'ancien défaut) | 12 | 16 |
-|---|---|---|---|---|---|---|---|
-| stabilisation | 53,4 s | 45,5 s | **42,2 s** | 43,4 s | 58,6 s | > 90 s | > 90 s |
-
-Le défaut était **déjà au-delà du sommet, de vingt-huit pour cent**. La règle
-laisse désormais deux cœurs physiques au reste — un au mailleur, un au flux —,
-ce qui rend six ici. La cause de la falaise n'est pas établie ; les candidats
-sont les verrous des grilles de sites et d'éléments, que chaque colonne
-consulte. *Un optimum de pool est propre à une machine* : `-- --fils n` refait
-la mesure, et c'est le premier réglage à reprendre sur un autre processeur.
-
-À faire ensuite :
-
-1. ~~**Mesurer par poste.**~~ Fait — `tools/profile_worldgen.gd` ;
-2. ~~**Les gains qui ne demandent pas de C++.**~~ Fait, et il y en avait un :
-   le pool. Il n'en reste pas d'autre que la mesure désigne — les trois couches
-   ne pèsent que 17 % à elles trois, et l'assiette est intrinsèque. Restent le
-   plafond du cache de pavés (16 384) et `generate_collisions`, déjà à faux, ni
-   l'un ni l'autre suspect.
-
-   > ⚠️ **Le LOD n'est pas le gain gratuit qu'il paraît.** `use_lod` est à faux,
-   > `VoxelLodTerrain` est câblé, `lod_count = 6`, `lod_view_distance = 2048` —
-   > cinq fois la distance actuelle. **Mais §5 dit pourquoi il est éteint** : en
-   > rendu cubes, des dalles d'eau apparaissent en pleine plaine dès le LOD 1,
-   > cause non établie. C'est une piste à *déboguer*, pas un interrupteur.
-
-3. **Puis le C++, et la mesure le demande.** La cible est
-   `CWValueNoise.sample`, puis `CWTerrainField._height_from` qui l'appelle
-   quinze fois. Porter la dispersion, la palette ou la carte n'achèterait rien.
-
-   **Ce qu'on peut en attendre, chiffré.** Un `sample` natif tient en quelques
-   dizaines de nanosecondes — c'est trois multiplications 32 bits et une
-   interpolation bicubique. Les 46 µs par colonne tomberaient sous 2, soit
-   **93,7 → ~50 µs/colonne** et un chargement de 384 blocs autour de **22 s** au
-   lieu de 42. Porter `_height_from` entier irait plus loin. C'est donc un
-   facteur deux, pas un facteur dix : *à décider en sachant ce qu'une chaîne de
-   compilation coûte au dépôt.* Et à décider **après** avoir vu si la falaise
-   des fils se déplace une fois le champ deux fois plus rapide : les deux
-   réglages ne sont pas indépendants.
-
-> ⚠️ **Le C++ ici n'est pas une case à cocher : le moteur est un build
-> personnalisé.** `godot.windows.editor.double.x86_64.exe`, **double précision**,
-> module Voxel Tools 1.7 compilé dedans. Il n'y a **ni `.gdextension` ni
-> `SConstruct`** dans le dépôt. Deux routes, et elles n'ont pas le même coût :
->
-> * **une GDExtension** (godot-cpp) : à compiler contre *exactement* ce build —
->   même version, même précision —, sinon elle ne charge pas. Le dépôt gagne une
->   chaîne de compilation et une bibliothèque par plate-forme ;
-> * **un module dans le moteur** : plus rapide à l'appel, mais il faut alors
->   reconstruire et redistribuer le binaire, que le dépôt embarque déjà à 190 Mo
->   à sa racine.
->
-> La première est la bonne par défaut. La décision se prend avec la mesure de
-> l'étape 1 en main, pas avant.
-
-### Le n° 2 — le ciel et le cycle jour/nuit
-
-**Tout se déduit d'un scalaire d'heure dans `[0, 1)` par la seule fonction
-`CWDaylight.applique`** — rotation, énergie et couleur du soleil ; zénith,
-horizon et sol du ciel ; couleur et relief des nuages ; ambiante ; couleur,
-densité et diffusion du brouillard. C'est une contrainte et non une commodité :
-si l'angle du soleil se réglait ici et la couleur du brouillard ailleurs, l'aube
-aurait un ciel rose et un brouillard bleu, et le défaut ne se verrait qu'à
-l'aube — c'est-à-dire rarement et tard.
-
-Les nuages sont un **bruit fractal en coordonnées de direction**
-(`src/demo/cw_sky.gdshader`), pas un dôme texturé : pas de géométrie, pas de
-plafond de couverture, et c'est la route qui donnera les ombres de nuages si on
-les veut — la même fonction, échantillonnée au sol.
-
-`--heure h` se pose à une heure et fige le cycle, `--jour n` change sa durée,
-`--nuages c` la couverture ; en jeu, **F2** fige, **F3** et **F4** reculent ou
-avancent d'une heure. *Regarder une aube en temps réel n'est pas une méthode de
-réglage.*
-
-**Le doute sur l'éclairage cuit est levé, et dans le bon sens.** `CWLight` ne
-suit pas le soleil, et on craignait que sa composante « ciel » à 255 garde le
-monde clair la nuit. Ce n'est pas le cas : le terrain **généré** ne passe jamais
-par `CWLight` — un champ de hauteurs est éclairé partout où on le voit —, donc
-ses voxels portent leur couleur pleine et s'assombrissent avec le soleil et
-l'ambiante comme n'importe quelle surface. Seul ce que le joueur a creusé porte
-de l'ombre cuite, et **une ombre reste une ombre à toute heure** : le voxel cuit
-est devenu un terme d'occlusion sans qu'on ait rien à y toucher.
-
-Trois réglages ont demandé une capture, et aucun ne se voyait dans le code :
-
-* **`fog_sky_affect` vaut 1 par défaut**, donc le brouillard repeignait le ciel
-  entier de sa couleur — dégradé, nuages et disque du soleil disparus sous un
-  aplat. La première capture de midi rendait exactement cela, quand celle de
-  minuit montrait le dégradé, simplement parce qu'à cette heure le brouillard
-  est de la couleur du ciel qu'il cachait. *Un défaut qui se voit le jour et pas
-  la nuit ressemble à un bug de shader ; c'en était un de réglage* ;
-* **la projection des nuages divergeait à l'horizon.** `EYEDIR.xz / EYEDIR.y`
-  est juste physiquement et illisible à l'écran — une vue à la première personne
-  regarde surtout là, et les nuages s'y écrasaient en filaments d'un pixel. Un
-  décalage au dénominateur borne la perspective au lieu de la laisser diverger ;
-* **les deux bandes de `smoothstep` se lisaient contre `[0, 1]`** au lieu de
-  l'étendue réelle du bruit fractal, qui ne monte guère au-dessus de 0,72. Tout
-  le nuage restait dans son fondu et dans sa teinte d'ombre : des masses grises
-  et délavées, ce qui ressemblait à un problème d'éclairage.
-
-**Ce qui reste ouvert, et rien ne presse :**
-
-- **la couverture nuageuse est une constante.** La faire varier demande un champ
-  de temps, qui est un autre sujet ;
-- **les ombres de nuages au sol** : la même fonction de bruit, échantillonnée en
-  `(x, z)`, multipliée à la lumière. Le shader est écrit pour ça ;
-- **le brouillard reste réglé pour une vue de 384 blocs** (`FOG_DENSITY_*`).
-  C'est l'accouplement avec le n° 2 : si la distance de vue augmente, il se
-  reprend.
-
----
-
-### Les portes déjà ouvertes
-
-1. ~~**La collision, objet par objet.**~~ **L'arbitrage est tranché le
-   2026-09-10 : le feuillage passe en matière**, avec le rocher géant et les
-   cactus. C'est devenu la demande n° 2 du programme ci-dessus ; le tableau des
-   cinq modèles à passer reste dans l'annexe de `docs/ROADMAP.md`, et le
-   branchage comme les filons étaient déjà réglés.
-2. **2.6, l'apparition** — la porte qui reste, et elle mène au jalon 2. Elle
-   n'attend rien : la fonction est lue, les constantes de pose extraites, la
-   couche d'éléments existe depuis 1.6 et la carte sait les afficher.
-
-**Quatre petites choses laissées ouvertes**, aucune bloquante :
-
-- **la rive n'est humide qu'en Jungles**, faute d'un roseau par biome. C'est un
-  besoin d'assets, pas de code — et c'est le seul endroit du monde où le marais
-  subsiste ;
-- **deux termes du champ de chenaux ne sont pas portés** : les bosses par type de
-  cellule de région, qui *interdisent* l'eau près d'un bourg
-  (`docs/systems/02` §10.2.1). Les porter déplacerait le lit des vallées
-  existantes, donc c'est un travail à faire d'un bloc, avec une capture avant et
-  après ;
-- **les provinces climatiques ont trois constantes réglées à l'œil sur une seule
-  graine** : fréquence, largeur du cœur, décalages de graine.
-  `tools/biome_stats.gd` mesure ce qu'elles rendent — répartition et voisinage —,
-  donc les bouger est cheap et vérifiable. Elles n'ont pas été balayées, et
-  **c'est un levier de la demande n° 3** : la répartition des biomes dépend
-  autant de la forme des provinces que des seuils de `CWBiome` ;
-- **les chemins ignorent les biomes** : même gravier de chaussée partout. Une
-  ligne dans `CWPalette`.
 
 ## 1. Où sont les choses
 
@@ -895,7 +347,7 @@ ne s'ouvre pas proprement (il est déclaré dans `project.godot`).
 ## 2. Commandes
 
 ```
-# Suite de validation (379 vérifications, ~25 s)
+# Suite de validation (407 vérifications, ~25 s)
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tests/worldgen_test.gd
 
 # Réimport après ajout d'un class_name (sinon l'éditeur ne le voit pas)
@@ -916,6 +368,13 @@ C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path 
 # Remise d'un lot de modèles dans la palette de projet (rapport, puis écriture)
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path . -s tools/repaint_models.gd
 C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path .     -s tools/repaint_models.gd -- --write
+
+# La carte, DANS le jeu et a la densite qu'on veut : `--carte` l'ouvre au
+# demarrage, `--zones n` la regle de 3 a 9. C'est le seul cas qui se juge —
+# a neuf zones les noms se marchent dessus, et c'est la que l'evitement de
+# collision se voit.
+./godot.windows.editor.double.x86_64.exe --path . scenes/terrain_demo.tscn \
+    --resolution 1600x900 -- --biome 1 --carte --zones 9 --shot 26
 
 # Apercu de la carte du monde, hors du jeu : la vue vierge et la meme apres une
 # diagonale parcourue (zone x, zone z, nombre de zones, graine)
@@ -1051,11 +510,18 @@ au code*.
 
 Le champ d'altitude et son climat (1.1-1.5), les **éléments de tuile** qui le
 déforment (1.6), les **six biomes** de l'alpha 2013 — Greenlands, Snowlands,
-Deserts, Jungles, Lava Lands, Oceans — et les matières de surface qui en
-découlent (1.12), les **provinces climatiques** qui font qu'une Snowlands peut
-toucher un désert (1.12bis), la **falaise** qui habille de roche les flancs
-raides (1.13, retirée puis rétablie tramée), les **lacs et rivières** qui suivent
-les fonds de vallée (1.14), le **réseau de chemins** et ses levées (1.16).
+Deserts, Jungles, Lava Lands, Oceans —, décidés au **site de région** depuis le
+2026-09-12 et donc grands comme une région (1.12), les **provinces climatiques**
+qui font qu'une Snowlands peut toucher un désert (1.12bis), la **falaise** qui
+habille de roche les flancs raides (1.13, retirée puis rétablie tramée), les
+**lacs et rivières** qui suivent les fonds de vallée (1.14), le **réseau de
+chemins** et ses levées (1.16).
+
+**Il y a exactement huit matières de surface, et sept d'entre elles sont un
+pays** : herbe, jungle, sable, neige, gravier, scorie et magma — Lava Lands est
+le seul biome qui en porte deux, et c'est demandé. La huitième est la **roche**
+de falaise, qui est une règle de pente. La terre ne se voit qu'au **lit d'une
+mare** et en creusant : ce n'est pas une surface, c'est le sous-sol en coupe.
 
 Par-dessus : la **flore** (1.7), instanciée ; les **arbres** (1.11), dont
 toutes les pièces sont **écrites dans le terrain** depuis le 2026-09-11 —
@@ -1075,6 +541,7 @@ la capture reste le juge.*
 | **la falaise**, première version | 2026-09-06 | peindre de la roche sur un flanc à 27° fait une tache, pas une paroi. *Une falaise ne se peint pas, elle se taille.* Revenue le lendemain, **tramée** |
 | **les ponts** et le lot d'ouvrages | 2026-09-09 | *trop compliqués à intégrer*. Remplacés par une **levée** : le chemin comble l'eau au lieu de l'enjamber. C'est un barrage, et c'est assumé |
 | **les surplombs** et leurs grottes | 2026-09-10 | trois refontes en trois jours — chapeau sur socle, masses escaladables, masses déformées à gradins — et aucune ne convainc en jeu. *Trois refontes qui ne convainquent pas disent que ce n'est pas la forme qui est en cause* |
+| **la plage, le haut-fond et le marais** | 2026-09-12 | ils nommaient un endroit, ce qui les avait sauvés deux fois — mais **ils le nommaient de la même façon dans trois pays**. Le marais a emporté le roseau, seule plante qu'il portait |
 
 Ce qu'il faut en retenir avant de reproposer l'un des trois : **une chose absente
 de la source n'est pas hors périmètre, elle est à décider** — c'est ce qui a
@@ -1093,6 +560,11 @@ l'**invariant n° 38**, et c'est ce qui dispense cette couche de la garde de
 réentrance que `CWTileFeatureGrid` doit porter — ses éléments, eux, déforment le
 champ dont ils lisent l'altitude.
 
+**Et le climat n'est plus au milieu de cette chaîne.** Le biome se décide au
+site de région (invariant n° 53), et l'écotone déplace le point plutôt qu'il ne
+brouille le climat (n° 54) : le champ d'altitude et le champ de climat ne se
+consultent plus l'un l'autre du tout.
+
 L'ordre des recouvrements dans une colonne — **invariant n° 39** — est : *le
 tronc estampé recouvre tout, le chemin creuse, l'étang mouille, le terrain
 porte*. `_generate_block` les pose du plus profond au plus superficiel,
@@ -1101,7 +573,10 @@ porte*. `_generate_block` les pose du plus profond au plus superficiel,
 ### Les trois choses qu'un nouveau venu confond
 
 1. **Un biome n'est pas une matière de surface** (invariant n° 27). `CWBiome.at`
-   dit *où on est*, `CWPalette.surface_of` dit *de quoi c'est fait*.
+   dit *où on est*, `CWPalette.surface_of` dit *de quoi c'est fait*. Depuis le
+   2026-09-12, les deux se répondent presque un pour un — mais *presque* : la
+   falaise et le lit d'une mare sont les deux endroits où ils divergent, et ce
+   sont les seuls.
 2. **Il y a quatre grilles de dessin** (invariant n° 28), et `VOXELS_PER_BLOCK`
    (40/3) n'est plus la seule : arbres et filons à **1** voxel par bloc, flore à
    **4 ou 6**, personnage et créatures à **40/3**. La grille est portée par le
@@ -1124,10 +599,13 @@ src/worldgen/
   cw_region_site_grid.gd   grille 1024² paresseuse, caches sous mutex
   cw_tile_feature.gd       structure d'un élément de tuile
   cw_tile_feature_grid.gd  grille 8x8 par zone, paresseuse, garde de réentrance
-  cw_terrain_field.gd      climat + altitude + chenaux + éléments  ← le cœur
-  cw_biome.gd              les six biomes et la règle qui les décide (1.12)
+  cw_terrain_field.gd      climat + altitude + chenaux + éléments, et l'écotone
+                           qui déplace le point  ← le cœur
+  cw_biome.gd              les six biomes et la règle qui les décide, sur le
+                           climat du site de région (1.12, 2026-09-12)
   cw_path_network.gd       le réseau de chemins, ses portes et ses levées (1.16)
-  cw_palette.gd            palette, matières de surface, coulées de lave (1.12)
+  cw_palette.gd            palette, matières de surface — une par biome depuis
+                           le 2026-09-12 —, coulées de lave (1.12)
   cw_voxel_generator.gd    VoxelGeneratorScript, cache de colonnes, arbres estampés
   cw_voxel_model.gd        modèle .vox préparé : deux grilles de dessin (1.12)
   cw_model_library.gd      chargement des modèles + tables par biome et par rôle
@@ -1141,7 +619,8 @@ src/worldgen/
                            compris depuis le 2026-09-11)
   cw_world_edits.gd        creuser, poser, interroger un bloc (1.8)
   cw_light.gd              éclairage voxel : deux passes, cases à repeindre (1.9)
-  cw_world_map.gd          carte : dalles de Voronoï, découverte, teintes (1.10)
+  cw_world_map.gd          carte : dalles de Voronoï, découverte, et sa propre
+                           table de teintes par biome (1.10, 2026-09-12)
   cw_region_name.gd        noms de région : deux tables de vingt syllabes (1.10)
 src/demo/terrain_demo.gd     scène de démonstration, touches 1-6 par biome
 src/demo/cw_clouds.gd        la couche de nuages : une grille de ciel, un tirage
@@ -1155,16 +634,18 @@ src/demo/cw_demo_map.gd      l'état de la carte du monde : rendu de fond,
                              découverte, sauvegarde (1.10)
 src/demo/scale_board.gd      gabarit d'échelle : mires, silhouette, modèles
 src/demo/model_portraits.gd  planche de validation : un modèle par capture
-src/demo/map_overlay.gd      affichage de la carte (touche M)
+src/demo/map_overlay.gd      affichage de la carte (touche M), et l'évitement
+                             de collision des noms (2026-09-12)
 tests/worldgen_test.gd       suite headless, tient le compte des vérifications
 tests/tile_features_test.gd  la moitié qui concerne les éléments de tuile
-tests/decor_test.gd          rôles, tables croisées, filtre de matière, composition
+tests/decor_test.gd          rôles, tables croisées, filtre de matière, composition,
+                             et le balayage qui refuse toute matière retirée
 tests/flora_test.gd          modèles, dispersion, maillage et pose
 tests/tree_test.gd           lot, enveloppes, grille, dispersion, espacement, montage
 tests/edit_test.gd           règles d'édition, requête ponctuelle, persistance (1.8)
 tests/light_test.gd          les deux passes, l'atténuation, les cases à repeindre (1.9)
-tests/map_test.gd            échelle, découverte, puzzle, rendu, noms (1.10)
-tests/relief_test.gd         chemins, levées, tramage (1.16)
+tests/map_test.gd            échelle, découverte, puzzle, rendu, teintes, noms (1.10)
+tests/relief_test.gd         chemins, levées, tramage, écotone de Voronoï (1.16)
 tests/sky_test.gd            le lot de nuages, la pureté du tirage, et les deux
                              accords que rien d'autre ne tient (2026-09-11)
 tools/export_palette.gd      régénère assets/palette/* depuis CWPalette
@@ -1321,9 +802,11 @@ docs/images/                 gabarit, carte et composition de flore, en jeu
     de grossir comme ce qu'on a touché. C'est aussi le modèle de l'original, qui
     ne sérialise que les colonnes modifiées.
 22. **`CWDecorRules.FAMILIES` et `CWModelLibrary.ROLES` doivent se répondre
-    exactement.** Un rôle qu'une surface sait *choisir* mais pas *poser* ne lève
+    exactement.** Un rôle qu'un biome sait *choisir* mais pas *poser* ne lève
     rien : la plante disparaît, et la densité moyenne ne bouge pas assez pour
     se voir — un quart des candidats d'un biome peut s'évaporer en silence.
+    C'est **exactement ce qui serait arrivé au roseau** le 2026-09-12 si le
+    marais était parti seul, et c'est pourquoi les deux sont partis ensemble.
     L'inverse, un modèle rangé sous un rôle que les deux crêtes n'atteignent
     jamais, est plus discret encore : le fichier est chargé, maillé, et ne sort
     pas une seule fois. Deux vérifications de `tests/decor_test.gd` tiennent les
@@ -1355,13 +838,20 @@ docs/images/                 gabarit, carte et composition de flore, en jeu
     `ESPACEMENT <= cell_size`.
 27. **Un biome n'est pas une matière de surface.** `CWBiome.at` dit *où on
     est*, `CWPalette.surface_of` dit *de quoi c'est fait*. Les tables de contenu
-    — `DENSITY`, `ROLES`, `SPECIES`, `FAMILIES` — sont indexées par **biome** ;
-    seules deux exceptions sont indexées par matière (`FAMILIES_SURFACE` : le
-    sol humide et l'herbe sèche), et chacune déclare le biome qui la produit
-    dans `FAMILIES_SURFACE_BIOME` pour qu'un test puisse vérifier que ses rôles
-    ont des modèles là où elle peut se produire. Confondre les deux ferait
-    pousser des bleuets sur la roche nue d'une prairie de montagne — ce que
-    `decor_allowed` empêche, et qu'aucun test de table ne verrait.
+    — `DENSITY`, `ROLES`, `SPECIES`, `FAMILIES` — sont indexées par **biome**, et
+    depuis le 2026-09-12 **elles n'ont plus une seule exception** : les deux
+    tables par matière (`FAMILIES_SURFACE`, `FAMILIES_SURFACE_BIOME`) sont
+    parties avec le marais, et `role_at` ne prend plus la matière du tout.
+    Confondre les deux ferait pousser des bleuets sur la roche nue d'une
+    prairie de montagne — ce que `decor_allowed` empêche, et qu'aucun test de
+    table ne verrait.
+
+    ⚠️ **Et la lecture inverse est vraie depuis le même jour :** une matière ne
+    dit plus rien qu'un biome ne dise déjà. Il n'en reste **qu'une** hors des
+    six — la roche de falaise, qui est une règle de *pente* — et une qui n'est
+    pas une surface : la couche meuble du lit d'une mare, qui est le sous-sol
+    vu en coupe. Toute nouvelle matière devra passer cette question : *qu'est-ce
+    qu'elle nomme que le biome ne nomme pas ?*
 28. **Il y a quatre grilles de dessin, et `VOXELS_PER_BLOCK` n'est plus la
     seule.** Les arbres et les filons sont à **1** voxel par bloc, le personnage
     et les créatures à **40/3**, et la flore à **4 ou 6** selon le modèle —
@@ -1523,6 +1013,11 @@ docs/images/                 gabarit, carte et composition de flore, en jeu
     étangs au jalon 1.14, repris trois fois : un objet posé à la hauteur brute
     du champ **flotte ou s'enterre**, et le défaut ne se voit que sur une
     capture.
+
+    ⚠️ **`pond_surface` a perdu son argument `biome` le 2026-09-12** : la rive
+    d'une mare ne prend plus la matière du marais, donc la matière rendue ne
+    dépend plus du pays. La **forme**, elle, n'a pas bougé — c'est la même
+    fonction, au même endroit de la chaîne, et c'est elle qui creuse la berge.
 43. **Un chemin ne sort pas de sa zone, et c'est ce qui rend la couche
     abordable.** Sans cette borne, une colonne devrait consulter le réseau des
     neuf zones voisines, donc les construire toutes — 350 ms chacune. Les zones
@@ -1540,7 +1035,7 @@ docs/images/                 gabarit, carte et composition de flore, en jeu
 45. **La couleur d'un bloc de surface n'est plus celle de son type, et c'est le
     contrat.** Depuis le 2026-09-08, `CHANNEL_TYPE` porte la matière et
     `CHANNEL_COLOR` une **nuance** de sa couleur : trois tons pour une prairie,
-    cinq marches de fondu au bord d'une plage. Le seul endroit où les deux canaux
+    cinq marches de fondu au pied d'une falaise. Le seul endroit où les deux canaux
     peuvent diverger est `_fill_run`, par son paramètre `raw` — un appelant qui
     l'oublie obtient l'aplat d'avant, pas une incohérence. Ce qui reste
     vérifiable est le voisinage : une teinte doit rester reconnaissable comme
@@ -1587,6 +1082,32 @@ docs/images/                 gabarit, carte et composition de flore, en jeu
     troisième** : la teinte, elle, continue de venir du soleil que
     `CWDaylight.applique` règle pour tout le monde. `tests/sky_test.gd` compare
     les deux matériaux terme à terme pour cette raison.
+53. **Le biome se classe au site de région, et le climat mélangé ne décide
+    plus rien.** Depuis le 2026-09-12, `sample_column` rend le climat **du site
+    le plus proche** et `CWBiome.of_site` le classe : un biome est une cellule
+    du diagramme de Voronoï des sites, seize mille blocs de côté par
+    construction. `CWTerrainField.climate_blend` existe toujours et rend le
+    mélange, **élargi et réservé à l'ATH et aux outils**.
+
+    ⚠️ Les deux nombres ne se contredisent pas — l'un est le climat du lieu,
+    l'autre celui du pays — mais **un seuil de `CWBiome` réglé en regardant
+    l'ATH serait faux**. Le seul instrument qui mesure la bonne grandeur est
+    `tools/biome_stats.gd`, et le seul qui résolve les seuils est
+    `tools/biome_balance.gd` ; tous deux passent par `sample_column`, donc par
+    le climat qui classe.
+54. **L'écotone déplace le point, il ne brouille plus le climat.**
+    `CWTerrainField.fringe_point` décale la colonne d'au plus `FRINGE_BLOCKS`
+    avant de chercher son site ; c'est ce point-là qui décide la **matière** du
+    sol, le point vrai décidant le biome **nommé** — celui qui choisit ce qui
+    pousse, ce que l'ATH affiche et ce que la carte teinte. Les mêler ferait
+    pousser un cactus tous les vingt blocs le long d'un désert.
+
+    ⚠️ **Une amplitude en unités de climat ne se remet pas.** C'est ce qui a été
+    retiré ce jour-là, avec les trois mécanismes qui la bornaient : une telle
+    amplitude ne dit rien de la largeur de la frange **en blocs**, celle-ci
+    valant l'amplitude divisée par la pente locale du champ — et infinie là où
+    le champ est plat, c'est-à-dire au cœur de chaque région. *Une frontière
+    dans l'espace se brouille dans l'espace.*
 
 ## 5. Pièges connus
 
@@ -1712,6 +1233,28 @@ docs/images/                 gabarit, carte et composition de flore, en jeu
   d'affichage, et elle ne se lit plus — un désert commence à 2 °C. Les seuils
   restent ajustables sans rien casser, à condition de relancer l'un des deux
   outils ; l'annexe de `docs/ROADMAP.md` (§6.3) dit pourquoi.
+
+  ⚠️ **Et depuis le 2026-09-12, ils se lisent sur le climat du site**, non plus
+  sur celui de la colonne. Le solveur relancé le confirme : les parts n'ont pas
+  bougé d'un dixième de point, parce que le climat de la colonne était déjà un
+  plateau par région. Ce que ça change n'est donc pas la composition du monde,
+  c'est **où l'on a le droit de lire un climat** — voir l'invariant n° 53.
+
+- **Une région d'océan est un pays, pas une ligne de rivage** (2026-09-12). La
+  carte peint en bleu toute région dont le site est noyé, îles comprises, et
+  peint en terre une région terrestre dont un tiers de la surface est sous
+  l'eau. C'est cohérent avec l'icône, qui lit le même drapeau, et c'est le seul
+  choix abordable : peindre le rivage demande une case par chunk au lieu d'une
+  par région, soit **4 096 fois le coût**. La route, si on la prend un jour, est
+  de peindre à la case *l'altitude* et de ne garder la teinte de région que pour
+  la terre.
+
+- **Combien de matières un biome a-t-il le droit d'avoir ?** La règle dit une, et
+  Lava Lands en a deux — la scorie et le magma — parce que c'est ce qui a été
+  demandé. La question se reposera au premier biome qui voudra une seconde
+  matière : ce qui distingue le magma d'une frange d'humidité est qu'il **nomme
+  un lieu** (une cuvette, une coulée) et non un gradient, et c'est le seul
+  critère que ce dépôt ait trouvé qui tienne dans les deux sens.
 - ~~**La bande d'herbe sèche de Greenlands est large.**~~ **Sans objet** :
   `DRY_GRASS_H` n'existe plus depuis le 2026-09-06, avec le retrait de l'herbe
   sèche et de la toundra. Ce qui reste vrai de cette note est la mesure qui la
