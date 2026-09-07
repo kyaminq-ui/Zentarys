@@ -5,103 +5,250 @@ il contient des décisions qui coûtent cher à redécouvrir.
 
 ---
 
-## 0. Demain, la première chose à faire
+## 0. La prochaine session — **quatre demandes, 2026-09-09 au soir**
 
-> **Six points relevés en jeu le 2026-09-08 au soir. Les six sont traités**
-> — §7octies pour les cinq premiers, §7octies.6 pour le sixième —, et une
-> seconde session de jeu, le 2026-09-09 au soir, en a ajouté trois autres qui
-> sont traités aussi : la chaussée creusée jusqu'en son milieu, les ponts
-> remplacés par des levées, et la forme des massifs refaite sans contrat
-> d'escalade (**§7nonies**). L'ordre ci-dessous est celui de ce qui se voyait le
-> plus, pas celui de la difficulté ; il est gardé tel quel comme trace.
+> **Rien n'en est commencé, et c'est délibéré.** Elles sont écrites ici et nulle
+> part ailleurs. L'ordre ci-dessous est celui dans lequel elles ont été
+> formulées ; l'ordre d'exécution recommandé est plus bas, et il n'est pas le
+> même.
 
-**1. Une matière de surface déborde dans le biome voisin.** *De l'herbe se
-retrouve dans le désert, et du sable de désert dans les Lava Lands.* C'est
-l'écotone du 2026-09-07 (`CWBiome.at_dithered`) qui va trop loin : son amplitude
-est en **unités de climat** — 0,07 en température, 0,09 en humidité — et la
-distance géographique que cela représente dépend de la **pente du champ de
-climat**, qui n'est pas la même partout. Là où le climat varie lentement, la
-frange fait des centaines de blocs et l'herbe traverse tout le désert. Deux
-pistes, à peser avant d'écrire :
+> Le programme précédent — six points relevés en jeu le 2026-09-08, puis trois
+> de plus le 2026-09-09 — **est entièrement traité** : §7octies pour les six,
+> §7nonies pour les trois. Il a été retiré d'ici pour que ce paragraphe reste
+> lisible ; le détail et les mesures sont dans ces deux sections.
 
-* borner la frange **en blocs** et non en unités de climat — ce qui demande un
-  gradient du champ de climat, donc des échantillons voisins ;
-* ou refuser purement le tramage entre certains couples : *Lava Lands ne se
-  mélange à rien*, c'est un cœur de région (jalon 1.12), et une frange de sable
-  y contredit ce que le biome raconte.
+---
 
-`tools/biome_stats.gd` mesure la répartition des matières : c'est lui qui dira si
-la correction a mangé la frange au lieu de la borner.
+### 1. Supprimer les surplombs
 
-**2. Le pas maximum d'un massif doit varier d'un massif à l'autre.** Aujourd'hui
-tous ont la même borne — deux blocs — parce qu'elle sort de trois constantes
-partagées (`CWMesa.SHAPE_AMP_*`, `HEIGHT_PER_RADIUS_*`). Les tirer **par massif**
-donnerait des masses lisses et des masses abruptes dans le même paysage. La
-vérification d'escalade de `tests/relief_test.gd` doit alors mesurer contre la
-borne **de ce massif-là** et non contre une constante : c'est elle qui garde le
-contrat, et elle devient paramétrée.
+*Finalement supprimer les surplombs, je n'aime pas le rendu en jeu.*
 
-**3. Les grottes : deux bouches en entonnoir, et un creusement plus libre.**
-Aujourd'hui une galerie a une **entrée** évasée et un **fond** fermé. Il faut :
+C'est un **retrait**, pas une correction, et le troisième de ce dépôt après la
+falaise du 2026-09-06 et les ponts du 2026-09-09. La couche a été refaite trois
+fois en trois jours — chapeau sur socle, masses escaladables, masses déformées à
+gradins — et aucune n'a convaincu en jeu. *Trois refontes qui ne convainquent pas
+disent que ce n'est pas la forme qui est en cause.*
 
-* une **sortie** aussi, évasée comme l'entrée — donc une galerie **traversante**,
-  et les deux bouches choisies par la règle des huit directions qui garantit
-  déjà qu'on débouche à l'air libre ;
-* un creusement **plus aléatoire**, « un peu comme Minecraft » : section et
-  hauteur qui varient le long de l'axe, embranchements courts, plafond qui monte
-  et descend ;
-* **sans cesser d'être praticable.** C'est la contrainte qui coûte : une section
-  variable peut se pincer jusqu'à boucher la galerie. Il faudra un plancher de
-  section, et une vérification qui parcoure l'axe et exige un passage libre
-  d'un bout à l'autre — le pendant de la vérification d'accès actuelle, qui ne
-  regarde que l'entrée.
+**Ce qui part avec elle, et il faut le savoir avant de commencer.**
 
-**4. Un chemin doit contourner un massif, pas le percer tout droit.** *Creusé de
-façon orbitale, avec un diamètre proportionnel à celui de la montagne, sans la
-couper en deux.*
+| ce qui tombe | où |
+|---|---|
+| la couche elle-même | `cw_mesa.gd` (512 l.), `cw_mesa_grid.gd` (665 l.) |
+| **les grottes** | elles sont définies comme des tubes qui percent **une masse** ; sans masse, il n'y a rien à percer |
+| le **porche**, le cœur de roche et sa frange enherbée | `SKIN_GRASS` / `SKIN_ROCK`, `cap_surfaces` / `cap_colors` de `ColumnPatch` |
+| les **tunnels** de chemin | `tunnel_bore`, `tunnel_arch`, `TUNNEL_SHARE`, `TUNNEL_ROOF_MIN` |
+| le terme de masse du coût de tracé | `CWPathNetwork.MESA_WEIGHT`, `_masse`, `_masse_arc`, `MESA_PROBE` |
+| trois outils | `tools/mesa_stats.gd`, `find_mesa.gd`, `find_canyon.gd` |
+| deux suites de vérification | `_test_surplombs` et `_test_grottes` de `tests/relief_test.gd` |
 
-> ⚠️ **Deux lectures, et elles ne demandent pas le même travail. À trancher avec
-> l'auteur de la demande avant d'écrire une ligne.**
+Les références à traiter, comptées : `cw_voxel_generator` 12, `relief_test` 13,
+`cw_path_network` 4, `terrain_demo` 4, `cw_terrain_field` 3, `cw_scatter` 3,
+`cw_tree_scatter` 2, `flora_test` 2, plus `CWWorldParams.overhangs` et les
+outils. C'est mécanique, mais ce n'est pas court.
+
+> ⚠️ **Deux choses à ne pas confondre avec les surplombs, et à garder.**
 >
-> * **le tracé tourne autour du massif** : le chemin cesse de traverser et
->   décrit un arc dont le rayon suit celui de la masse — un chemin de corniche.
->   C'est du travail dans `CWPathNetwork._relaxe`, dont la fonction de coût
->   ignore aujourd'hui totalement cette couche (c'est déjà listé plus bas comme
->   ouvert) ;
-> * **la section du tunnel devient circulaire** — un « diamètre » et non une
->   tranche rectangulaire — proportionnel à la masse traversée. C'est du travail
->   dans `CWVoxelGenerator.tunnel_height`, qui rend aujourd'hui une hauteur et
->   devrait rendre un profil.
+> * **la falaise** (`cliff_slope`) est indépendante : elle mesure la pente du
+>   **champ d'altitude**, qui n'a jamais rien su de cette couche. §7sexies dit
+>   que la falaise est revenue *grâce* aux surplombs — c'est vrai
+>   historiquement, faux techniquement. Elle survit au retrait ;
+> * **les levées** et le reste du réseau de chemins ne dépendent des massifs que
+>   par le tunnel et le terme de coût. Le reste est intact.
+
+**L'ordre honnête, et il coûte cinq minutes :** la bascule existe déjà. Lancer la
+démo avec `--sans-surplombs` **avant** de supprimer quoi que ce soit, et regarder
+le paysage sans elle. Si le monde est meilleur ainsi, le retrait est acquis et on
+supprime en confiance ; s'il est plat et vide, la vraie demande n'était
+peut-être pas *« supprime »* mais *« ce relief-là ne va pas »*, et il faut le
+redemander avant de jeter mille deux cents lignes.
+
+**Une question à trancher avec l'auteur de la demande :** *les grottes
+disparaissent-elles avec les massifs ?* Elles sont la seule chose que cette
+couche apporte et qui ne soit pas du relief — *« pas profondes comme Minecraft,
+toujours accessibles par une falaise, jamais besoin de creuser »*. Les garder
+demanderait de **réécrire** un système de galeries qui s'accroche au champ
+d'altitude au lieu d'une masse : ce n'est pas une suppression, c'est un jalon.
+
+**Ce que ça rend :** 0,7 s de chargement à l'époque de la mesure, ~30 µs par
+colonne dans une fenêtre qui porte des masses, et environ **1 500 lignes** de
+moins à maintenir. Ce dernier point compte pour le n° 4.
+
+---
+
+### 2. Un ciel, des nuages, et un cycle jour/nuit
+
+*Ajouter des nuages et un ciel, système basique jour/nuit, et adapter en
+conséquence le brouillard et l'éclairage déjà implémentés.*
+
+**L'existant tient en vingt-cinq lignes**, `_build_environment()` dans
+`src/demo/terrain_demo.gd` (~ligne 500) : un `DirectionalLight3D` à un angle
+fixe, un `ProceduralSkyMaterial` nu, l'ambiante prise du ciel à 0,45, un
+tonemap filmique, et un brouillard **constant** — `fog_light_color` gris-bleu,
+`fog_density` 0,0016. Rien n'y varie dans le temps.
+
+Ce qu'il faut écrire :
+
+* **un scalaire d'heure** dans `[0, 1)`, et une seule fonction qui en déduit
+  *tout* : rotation, énergie et couleur du soleil ; couleurs de zénith,
+  d'horizon et de sol du ciel ; énergie de l'ambiante ; **couleur et densité du
+  brouillard**. Un seul point d'entrée, sinon l'aube aura un ciel rose et un
+  brouillard bleu ;
+* **les nuages.** `ProceduralSkyMaterial` n'en a pas. Deux routes : un
+  `ShaderMaterial` de ciel avec un bruit fractal en coordonnées de direction —
+  pas de géométrie, pas de limite de couverture, et le projet a déjà toute sa
+  culture de bruit —, ou un dôme texturé qui défile. **La première**, et c'est
+  aussi celle qui donnera les ombres de nuages plus tard si on les veut ;
+* **une vitesse**, et une touche pour la forcer. Regarder une aube en temps réel
+  n'est pas une méthode de réglage.
+
+> ⚠️ **Le piège, et il est structurel : `CWLight` est un éclairage *cuit*.** La
+> passe A descend le soleil colonne par colonne, la passe B diffuse seize fois à
+> l'horizontale, et le résultat est écrit **dans le canal de couleur du voxel** à
+> la génération. Il ne suit pas le `DirectionalLight3D`. Tourner le soleil ne
+> rallume donc rien : le voxel garde la lumière qu'il avait quand il a été
+> engendré, et un recuit est hors de question (7 ms pour un pavé de 33³).
 >
-> La formulation du 2026-09-07 — *« augmente le dégagement, proportionnel au
-> surplomb, sans le couper en deux »* — penche pour la seconde ; le mot
-> « orbitale » penche pour la première. Les deux se défendent, et faire la
-> mauvaise coûte une journée.
+> La lecture qui marche : **le voxel cuit devient un terme d'occlusion**, pas une
+> heure — il dit *ce recoin est abrité*, ce qui reste vrai la nuit — et c'est la
+> lumière directionnelle de la scène qui porte le cycle. À vérifier en jeu, parce
+> que l'éclairage cuit a une composante « ciel » à 255 qui pourrait rester trop
+> claire de nuit ; si c'est le cas, c'est un facteur global à l'affichage, pas un
+> recuit.
 
-**5. Le pont : un modèle simple, d'une seule teinte de bois, et posé sur ses deux
-rives.** Deux choses distinctes :
+> ⚠️ **Le brouillard et le n° 3 sont couplés.** La densité actuelle est réglée
+> pour cacher le bord d'une vue de 384 blocs. Le n° 3 veut augmenter cette
+> distance : la même densité rendra alors le lointain laiteux bien avant le bord.
+> **Ne pas régler le brouillard avant de savoir quelle distance de vue on vise**,
+> ou le faire deux fois.
 
-* **il flotte d'un bloc.** La travée est instanciée à `tablier + 1` et le tablier
-  de matière est à `deck_y` : aux culées, le terrain est plus bas que le tablier,
-  donc l'ouvrage ne rejoint pas la rive. Il faut que le tablier **descende
-  rejoindre le sol** aux deux extrémités du franchissement — c'est-à-dire que
-  `_releve_ponts` et `road_shape` s'accordent sur une rampe, pas sur un palier ;
-* **une seule couleur de bois.** `generer_ponts.py` emploie aujourd'hui neuf
-  index de la rampe des planches plus un de pierre pour les chapeaux : le
-  résultat est bruyant à six voxels par bloc. Un seul index, et la forme fait le
-  reste.
+**Où ça vit :** pas dans `terrain_demo.gd`, qui fait déjà 1 153 lignes et sept
+métiers. Un nœud à lui — `CWDaylight` ou `CWSky` — et c'est un premier morceau du
+n° 4.
 
-**6. Tous les voxels d'un asset doivent porter sur le sol.** *(fait le
-2026-09-09, §7octies.6.)* Un modèle est posé
-sur la hauteur de **sa colonne d'ancrage**, mais son empreinte fait plusieurs
-blocs de large : dès que le terrain descend sous un de ses bords, ce bord
-flotte. Le remède demande de connaître le sol **sous toute l'empreinte** —
-`CWScatter` ne lit qu'une colonne aujourd'hui —, puis de poser sur le **minimum**
-de cette empreinte (l'objet s'enterre un peu plutôt que de flotter), ou d'écarter
-le candidat quand l'écart dépasse un ou deux blocs. Attention au coût : une
-empreinte de 5 × 5 blocs, c'est vingt-cinq colonnes là où on en paie une, et la
-dispersion est déjà le second poste du chargement. La piste bon marché est de
-sonder les **quatre coins** de l'empreinte et rien d'autre.
+---
+
+### 3. Optimisation, et peut-être du C++
+
+*Optimisation complète, peut-être passer en GDScript + C++. Objectif : distance
+de rendu maximale sans perte de fps ni saccade au chargement des chunks.*
+
+> **L'objectif contient deux problèmes qui n'ont pas le même remède, et les
+> mélanger coûtera une journée.**
+>
+> * **le débit** — combien de colonnes par seconde. C'est lui qui fixe la
+>   distance de vue atteignable, et c'est là que le C++ jouerait ;
+> * **la saccade** — un à-coup quand un pavé arrive. C'est une affaire de
+>   *latence* et d'ordonnancement, pas de débit : un générateur deux fois plus
+>   rapide qui rend toujours ses pavés au même moment saccade toujours.
+
+**Ce qu'on sait déjà, et qui doit servir de base.** Le chargement d'une vue de
+384 blocs se stabilise en **24,1 s** les trois couches éteintes et **28,5 s**
+allumées (2026-09-08). `sample_column` coûte **73 à 80 µs**, et c'est le verrou
+depuis toujours — *l'échantillonnage du champ est le poste unique*. La
+dispersion est le second.
+
+**À faire dans cet ordre, et pas un autre :**
+
+1. **Mesurer avant d'écrire.** Un profil par poste : champ d'altitude, sites de
+   région, éléments de tuile, dispersion, maillage. Les bascules
+   `CWWorldParams` existent déjà pour ça et elles ont servi trois fois ;
+2. **Les gains qui ne demandent pas de C++**, et il y en a un gros :
+   **`use_lod` est à faux**. `VoxelLodTerrain` est câblé, `lod_count = 6`,
+   `lod_view_distance = 2048` — soit **cinq fois** la distance actuelle. Il est
+   très possible que « distance de rendu maximale » soit un problème de réglage
+   de LOD et non de langage. À essayer *avant* toute réécriture. Voir aussi le
+   nombre de fils (`generation_threads`, auto aujourd'hui), le plafond du cache
+   de pavés (16 384), et `generate_collisions` qui est déjà à faux ;
+3. **Puis le C++, si la mesure le demande, et sur le seul poste chaud** :
+   `CWTerrainField._height_from` et `CWValueNoise`. Porter la dispersion, la
+   palette ou la carte n'achèterait rien.
+
+> ⚠️ **Le C++ ici n'est pas une case à cocher : le moteur est un build
+> personnalisé.** `godot.windows.editor.double.x86_64.exe`, **double précision**,
+> module Voxel Tools 1.7 compilé dedans. Il n'y a **ni `.gdextension` ni
+> `SConstruct`** dans le dépôt. Deux routes, et elles n'ont pas le même coût :
+>
+> * **une GDExtension** (godot-cpp) : à compiler contre *exactement* ce build —
+>   même version, même précision —, sinon elle ne charge pas. Le dépôt gagne une
+>   chaîne de compilation et une bibliothèque par plate-forme ;
+> * **un module dans le moteur** : plus rapide à l'appel, mais il faut alors
+>   **reconstruire et redistribuer le binaire**, que le dépôt embarque déjà à
+>   190 Mo à sa racine.
+>
+> La première est la bonne par défaut. La décision se prend avec la mesure de
+> l'étape 1 en main, pas avant.
+
+---
+
+### 4. Analyse intégrale, nettoyage, modularité
+
+*Correction des potentiels bugs et erreurs, nettoyage du projet, le rendre plus
+modulaire et facile à maintenir — Claude Code commence à avoir du mal à
+reprendre le projet et à garder le contexte entre chaque session.*
+
+**La cause est nommée dans la demande, et elle est mesurable.** Le projet fait
+**18 682 lignes** de GDScript. Ce fichier en fait **3 743**, `docs/ROADMAP.md`
+environ 2 100. Une session qui commence par *« lire `nextsteps.md` en entier »*
+dépense son contexte avant d'avoir ouvert un seul fichier de code.
+
+**Le fichier de reprise est devenu un journal, et c'est le vrai problème.** Il a
+été écrit pour porter *les décisions qui coûtent cher à redécouvrir* ; il porte
+aujourd'hui le récit de chaque session, avec ses mesures, ses essais ratés et
+ses tableaux avant/après. Ces choses ont leur valeur — elles sont ce qui empêche
+de refaire une erreur —, mais **elles n'ont pas leur place au début du fichier
+qu'on lit en premier**.
+
+La coupe proposée, à trancher :
+
+* **`nextsteps.md` garde** : où sont les choses, les commandes, la carte des
+  fichiers, les invariants, et les décisions ouvertes. Cible : **500 lignes** ;
+* **le récit des sessions part** dans le journal de `docs/ROADMAP.md`, qui en a
+  déjà un et qui est fait pour ça ;
+* **un fichier d'amorçage court à la racine** — `CLAUDE.md`, qui n'existe pas
+  aujourd'hui — avec les commandes, les cinq invariants qui coûtent le plus, et
+  les trois règles de style. Une session doit pouvoir commencer sur 200 lignes.
+
+**Côté code, les cibles sont les fichiers qui font plusieurs métiers :**
+
+| fichier | lignes | métiers mêlés |
+|---|---|---|
+| `src/demo/terrain_demo.gd` | 1 153 | arguments de ligne de commande, terrain, environnement, carte, HUD, caméra, captures |
+| `src/worldgen/cw_terrain_field.gd` | 1 125 | champ d'altitude, climat, chenaux, étangs, profil de colonne, caches |
+| `src/worldgen/cw_path_network.gd` | 1 062 | graphe de zone, relaxation, profil, franchissements, règle de colonne |
+| `src/worldgen/cw_palette.gd` | 1 007 | palette, matières de surface, teintes, tramage |
+| `src/worldgen/cw_voxel_generator.gd` | 991 | chemin froid par colonne, chemin chaud par pavé, écriture des troncs |
+
+Deux règles qui rendraient la reprise moins chère, et qui sont des règles de
+découpe, pas de goût : **un fichier, une décision** ; et **une couche ne connaît
+que celle du dessous** — la chaîne va aujourd'hui `chemins → massifs → champ` et
+ne revient pas, ce qui est exactement ce qu'il faut généraliser.
+
+**Et la partie « bugs » de la demande n'est pas rhétorique.** La suite passe à
+409 vérifications, mais elle vérifie de la **géométrie**, jamais du rendu — c'est
+écrit en tête de `tests/relief_test.gd`, et les trois systèmes retirés par ce
+dépôt passaient tous leurs tests. Une passe de relecture sur les points que la
+suite ne peut pas voir vaut donc son temps : ordres de recouvrement, accords
+entre le chemin froid et le chemin chaud, et les endroits où deux copies d'une
+même règle ont eu le droit de diverger.
+
+---
+
+### L'ordre d'exécution recommandé
+
+Ce n'est pas celui de la liste, et voici pourquoi.
+
+1. **Le n° 1 d'abord** — mais après l'essai `--sans-surplombs`. Supprimer mille
+   cinq cents lignes avant de nettoyer et d'optimiser évite de nettoyer et
+   d'optimiser du code qu'on va jeter ;
+2. **puis le n° 4**, au moins sa moitié documentaire. Elle est ce qui rend les
+   sessions suivantes moins chères, et elle bénéficie du retrait qui précède ;
+3. **puis le n° 3**, mesuré sur le code déjà allégé et rangé — et en commençant
+   par le LOD, qui pourrait suffire ;
+4. **le n° 2 en dernier**, parce que le réglage du brouillard dépend de la
+   distance de vue que le n° 3 aura fixée. Il est aussi le plus visible et le
+   plus court : si le moral demande un résultat visible tout de suite, c'est
+   celui-là qu'il faut prendre en premier, en acceptant de régler le brouillard
+   deux fois.
 
 ---
 
@@ -127,12 +274,13 @@ bloc et plus larges, un dégagement de tunnel proportionnel à la masse, et un
 Ce qu'ils laissent ouvert, par ordre de ce qui se verra le plus vite :
 
 - **le pied d'un massif rencontre l'herbe sans transition.** Moins qu'avant — le
-  raccord est tangentiel — mais un éboulis lui donnerait son assise ;
-- **le réseau de chemins ne connaît pas les massifs quand il se trace.** Le
-  tunnel qui en sort est joli ; ce n'est pas une raison pour le laisser au
-  hasard ;
+  raccord est tangentiel — mais un éboulis lui donnerait son assise. *Sans objet
+  si le n° 1 du programme est fait* ;
+- ~~**le réseau de chemins ne connaît pas les massifs quand il se trace.**~~
+  Fait le 2026-09-09 : la masse entre dans la fonction de coût (§7octies.4) ;
 - **massifs et chemins ignorent les biomes** : même roche d'affleurement et même
-  gravier de chaussée partout. Une ligne dans `CWPalette` chacun ;
+  gravier de chaussée partout. Une ligne dans `CWPalette` chacun — *la moitié
+  « massifs » tombe avec le n° 1* ;
 - ~~**un pont n'a pas de piles.**~~ Sans objet : il n'y a plus de pont
   (§7nonies.2).
 
