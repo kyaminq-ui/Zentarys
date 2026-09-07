@@ -53,8 +53,14 @@ s'ouvre pas proprement. Il permet de piloter l'éditeur par MCP.
 # La démo, au clavier. Clic pour capturer la souris, ZQSD, Maj = rapide,
 # Espace/Ctrl = monter/descendre, F1 détails, clic gauche creuser, clic droit
 # poser, F12 capture, Page haut/bas distance de vue, M carte, 1-6 téléportation
-# vers un biome, Échap pour rendre la souris puis quitter.
+# vers un biome, F2 fige l'heure, F3/F4 reculent ou avancent d'une heure,
+# Échap pour rendre la souris puis quitter.
 ./godot.windows.editor.double.x86_64.exe --path . scenes/terrain_demo.tscn
+
+# Deux bascules qui servent souvent, et qui n'existent que pour la capture :
+#   --heure h   se pose à une heure du cycle (0 minuit, 0,5 midi) et le fige
+#   --fils n    force le nombre de fils de génération — le réglage le plus
+#               rentable du projet, et son optimum est propre à la machine
 ```
 
 Le reste de l'outillage — statistiques de biomes, planches de validation

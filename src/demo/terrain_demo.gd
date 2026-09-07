@@ -281,6 +281,26 @@ func _read_cmdline() -> void:
 			"--carte":
 				if not world_map.is_open():
 					world_map.toggle(_world_position())
+			# L'heure, dans [0, 1) : 0 minuit, 0,25 lever, 0,5 midi, 0,75
+			# coucher. C'est le seul moyen de capturer une aube sans attendre
+			# neuf minutes qu'elle arrive, et donc de la regler.
+			"--heure":
+				if i + 1 < args.size():
+					i += 1
+					daylight.hour = float(args[i])
+					# Une capture se prend a l'heure demandee, pas trois minutes
+					# plus tard : viser une heure fige le cycle.
+					daylight.paused = true
+			# Duree d'un jour complet, en secondes. 0 fige le cycle.
+			"--jour":
+				if i + 1 < args.size():
+					i += 1
+					daylight.day_length = float(args[i])
+			"--nuages":
+				if i + 1 < args.size():
+					i += 1
+					daylight.cloud_cover = clampf(float(args[i]), 0.0, 1.0)
+					daylight.applique()
 		i += 1
 
 
@@ -626,6 +646,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		capture_screenshot()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_F1:
 		_hud_detailed = not _hud_detailed
+	# Le cycle jour/nuit. **F2** le fige, **F3** et **F4** le font defiler d'une
+	# heure : regarder une aube en temps reel n'est pas une methode de reglage.
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_F2:
+		daylight.paused = not daylight.paused
+		_hud_timer = 0.0
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_F3:
+		daylight.avance(-CWDaylight.HOUR_STEP)
+		_hud_timer = 0.0
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_F4:
+		daylight.avance(CWDaylight.HOUR_STEP)
+		_hud_timer = 0.0
 		_hud_timer = 0.0
 		_update_hud()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_M:
@@ -798,9 +829,10 @@ func _update_hud() -> void:
 	var lines: Array[String] = [
 		"%d, %d   y %d  (sol %d%s)%s" % [wx, wz, roundi(p.y), prof.x,
 			"" if prof.y > prof.z else ", eau %d" % prof.z, region],
-		"%s / %s   T %.2f (%.0f C)  H %.0f %%   %d ips%s" % [
+		"%s / %s   T %.2f (%.0f C)  H %.0f %%   %s%s   %d ips%s" % [
 			CWBiome.name_of(biome), CWPalette.name_of(surface),
 			c.y, CWBiome.celsius(c.y), c.z * 100.0,
+			daylight.horloge(), " (fige)" if daylight.paused else "",
 			Engine.get_frames_per_second(), busy],
 	]
 	if _hud_detailed:
@@ -846,6 +878,7 @@ func _update_hud() -> void:
 		lines.append("ZQSD/WASD + souris · Maj vite · Espace/Ctrl · Echap souris puis quitter")
 		lines.append("Clic gauche : creuser · clic droit : poser")
 		lines.append("Page haut/bas : distance de vue · M : carte du monde")
+		lines.append("F2 : figer l'heure · F3/F4 : reculer / avancer d'une heure")
 		lines.append("1 herbe · 2 herbe seche · 3 jungle · 4 marais · 5 sable")
 		lines.append("6 neige · 7 toundra · 8 roche · 9 fond marin")
 	else:

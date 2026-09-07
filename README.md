@@ -65,6 +65,14 @@ trois tons, une frontière cinq marches de fondu, et le sable et l'herbe
 s'interpénètrent sur une dizaine de blocs au lieu d'être séparés par une courbe
 de niveau.
 
+**Et le monde a une heure.** Un cycle jour/nuit où tout se déduit d'un seul
+scalaire : le soleil, le ciel, les nuages, l'ambiante et le brouillard. Les
+nuages sont un bruit fractal en coordonnées de direction — pas de géométrie, pas
+de plafond de couverture —, et l'aube teinte le brouillard en même temps que le
+ciel, parce qu'une seule fonction décide des deux. L'éclairage voxel cuit, lui,
+n'a pas eu à bouger : il ne dit pas une heure, il dit *ce recoin est abrité*, et
+c'est vrai à toute heure.
+
 Deux chantiers suivent : la **collision** des objets instanciés, qui reste due —
 les chemins, eux, sont de la matière et l'ont gratuitement ; et le **jalon 2**,
 créatures et comportements, en commençant par les points d'apparition, dont les
@@ -95,7 +103,8 @@ godot --headless --path . -s tests/worldgen_test.gd   # 379 vérifications
 Scène de démonstration : `scenes/terrain_demo.tscn`. Clic pour capturer la
 souris, ZQSD/WASD, **clic gauche** creuser, **clic droit** poser, **F1**
 détails, **Page haut/bas** distance de vue, **M** carte du monde, **1-6**
-téléportation vers un biome, **Échap** rend la souris puis quitte. Les
+téléportation vers un biome, **F2** fige l'heure, **F3**/**F4** la font
+défiler, **Échap** rend la souris puis quitte. Les
 modifications du terrain sont conservées dans `user://saves`, une base par
 graine ; seuls les blocs édités y sont écrits, le reste du monde se régénère.
 Les cases de carte parcourues y sont gardées de même.

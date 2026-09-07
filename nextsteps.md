@@ -69,7 +69,7 @@ Ce qui reste :
 | fichier | lignes | métiers mêlés |
 |---|---|---|
 | `src/worldgen/cw_terrain_field.gd` | 1 117 | altitude, climat, chenaux, étangs, profil de colonne, caches |
-| `src/demo/terrain_demo.gd` | 928 | arguments, terrain, ATH, caméra, captures, persistance |
+| `src/demo/terrain_demo.gd` | 962 | arguments, terrain, ATH, caméra, captures, persistance |
 | `src/worldgen/cw_palette.gd` | 1 002 | palette, matières de surface, teintes, tramage |
 | `src/worldgen/cw_path_network.gd` | 946 | graphe de zone, relaxation, profil, franchissements, règle de colonne |
 | `src/worldgen/cw_voxel_generator.gd` | 797 | chemin froid, chemin chaud, troncs estampés |
@@ -228,64 +228,61 @@ la mesure, et c'est le premier réglage à reprendre sur un autre processeur.
 > La première est la bonne par défaut. La décision se prend avec la mesure de
 > l'étape 1 en main, pas avant.
 
-### 3. Un ciel, des nuages, et un cycle jour/nuit
+### 3. ~~Un ciel, des nuages, et un cycle jour/nuit~~ — fait le 2026-09-10
 
-*Ajouter des nuages et un ciel, système basique jour/nuit, et adapter en
-conséquence le brouillard et l'éclairage déjà implémentés.*
+**Tout se déduit d'un scalaire d'heure dans `[0, 1)` par la seule fonction
+`CWDaylight.applique`** — rotation, énergie et couleur du soleil ; zénith,
+horizon et sol du ciel ; couleur et relief des nuages ; ambiante ; couleur,
+densité et diffusion du brouillard. C'est une contrainte et non une commodité :
+si l'angle du soleil se réglait ici et la couleur du brouillard ailleurs, l'aube
+aurait un ciel rose et un brouillard bleu, et le défaut ne se verrait qu'à
+l'aube — c'est-à-dire rarement et tard.
 
-**L'existant tient en vingt-cinq lignes**, `_build_environment()` dans
-`src/demo/terrain_demo.gd` : un `DirectionalLight3D` à un angle fixe, un
-`ProceduralSkyMaterial` nu, l'ambiante prise du ciel à 0,45, un tonemap
-filmique, et un brouillard **constant** — `fog_light_color` gris-bleu,
-`fog_density` 0,0016. Rien n'y varie dans le temps.
+Les nuages sont un **bruit fractal en coordonnées de direction**
+(`src/demo/cw_sky.gdshader`), pas un dôme texturé : pas de géométrie, pas de
+plafond de couverture, et c'est la route qui donnera les ombres de nuages si on
+les veut — la même fonction, échantillonnée au sol.
 
-Ce qu'il faut écrire :
+`--heure h` se pose à une heure et fige le cycle, `--jour n` change sa durée,
+`--nuages c` la couverture ; en jeu, **F2** fige, **F3** et **F4** reculent ou
+avancent d'une heure. *Regarder une aube en temps réel n'est pas une méthode de
+réglage.*
 
-* **un scalaire d'heure** dans `[0, 1)`, et une seule fonction qui en déduit
-  *tout* : rotation, énergie et couleur du soleil ; couleurs de zénith,
-  d'horizon et de sol du ciel ; énergie de l'ambiante ; **couleur et densité du
-  brouillard**. Un seul point d'entrée, sinon l'aube aura un ciel rose et un
-  brouillard bleu ;
-* **les nuages.** `ProceduralSkyMaterial` n'en a pas. Deux routes : un
-  `ShaderMaterial` de ciel avec un bruit fractal en coordonnées de direction —
-  pas de géométrie, pas de limite de couverture, et le projet a déjà toute sa
-  culture de bruit —, ou un dôme texturé qui défile. **La première**, et c'est
-  aussi celle qui donnera les ombres de nuages plus tard si on les veut ;
-* **une vitesse**, et une touche pour la forcer. Regarder une aube en temps réel
-  n'est pas une méthode de réglage.
+**Le doute sur l'éclairage cuit est levé, et dans le bon sens.** `CWLight` ne
+suit pas le soleil, et on craignait que sa composante « ciel » à 255 garde le
+monde clair la nuit. Ce n'est pas le cas : le terrain **généré** ne passe jamais
+par `CWLight` — un champ de hauteurs est éclairé partout où on le voit —, donc
+ses voxels portent leur couleur pleine et s'assombrissent avec le soleil et
+l'ambiante comme n'importe quelle surface. Seul ce que le joueur a creusé porte
+de l'ombre cuite, et **une ombre reste une ombre à toute heure** : le voxel cuit
+est devenu un terme d'occlusion sans qu'on ait rien à y toucher.
 
-> ⚠️ **Le piège, et il est structurel : `CWLight` est un éclairage *cuit*.** La
-> passe A descend le soleil colonne par colonne, la passe B diffuse seize fois à
-> l'horizontale, et le résultat est écrit **dans le canal de couleur du voxel** à
-> la génération. Il ne suit pas le `DirectionalLight3D`. Tourner le soleil ne
-> rallume donc rien, et un recuit est hors de question (7 ms pour un pavé
-> de 33³).
->
-> La lecture qui marche : **le voxel cuit devient un terme d'occlusion**, pas une
-> heure — il dit *ce recoin est abrité*, ce qui reste vrai la nuit — et c'est la
-> lumière directionnelle de la scène qui porte le cycle. À vérifier en jeu, parce
-> que l'éclairage cuit a une composante « ciel » à 255 qui pourrait rester trop
-> claire de nuit ; si c'est le cas, c'est un facteur global à l'affichage, pas un
-> recuit.
+Trois réglages ont demandé une capture, et aucun ne se voyait dans le code :
 
-> ⚠️ **Le brouillard et le n° 2 sont couplés.** La densité actuelle est réglée
-> pour cacher le bord d'une vue de 384 blocs. Le n° 2 veut augmenter cette
-> distance : la même densité rendra alors le lointain laiteux bien avant le bord.
-> **Ne pas régler le brouillard avant de savoir quelle distance de vue on vise**,
-> ou le faire deux fois.
+* **`fog_sky_affect` vaut 1 par défaut**, donc le brouillard repeignait le ciel
+  entier de sa couleur — dégradé, nuages et disque du soleil disparus sous un
+  aplat. La première capture de midi rendait exactement cela, quand celle de
+  minuit montrait le dégradé, simplement parce qu'à cette heure le brouillard
+  est de la couleur du ciel qu'il cachait. *Un défaut qui se voit le jour et pas
+  la nuit ressemble à un bug de shader ; c'en était un de réglage* ;
+* **la projection des nuages divergeait à l'horizon.** `EYEDIR.xz / EYEDIR.y`
+  est juste physiquement et illisible à l'écran — une vue à la première personne
+  regarde surtout là, et les nuages s'y écrasaient en filaments d'un pixel. Un
+  décalage au dénominateur borne la perspective au lieu de la laisser diverger ;
+* **les deux bandes de `smoothstep` se lisaient contre `[0, 1]`** au lieu de
+  l'étendue réelle du bruit fractal, qui ne monte guère au-dessus de 0,72. Tout
+  le nuage restait dans son fondu et dans sa teinte d'ombre : des masses grises
+  et délavées, ce qui ressemblait à un problème d'éclairage.
 
-**Où ça vit : `src/demo/cw_daylight.gd`, qui existe depuis le 2026-09-10.** Le
-nœud est déjà sorti de `terrain_demo.gd` et son en-tête porte la forme visée et
-les deux pièges ci-dessus. Il ne reste qu'à y écrire le scalaire d'heure et le
-shader de ciel.
+**Ce qui reste ouvert, et rien ne presse :**
 
-> **Pourquoi cet ordre.** Le rangement du code rend les sessions suivantes moins
-> chères et bénéficie du retrait qui vient d'avoir lieu ; l'optimisation se
-> mesure sur du code déjà allégé ; le ciel vient en dernier parce que le réglage
-> du brouillard dépend de la distance de vue que l'optimisation aura fixée. Il
-> est aussi le plus visible et le plus court : **si le moral demande un résultat
-> visible tout de suite, c'est celui-là qu'il faut prendre en premier**, en
-> acceptant de régler le brouillard deux fois.
+- **la couverture nuageuse est une constante.** La faire varier demande un champ
+  de temps, qui est un autre sujet ;
+- **les ombres de nuages au sol** : la même fonction de bruit, échantillonnée en
+  `(x, z)`, multipliée à la lumière. Le shader est écrit pour ça ;
+- **le brouillard reste réglé pour une vue de 384 blocs** (`FOG_DENSITY_*`).
+  C'est l'accouplement avec le n° 2 : si la distance de vue augmente, il se
+  reprend.
 
 ---
 
@@ -399,6 +396,11 @@ python tools/blender/generer_arbres.py
 #   qu'elle coute au chargement. --carte ouvre la carte du monde au demarrage.
 #   --fils n force le nombre de fils de generation : c'est le reglage le plus
 #   rentable du projet, et son optimum est propre a chaque machine.
+#   --heure h se pose a une heure du cycle jour/nuit et **fige le cycle** :
+#   0 minuit, 0,25 lever, 0,5 midi, 0,75 coucher. C'est le seul moyen de
+#   capturer une aube sans attendre qu'elle arrive, donc de la regler.
+#   --jour n change la duree d'un jour (720 s par defaut), --nuages c la
+#   couverture nuageuse.
 #   --vers x z oriente la camera vers un point, --altitude n la leve : sans les
 #   deux, une capture d'un objet pose a cent blocs est une capture de ce qui se
 #   trouvait dans l'autre sens.
@@ -450,7 +452,8 @@ ZQSD/WASD, Maj = rapide, Espace/Ctrl = monter/descendre, **F1** détails,
 **clic gauche** creuser, **clic droit** poser,
 **F12** capture d'écran dans `user://shots`, **Page haut/bas** distance de vue,
 **M** carte du monde (`+`/`−` pour l'élargir), **1-6** téléportation vers un
-biome, **Échap** rend la souris puis quitte.
+biome, **F2** fige l'heure, **F3**/**F4** reculent ou avancent d'une heure,
+**Échap** rend la souris puis quitte.
 
 ## 3. État
 
@@ -550,8 +553,10 @@ src/worldgen/
   cw_world_map.gd          carte : dalles de Voronoï, découverte, teintes (1.10)
   cw_region_name.gd        noms de région : deux tables de vingt syllabes (1.10)
 src/demo/terrain_demo.gd     scène de démonstration, touches 1-6 par biome
-src/demo/cw_daylight.gd      le ciel, le soleil et le brouillard — et le futur
-                             cycle jour/nuit
+src/demo/cw_daylight.gd      le cycle jour/nuit : un scalaire d'heure, et une
+                             seule fonction qui en déduit soleil, ciel, nuages,
+                             ambiante et brouillard
+src/demo/cw_sky.gdshader     le ciel : dégradé, nuages en bruit fractal, soleil
 src/demo/cw_demo_map.gd      l'état de la carte du monde : rendu de fond,
                              découverte, sauvegarde (1.10)
 src/demo/scale_board.gd      gabarit d'échelle : mires, silhouette, modèles
