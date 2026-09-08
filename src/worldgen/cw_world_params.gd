@@ -115,6 +115,13 @@ const OFFSET_COUNT: int = 32
 ## paves deja generes portent les arbres.
 @export var trees: bool = true
 
+## Active les **filons estampes** (jalon 2.6, l'apparition).
+##
+## C'est la bascule de `--sans-filons`, meme raison que `trees` : couper la
+## couche coupe une ecriture dans le terrain, donc les caches doivent etre
+## vides apres l'avoir changee.
+@export var ores: bool = true
+
 ## Active la **roche de pente** (la falaise, jalon 1.15).
 ##
 ## Ce n'est pas qu'une regle de couleur : la pente se mesure par difference

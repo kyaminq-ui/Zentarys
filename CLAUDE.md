@@ -34,7 +34,7 @@ s'ouvre pas proprement. Il permet de piloter l'éditeur par MCP.
 ## Les quatre commandes qui servent tous les jours
 
 ```bash
-# La suite de validation — 433 vérifications, ~2 min. À lancer après toute
+# La suite de validation — 449 vérifications, ~2 min. À lancer après toute
 # modification du monde. C'est le filet, et il tient tous les contrats
 # inter-fichiers que rien d'autre ne tient. (Elle prenait 25 s jusqu'au
 # 2026-09-12 : ce qui coûte est la suite de LOD, qui doit engendrer le monde à

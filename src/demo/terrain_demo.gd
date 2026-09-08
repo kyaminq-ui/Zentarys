@@ -355,6 +355,11 @@ func _read_cmdline() -> void:
 			"--sans-arbres":
 				params.trees = false
 				generator.clear_caches()
+			# Meme raison que --sans-arbres : un filon est une ecriture dans le
+			# terrain depuis le jalon 2.6, pas un rendu.
+			"--sans-filons":
+				params.ores = false
+				generator.clear_caches()
 			"--sans-flore":
 				if flora != null:
 					flora.enabled = false

@@ -200,6 +200,11 @@ static var _shared: CWModelLibrary = null
 ## `MultiMesh` d'herbe porterait une boite de visibilite demesuree. Deux
 ## bibliotheques, deux maxima, deux marges.
 static var _shared_trees: CWModelLibrary = null
+## Bibliotheque des filons (jalon 2.6). Meme grille que les arbres — un voxel
+## par bloc, puisqu'un filon s'estampe et se mine — mais rangee a part parce que
+## le choix du modele ne suit ni un biome ni un role : c'est
+## `CWPalette.roll_ore` qui decide, sur l'index de palette. Voir `CWOreScatter`.
+static var _shared_ores: CWModelLibrary = null
 static var _shared_mutex: Mutex = Mutex.new()
 
 ## Dossier racine des chemins de cette bibliotheque.
@@ -259,11 +264,28 @@ static func shared_trees() -> CWModelLibrary:
 	return out
 
 
+## Bibliotheque des filons, construite au premier appel.
+static func shared_ores() -> CWModelLibrary:
+	if _shared_ores != null:
+		return _shared_ores
+	_shared_mutex.lock()
+	if _shared_ores == null:
+		var lib := CWModelLibrary.new()
+		lib._dir = CWOreScatter.ORES_DIR
+		lib._voxels_per_block = CWVoxelModel.VOXELS_PER_BLOCK_TERRAIN
+		lib._load_ores()
+		_shared_ores = lib
+	var out: CWModelLibrary = _shared_ores
+	_shared_mutex.unlock()
+	return out
+
+
 ## Oublie les bibliotheques partagees. Pour les tests et le rechargement d'assets.
 static func reset_shared() -> void:
 	_shared_mutex.lock()
 	_shared = null
 	_shared_trees = null
+	_shared_ores = null
 	_shared_mutex.unlock()
 
 
@@ -294,6 +316,25 @@ func _load_trees() -> void:
 					available.append(m)
 		if not available.is_empty():
 			_by_biome[biome] = available
+
+
+## Clef de `_by_biome` pour les filons : ils ne se choisissent pas par biome,
+## seulement `has_any()` en a besoin pour savoir si le lot a charge.
+const NO_BIOME: int = -1
+
+## Charge les neuf filons (jalon 2.6). Pas de role ni de biome ici : le choix se
+## fait sur l'index de palette de l'espece (`CWPalette.roll_ore`), pas sur une
+## table de decor — voir `CWOreScatter.MODEL_OF`. Un filon absent du disque est
+## ignore comme le reste du lot ; les huit autres restent poses.
+func _load_ores() -> void:
+	var palette: Resource = CWPalette.build_voxel_palette()
+	var available: Array[CWVoxelModel] = []
+	for path in CWOreScatter.MODEL_OF.values():
+		var m: CWVoxelModel = _get_or_load(path, palette)
+		if m != null and not available.has(m):
+			available.append(m)
+	if not available.is_empty():
+		_by_biome[NO_BIOME] = available
 
 
 ## Une espece est-elle entierement sur le disque ? Reponse par chemin, pour que

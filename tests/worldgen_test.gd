@@ -31,6 +31,7 @@ func _initialize() -> void:
 	_test_decor()
 	_test_flora()
 	_test_trees()
+	_test_ores()
 	_test_edits()
 	_test_light()
 	_test_map()
@@ -436,6 +437,11 @@ func _test_flora() -> void:
 
 func _test_trees() -> void:
 	CWTreeTest.new().run(self)
+
+
+## La couche des filons (jalon 2.6, l'apparition).
+func _test_ores() -> void:
+	CWOreTest.new().run(self)
 
 
 func _test_edits() -> void:

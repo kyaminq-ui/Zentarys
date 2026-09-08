@@ -37,11 +37,12 @@ extends RefCounted
 ## vert avec le defaut remis en place. `ORIGIN` vise donc un endroit choisi pour
 ## ce qu'il contient — 41 % de mer, 17 % de mares, le reste en terre.
 ##
-## ⚠️ **La couche d'arbres est coupee.** Elle s'arrete a `TREE_MAX_LOD` par
-## decision, donc sans cela chaque mesure dirait « le sol a disparu » la ou seul
-## un houppier manque. Et la filtrer par la matiere ne marche pas : un
-## `rocher_geant` est de la roche, comme le sous-sol, et il monte de vingt blocs
-## au-dessus du terrain.
+## ⚠️ **Les couches d'arbres et de filons sont coupees.** Elles s'arretent
+## respectivement a `TREE_MAX_LOD` et `ORE_MAX_LOD` par decision, donc sans cela
+## chaque mesure dirait « le sol a disparu » la ou seul un houppier — ou un
+## affleurement de filon, depuis le jalon 2.6 — manque. Et les filtrer par la
+## matiere ne marche pas : un `rocher_geant` est de la roche, comme le sous-sol,
+## et il monte de vingt blocs au-dessus du terrain ; un filon de meme.
 ##
 ## ⚠️ Comme partout dans ce depot, ceci verifie de la geometrie, jamais du
 ## rendu. La capture reste le juge : c'est elle qui a montre les dalles.
@@ -156,6 +157,12 @@ func _test_lit_de_mare() -> void:
 func _test_pyramide() -> void:
 	var p := CWWorldParams.new()
 	p.trees = false
+	# Meme raison que les arbres (voir l'en-tete) : un filon affleure jusqu'a
+	# quatre blocs au-dessus du sol (jalon 2.6), et il ne survit pas au LOD
+	# (`CWVoxelGenerator.ORE_MAX_LOD`, zero) — sans cette coupure, un
+	# affleurement qui disparait ferait dire « le sol a disparu » exactement
+	# comme un houppier coupe.
+	p.ores = false
 	var gen := CWVoxelGenerator.new()
 	gen.params = p
 

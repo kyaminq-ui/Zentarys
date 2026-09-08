@@ -72,6 +72,16 @@ const PATCH_BYTES: int = 256 * (4 + 1 + 4 + 8 + 8)
 ## **lisibilite**, pas de cout — le cout, lui, est plat (voir `_stamp_trees`).
 const TREE_MAX_LOD: int = 2
 
+## Dernier niveau de LOD ou les filons sont encore estampes.
+##
+## Zero : un filon fait six blocs de haut et quatre de rayon (`generer_filons.
+## FILON`), soit deja plus fin qu'une seule cellule au pas de huit. Au premier
+## niveau de reduction il ne resterait qu'un cube de roche indiscernable du
+## reste de la falaise — un affleurement qui ne se voit plus n'a plus de raison
+## d'etre estampe, et `_stamp_ores` n'a pas a porter la garde de recouvrement de
+## `_stamp_trees` (invariant n° 55-57) tant qu'il ne travaille qu'au pas de un.
+const ORE_MAX_LOD: int = 0
+
 ## Attente maximale, en millisecondes, avant de renoncer a attendre le fil qui
 ## calcule deja la meme carte de hauteurs et de la calculer soi-meme. Filet de
 ## securite : sans lui, un fil interrompu bloquerait les autres.
@@ -113,6 +123,7 @@ class ColumnPatch extends RefCounted:
 		_field = null
 		_scatter = null
 		_tree_scatter = null
+		_ore_scatter = null
 		clear_caches()
 
 ## Epaisseur de la couche meuble sous la surface.
@@ -121,6 +132,7 @@ class ColumnPatch extends RefCounted:
 var _field: CWTerrainField
 var _scatter: CWScatter
 var _tree_scatter: CWTreeScatter
+var _ore_scatter: CWOreScatter
 var _field_mutex: Mutex = Mutex.new()
 var _patches: Dictionary = {}
 var _patches_prev: Dictionary = {}
@@ -159,6 +171,7 @@ func field() -> CWTerrainField:
 		_field = CWTerrainField.new(params)
 		_scatter = CWScatter.new(_field)
 		_tree_scatter = CWTreeScatter.new(_field)
+		_ore_scatter = CWOreScatter.new(_field)
 	var f: CWTerrainField = _field
 	_field_mutex.unlock()
 	return f
@@ -188,6 +201,15 @@ func tree_scatter_grid() -> CWTreeScatter:
 	return _tree_scatter
 
 
+## Grille de dispersion des **filons** (jalon 2.6) — meme raison d'etre que
+## `tree_scatter_grid`, et le meme genre de consommateur : `_stamp_ores` ecrit
+## les filons dans les donnees du monde, sur le meme exemplaire que celui qu'une
+## carte ou un outil consulterait.
+func ore_scatter_grid() -> CWOreScatter:
+	field()
+	return _ore_scatter
+
+
 ## Entrees de cache de colonnes vivantes, les deux generations comprises.
 ## Pour l'ATH : multipliee par `PATCH_BYTES`, elle donne ce que la couche de
 ## generation tient en memoire, qui est le seul poste qu'elle possede.
@@ -208,6 +230,8 @@ func clear_caches() -> void:
 		_scatter.clear_cache()
 	if _tree_scatter != null:
 		_tree_scatter.clear_cache()
+	if _ore_scatter != null:
+		_ore_scatter.clear_cache()
 
 
 ## Bloc occupant l'altitude `y` d'une colonne, en fonction de son profil.
@@ -321,6 +345,30 @@ func tree_at(wx: int, y: int, wz: int) -> int:
 	return trouve
 
 
+## Le type de bloc d'un filon estampe en ce point, ou `AIR`. Coordonnees
+## **monde**. Jumelle de `tree_at` (jalon 2.6) : meme raison d'etre — sans elle,
+## `_stamp_ores` ecrirait un filon que la requete ponctuelle ne verrait jamais,
+## et l'invariant n. 18 tomberait en defaut sur cette couche comme il est deja
+## tombe deux fois sur celle des arbres.
+##
+## Contrairement a un arbre, un filon n'a qu'une piece et pas de feuillage : le
+## premier voxel trouve fait foi, sans regle de recouvrement particuliere.
+func ore_at(wx: int, y: int, wz: int) -> int:
+	if not field().params().ores:
+		return CWPalette.AIR
+	var ores: CWOreScatter = ore_scatter_grid()
+	if ores == null:
+		return CWPalette.AIR
+	for pl in ores.placements_in(wx, wz, 1, 1):
+		var span: Vector2i = CWOreScatter.piece_span(pl)
+		if y < span.x or y > span.y:
+			continue
+		for v in CWOreScatter.piece_voxels(pl):
+			if v.x == wx and v.y == y and v.z == wz:
+				return CWPalette.matiere_de(v.w)
+	return CWPalette.AIR
+
+
 ## Bloc genere en un point, en coordonnees de scene. Ne consulte aucune edition :
 ## c'est le monde tel que le champ le decrit.
 ##
@@ -339,6 +387,13 @@ func generated_voxel(x: int, y: int, z: int) -> int:
 	var arbre: int = tree_at(wx, y, wz)
 	if arbre != CWPalette.AIR and arbre != CWPalette.LEAVES:
 		return arbre
+	# Le filon estampe (jalon 2.6), meme raisonnement : `_stamp_ores` ecrit
+	# apres tous les remplissages de `_generate_block`, donc il recouvre ce
+	# qu'il traverse. Une seule piece, pas de regle de recouvrement partielle
+	# comme pour le feuillage.
+	var filon: int = ore_at(wx, y, wz)
+	if filon != CWPalette.AIR:
+		return filon
 	var c: Vector4 = f.sample_column_full(wx, wz)
 	var sea: int = p.sea_level
 	var biome: int = CWBiome.at(c.x, c.y, c.z, sea)
@@ -609,6 +664,7 @@ func _generate_block(out_buffer: VoxelBuffer, origin_in_voxels: Vector3i, lod: i
 						maxi(road_lo, above), road_hi, CWPalette.AIR)
 
 	_stamp_trees(out_buffer, origin_in_voxels, size, stride, lod, p, patch)
+	_stamp_ores(out_buffer, origin_in_voxels, size, stride, lod, p)
 
 
 ## Ecrit dans le bloc les pieces d'arbre qui le traversent (jalon 1.11 pour le
@@ -724,6 +780,52 @@ func _stamp_trees(buf: VoxelBuffer, origin: Vector3i, size: Vector3i,
 					lx, ly, lz, CWPalette.CHANNEL_TYPE) != CWPalette.AIR:
 				continue
 			buf.set_voxel(t, lx, ly, lz, CWPalette.CHANNEL_TYPE)
+			buf.set_voxel(CWPalette.raw_of(v.w), lx, ly, lz,
+					CWPalette.CHANNEL_COLOR)
+
+
+## Ecrit dans le bloc les filons qui le traversent (jalon 2.6).
+##
+## Jumelle de `_stamp_trees`, en plus simple : un filon n'a qu'une piece, pas de
+## fut a reechantillonner ni de couronne a laisser deborder sur du vide — il
+## **recouvre** ce qu'il traverse, sans condition, comme un modele d'arbre
+## entier. Il n'est jamais stampe au-dela de `ORE_MAX_LOD` (zero), donc `stride`
+## vaut toujours un ici et la garde de recouvrement de `_stamp_trees` contre le
+## sol au LOD (invariant n. 55-57) n'a pas lieu d'etre.
+func _stamp_ores(buf: VoxelBuffer, origin: Vector3i, size: Vector3i,
+		stride: int, lod: int, p: CWWorldParams) -> void:
+	if lod > ORE_MAX_LOD or _shutting_down or not p.ores:
+		return
+	var ores: CWOreScatter = ore_scatter_grid()
+	if ores == null:
+		return
+	var wx: int = p.world_origin.x + origin.x
+	var wz: int = p.world_origin.y + origin.z
+	var span_x: int = size.x * stride
+	var span_z: int = size.z * stride
+	var placements: Array = ores.placements_in(wx, wz, span_x, span_z)
+	if placements.is_empty():
+		return
+
+	var y_min: int = origin.y
+	var y_max: int = origin.y + size.y * stride - 1
+	for pl in placements:
+		var span: Vector2i = CWOreScatter.piece_span(pl)
+		if span.y < y_min or span.x > y_max:
+			continue
+		for v in CWOreScatter.piece_voxels(pl):
+			if v.y < y_min or v.y > y_max:
+				continue
+			if v.x < wx or v.z < wz or v.x >= wx + span_x or v.z >= wz + span_z:
+				continue
+			@warning_ignore("integer_division")
+			var lx: int = (v.x - wx) / stride
+			@warning_ignore("integer_division")
+			var lz: int = (v.z - wz) / stride
+			@warning_ignore("integer_division")
+			var ly: int = (v.y - y_min) / stride
+			buf.set_voxel(CWPalette.matiere_de(v.w), lx, ly, lz,
+					CWPalette.CHANNEL_TYPE)
 			buf.set_voxel(CWPalette.raw_of(v.w), lx, ly, lz,
 					CWPalette.CHANNEL_COLOR)
 

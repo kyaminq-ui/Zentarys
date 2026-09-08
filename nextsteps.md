@@ -15,50 +15,86 @@ invariants, les pièges, les décisions ouvertes.
 
 ## 0. La prochaine session
 
-*Rien n'est demandé pour l'instant.* Le programme du 2026-09-12 au soir — le LOD
-natif, et rien d'autre — est traité ; son compte rendu est en §0bis. Ce qui
-suit sont les trois choses qu'il a laissées ouvertes, dans l'ordre où elles
-mordront.
+*Rien n'est demandé pour l'instant.* Le jalon 2.6 (l'apparition) a été ouvert le
+2026-09-15 pour les filons ; son compte rendu suit. Le programme du 2026-09-12
+au soir — le LOD natif, et rien d'autre — est traité ; son compte rendu est en
+§0bis.
 
-### 1. ⚠️ Le mode LOD n'a jamais été creusé ni rechargé
+### 2.6, l'apparition — les filons affleurent (fait le 2026-09-15)
 
-C'est **la seule chose qui décide du défaut de la scène**, et elle ne se règle
-pas ici. `TerrainDemo.use_lod` reste à faux, et il y reste tant que personne
-n'aura, manette en main :
+**La porte du jalon 2 est ouverte, pour sa seule moitié qui n'attendait rien.**
+Les neuf modèles, le tirage de rareté (`CWPalette.roll_ore`) et la plage de
+palette existaient depuis le jalon 1.11 ; il manquait « la couche qui les
+pose », comme `tools/blender/generer_filons.py` le disait en toutes lettres.
+`docs/ROADMAP.md`, journal du 2026-09-15, porte le récit complet — ce qui suit
+en est le résultat.
 
-* **creusé et posé** en mode LOD (clic gauche / clic droit) ;
-* **quitté puis rouvert** le monde, pour voir si l'édition est revenue.
+* **où un filon affleure n'est écrit nulle part dans la source.** La réponse
+  est venue du modèle : chaque `.vox` de `assets/models/filons/` porte sa
+  propre gangue de roche (index 1) autour de sa veine, pour se fondre dans le
+  terrain plutôt que de dessiner un caillou posé dessus. Un filon n'a donc de
+  sens que là où il y a de la roche à fondre — et la falaise est la seule
+  matière du monde qui en soit (invariant n° 27). C'est la décision qui cadre
+  toute la couche, et ce n'est ni une extraction ni un pari : c'est une lecture
+  du seul fichier qui restait à lire ;
+* `CWOreScatter` (`src/worldgen/cw_ore_scatter.gd`) reprend l'architecture des
+  arbres — cellule de 64 blocs, voisinage 3×3 sans récursion (invariant n° 25)
+  — et porte **verbatim** trois constantes de `docs/systems/02` §6 :
+  l'espacement minimum (20 blocs), le rejet près d'un élément de tuile sauf le
+  donjon, l'abandon à une chance sur quatre sous 0,2 d'humidité ou de
+  température. Le raster de la source (pas de 85, décalage +24) n'est **pas**
+  porté : c'est la géométrie d'une boucle qui parcourt une tuile entière, pas
+  celle d'une cellule mise en cache — voir l'en-tête du fichier ;
+* ⚠️ **`gres` et `cristal_de_glace` ne sortent jamais de `roll_ore`** — la
+  source ne dit pas qui les pose (`docs/systems/02` §5.4). Décision de ce
+  projet, notée comme telle dans `CWOreScatter.ESPECE_PAR_BIOME` : Deserts et
+  Snowlands les forcent, parce que ce sont les deux seuls biomes qui leur
+  donnent un sens sans inventer un troisième axe ;
+* ⚠️ **`tests/lod_test.gd` a viré au rouge**, et c'est la couche existante qui
+  l'a vu, pas la nouvelle. Un filon affleure jusqu'à quatre blocs au-dessus du
+  sol et ne survit pas au-delà de `CWVoxelGenerator.ORE_MAX_LOD` (zéro) — sans
+  le couper, la suite disait « le sol a disparu » là où seul un affleurement
+  manquait, exactement comme un houppier non coupé l'aurait fait. `tests/
+  lod_test.gd` coupe maintenant `p.ores` comme il coupe déjà `p.trees` ;
+* **hors périmètre, et ça le reste** : le choix d'une créature contre un filon
+  en un point donné n'est dit nulle part dans la source, et l'apparence des
+  créatures est explicitement hors périmètre du jalon 2 (`docs/ROADMAP.md`).
+  Cette session ne pose que des filons — `tools/find_ore.gd` les repère,
+  `tests/ore_test.gd` les vérifie (16 vérifications, dont l'accord entre le
+  bloc généré et la requête ponctuelle, invariant n° 18). Suite : **449
+  vérifications, 0 échec**.
 
-La couche d'édition est branchée par `has_method("get_voxel_tool")` et non sur la
-classe, donc elle prend son outil du nœud sans rien savoir de lui — c'est un
-argument, pas une preuve. Les collisions sont à faux dans les deux modes, donc
-elles ne sont pas dans le chemin. Si ça marche, `use_lod` passe à vrai et le
-mode plat devient le repli ; si ça ne marche pas, le sujet est le `VoxelTool`
-d'un `VoxelLodTerrain`, pas le générateur.
+### Le mode LOD reste éteint par défaut — décision de rendu, pas de mesure
 
-### 2. La distance de vue n'est plus bornée par ce qu'on croyait
+En jeu, manette en main : **le rendu à plat l'emporte**. Le LOD tenait ses 433
+vérifications et personne n'y avait trouvé de défaut de composition, mais vu en
+jeu la scène plate est jugée plus lisible que la pyramide à six niveaux.
+`TerrainDemo.use_lod` reste à **faux** — et cette fois ce n'est plus faute
+d'avoir testé l'édition et la persistance en LOD, c'est que la question ne se
+pose plus tant que ce choix de rendu tient : voir la scène de plus loin ne vaut
+pas la qualité perdue.
 
-L'invariant n° 5 — le plafond du cache de colonnes borne la vue à 1 024 blocs —
-**ne s'applique qu'au mode plat**. En LOD, la pyramide ne garde qu'un anneau
-mince par niveau : 740 entrées pour 2 048 blocs de vue, contre 2 500 pour 384 à
-plat. `lod_view_distance` peut donc monter, et personne ne sait encore où ça
-casse. Le prochain plafond est probablement la mémoire vidéo (305 Mo à 2 048).
+**Rien n'est retiré.** Contrairement à la falaise v1, aux ponts, aux surplombs
+et à la plage/au haut-fond/au marais (tableau du §3, « ce qui a été retiré ») —
+quatre systèmes qui avaient chacun échoué à une capture — le LOD n'a rien
+d'invalide : il n'a simplement pas été choisi. Le code
+(`VoxelLodTerrain`, `--lod`, `--lod-vue`, `tests/lod_test.gd`,
+`CWVoxelGenerator.TREE_MAX_LOD`) reste dans le dépôt, pilotable en ligne de
+commande, pour qui voudrait le rejuger un jour avec un autre réglage. Ce qui
+suit reste vrai tant qu'on ne l'utilise pas :
 
-### 3. Ce que le LOD ne sait toujours pas faire, et ce que ça coûte
-
-* **les arbres s'arrêtent au LOD 2** (`CWVoxelGenerator.TREE_MAX_LOD`), donc à
-  quatre fois `lod_distance` du joueur. C'est une décision de lisibilité et non
-  de coût, et elle se rediscute en regardant une capture, pas un banc ;
-* **la flore, elle, ne dépasse pas le LOD 0** : elle est instanciée par-dessus le
-  terrain (`CWFloraRenderer`), pas écrite dedans, et elle suit `view_distance` et
-  non la distance rendue. C'est cohérent — une touffe d'herbe à mille blocs n'a
-  pas de sens — mais c'est une seconde frontière, à un autre rayon que celle des
-  arbres ;
-* **le réseau de chemins est consulté une fois par bloc**, sur une cellule
-  d'index de 256 unités. Un bloc de LOD 5 en couvre **512**, donc il lit les
-  chemins d'un quart de son emprise. Ça ne s'est pas vu sur les captures — une
-  chaussée au LOD 5 fait une cellule de large — mais c'est faux, et c'est écrit
-  ici pour que la prochaine personne ne le redécouvre pas depuis une capture.
+* **l'édition, la persistance et les collisions en mode LOD ne sont toujours
+  pas vérifiées** — ni par un test, ni manette en main. Ce n'est plus un
+  blocage puisque le mode n'est plus candidat au défaut, mais ça resterait à
+  faire le jour où on le rouvrirait ;
+* **l'invariant n° 5 — le plafond du cache de colonnes borne la vue à
+  1 024 blocs — ne s'applique qu'au mode plat**, celui qu'on garde : sans objet
+  tant qu'on y reste, mais ça revient si `use_lod` repasse à vrai ;
+* **ce que le LOD ne sait toujours pas faire, pour mémoire** : les arbres
+  s'arrêtent au LOD 2 (`CWVoxelGenerator.TREE_MAX_LOD`), la flore ne dépasse
+  pas le LOD 0 (`CWFloraRenderer` suit `view_distance`, pas la distance
+  rendue), et le réseau de chemins est consulté sur une cellule d'index de 256
+  unités qui ne couvre qu'un quart de l'emprise d'un bloc de LOD 5.
 
 ---
 
@@ -493,7 +529,7 @@ ne s'ouvre pas proprement (il est déclaré dans `project.godot`).
 ## 2. Commandes
 
 ```
-# Suite de validation (433 vérifications, ~2 min)
+# Suite de validation (449 vérifications, ~2 min)
 # ⚠️ Elle prenait 25 s jusqu'au 2026-09-12. Ce qui coûte est `tests/lod_test.gd`,
 # qui doit engendrer le monde à six niveaux de LOD pour les comparer — c'est la
 # seule façon de tenir un contrat qui ne se voit pas au pas de un.
@@ -578,12 +614,14 @@ python tools/blender/generer_arbres.py
 # Le PNG sort dans user://shots.
 ./godot.windows.editor.double.x86_64.exe --path . scenes/terrain_demo.tscn \
     --resolution 1600x900 -- --biome 7 --shot 32 --vue 256
-#   options : --sans-arbres, --sans-flore, --sans-chemins, --sans-falaise,
-#   --sans-nuages, pour isoler une couche. **--sans-arbres coupe une ecriture
-#   dans le terrain depuis le 2026-09-11, plus un rendu** : il vide donc les
-#   caches, et il ne coupe **pas** la borne du chemin rapide, qui est une
-#   constante. C'est ce qui a permis de separer les deux couts. Les deux dernieres servent aussi a mesurer ce
-#   qu'elle coute au chargement. --carte ouvre la carte du monde au demarrage.
+#   options : --sans-arbres, --sans-filons, --sans-flore, --sans-chemins,
+#   --sans-falaise, --sans-nuages, pour isoler une couche. **--sans-arbres et
+#   --sans-filons coupent une ecriture dans le terrain (le second depuis le
+#   2026-09-15), pas seulement un rendu** : ils vident donc les caches, et ne
+#   coupent **pas** la borne du chemin rapide, qui est une constante. C'est ce
+#   qui a permis de separer les deux couts. Les deux dernieres servent aussi a
+#   mesurer ce qu'elle coute au chargement. --carte ouvre la carte du monde au
+#   demarrage.
 #   --fils n force le nombre de fils de generation : c'est le reglage le plus
 #   rentable du projet, et son optimum est propre a chaque machine.
 #   --heure h se pose a une heure du cycle jour/nuit et **fige le cycle** :
@@ -617,6 +655,11 @@ C:/Users/Admin/Desktop/godot.windows.editor.double.x86_64.exe --headless --path 
 # Reperer une mare, pour viser une capture dessus. Rend des coordonnees pretes
 # a passer a `--ici`, **sur la graine 2024** — celle de la demo, invariant n. 37.
 ./godot.windows.editor.double.x86_64.exe --headless --path . -s tools/find_pond.gd
+
+# Reperer un filon (jalon 2.6), meme usage et meme graine que les deux
+# precedents. Balaie les cellules de `CWOreScatter`, pas des colonnes : un
+# filon se decide par cellule, pas par point.
+./godot.windows.editor.double.x86_64.exe --headless --path . -s tools/find_ore.gd
 
 # Se poser a un point **nomme** plutot qu'au premier endroit qui convient : les
 # coordonnees sont celles de l'ATH, donc celles qu'on lit sur une capture
@@ -657,10 +700,13 @@ biome, **F2** fige l'heure, **F3**/**F4** reculent ou avancent d'une heure,
 
 ## 3. État
 
-**Jalon 1 (le monde) : 1.1 à 1.16 sont portés, testés et vus en jeu.** Suite de
-validation : **408 vérifications, 0 échec**, ~25 s. Le détail de chaque jalon est
-dans `docs/ROADMAP.md` ; ce qui suit est ce qu'il faut savoir *avant de toucher
-au code*.
+**Jalon 1 (le monde) : 1.1 à 1.16 sont portés, testés et vus en jeu. Jalon 2.6
+(l'apparition) est fait pour les filons**, seule moitié qui n'attendait rien du
+reste du jalon 2 — voir §0. Suite de validation : **449 vérifications, 0
+échec**, ~2 min (la suite de LOD, qui doit engendrer le monde à six niveaux pour
+les comparer, en est le poste qui coûte). Le détail de chaque jalon est dans
+`docs/ROADMAP.md` ; ce qui suit est ce qu'il faut savoir *avant de toucher au
+code*.
 
 ### Ce que le monde contient aujourd'hui
 
@@ -681,9 +727,10 @@ mare** et en creusant : ce n'est pas une surface, c'est le sous-sol en coupe.
 
 Par-dessus : la **flore** (1.7), instanciée ; les **arbres** (1.11), dont
 toutes les pièces sont **écrites dans le terrain** depuis le 2026-09-11 —
-la couche d'instances d'arbres n'existe plus, l'**édition** et sa persistance (1.8),
-l'**éclairage voxel** là où le joueur a creusé (1.9), et la **carte du monde**
-(1.10).
+la couche d'instances d'arbres n'existe plus, les **filons** (2.6, 2026-09-15),
+neuf veines qui affleurent sur la falaise et s'estampent comme un arbre entier,
+l'**édition** et sa persistance (1.8), l'**éclairage voxel** là où le joueur a
+creusé (1.9), et la **carte du monde** (1.10).
 
 ### Ce qui a été retiré, et c'est ce qui coûte le plus cher à redécouvrir
 
@@ -773,6 +820,9 @@ src/worldgen/
   cw_tree_scatter.gd       la couche jumelle : cellule de 64, espacement de 14,
                            et l'arbre entier en matière (1.11, feuillage
                            compris depuis le 2026-09-11)
+  cw_ore_scatter.gd        les neuf filons : ou ils affleurent (la falaise) et
+                           leur pose, memes cellules et memes principes que les
+                           arbres (2.6, 2026-09-15)
   cw_world_edits.gd        creuser, poser, interroger un bloc (1.8)
   cw_light.gd              éclairage voxel : deux passes, cases à repeindre (1.9)
   cw_world_map.gd          carte : dalles de Voronoï, découverte, et sa propre
@@ -798,6 +848,8 @@ tests/decor_test.gd          rôles, tables croisées, filtre de matière, compo
                              et le balayage qui refuse toute matière retirée
 tests/flora_test.gd          modèles, dispersion, maillage et pose
 tests/tree_test.gd           lot, enveloppes, grille, dispersion, espacement, montage
+tests/ore_test.gd            lot, gangue et veine, dispersion, espacement,
+                             accord bloc genere / requête ponctuelle (2.6)
 tests/edit_test.gd           règles d'édition, requête ponctuelle, persistance (1.8)
 tests/light_test.gd          les deux passes, l'atténuation, les cases à repeindre (1.9)
 tests/map_test.gd            échelle, découverte, puzzle, rendu, teintes, noms (1.10)
@@ -815,6 +867,7 @@ tools/inspect_model.gd       inventaire d'un .vox : gabarit, index, plages, morc
 tools/repaint_models.gd      remet un .vox dans la palette de projet
 tools/preview_map.gd         aperçu de la carte, vierge et après une diagonale
 tools/find_path.gd           une chaussée, une levée (1.16)
+tools/find_ore.gd            un filon, par cellule de `CWOreScatter` (2.6)
 tools/profile_worldgen.gd    le profil du chargement, poste par poste
 tools/profile_mesh.gd        ce que coute le maillage : sommets, tramage,
                              fusion gloutonne, memoire (2026-09-11)
@@ -1299,6 +1352,25 @@ docs/images/                 gabarit, carte et composition de flore, en jeu
     place. `CWLodTest.ORIGIN` vise un endroit choisi — 41 % de mer, 17 % de
     mares. Et **un garde-fou se vérifie en remettant le défaut** : sans ça on ne
     sait pas s'il garde quoi que ce soit.
+59. **Un filon n'affleure que sur la roche de pente, et rien d'autre.**
+    `CWOreScatter` n'a de sens qu'à l'endroit où `CWPalette.surface_of` rend
+    `STONE` : la falaise est la seule matière du monde qui ne soit pas celle
+    d'un biome (invariant n° 27), et un modèle de filon porte sa propre gangue
+    de roche pour s'y fondre (`generer_filons.py`, en-tête) — le poser ailleurs
+    dessinerait un caillou peint sur de l'herbe. Comme la falaise, ce test
+    demande la **pente** (`slope_at`), jamais la version sans pente que l'ATH
+    utilise pour son affichage (`terrain_demo._update_hud`) : les deux
+    répondent à des questions différentes, et régler le seuil de la couche en
+    lisant l'ATH décrirait un monde qui n'est pas celui qui se génère.
+
+    ⚠️ **Et un filon ne survit pas au LOD** (`CWVoxelGenerator.ORE_MAX_LOD`,
+    zéro), pour la même raison qu'un houppier ne survit pas au-delà de
+    `TREE_MAX_LOD` : un affleurement de quatre blocs de rayon disparaît d'un
+    bloc à l'autre. `tests/lod_test.gd` doit couper `p.ores` comme il coupe déjà
+    `p.trees`, sans quoi il confond un filon qui disparaît avec la dalle d'eau
+    qu'il est fait pour attraper — c'est exactement ce qui est arrivé à
+    l'écriture de cette couche, sur deux colonnes d'une emprise qui n'avait
+    jamais vu de filon avant.
 
 ## 5. Pièges connus
 
