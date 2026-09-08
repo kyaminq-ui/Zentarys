@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://bpxxsaniwfpua"
+path="res://.godot/imported/jambe.vox-6e455f24b1b42cdda17f54aa57224a65.tscn"
+
+[deps]
+
+source_file="res://assets/models/personnage/jambe.vox"
+dest_files=["res://.godot/imported/jambe.vox-6e455f24b1b42cdda17f54aa57224a65.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

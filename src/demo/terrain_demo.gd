@@ -56,6 +56,18 @@ const BIOME_KEYS: Dictionary = {
 @export var move_speed: float = 28.0
 @export var boost_multiplier: float = 6.0
 @export var mouse_sensitivity: float = 0.0022
+
+## Le joueur physique (`CWPlayerController`) a la place de la camera libre.
+## Off par defaut : c'est la camera libre que pilotent tous les outils de
+## capture (`--ici`, `--vers`, `--regard`...), et ce mode s'y ajoute, il ne la
+## remplace pas. Voir `CWPlayerController` pour pourquoi ce premier morceau du
+## jalon 3.1 est invente plutot que porte.
+##
+## Se bascule aussi **en jeu**, par F5 (`_toggle_player_mode`) : utile pour
+## partir en camera libre reperer un endroit puis y entrer dans la peau du
+## personnage, sans relancer avec `--joueur`. Reste faux au demarrage meme
+## avec F5 disponible, pour la meme raison que juste au-dessus.
+@export var player_mode: bool = false
 ## Distance de vue initiale, en blocs. Reglable en jeu par Page haut / Page bas.
 ##
 ## **La flore suit ce reglage**, toujours et sans knob separe : une couche de
@@ -164,6 +176,8 @@ var clouds: CWClouds
 ## `--biome`. Sortie d'ici le 2026-09-10 : voir `CWBiomeSearch`.
 var search: CWBiomeSearch
 var camera: Camera3D
+## Non nul seulement en `player_mode` : voir `_build_player`.
+var player: CWPlayerController
 var hud: Label
 
 var _yaw: float = 0.0
@@ -264,6 +278,12 @@ func _read_lod_cmdline() -> void:
 				if i + 1 < args.size():
 					i += 1
 					lod_view_distance = int(args[i])
+			# Le joueur physique plutot que la camera libre : voir
+			# `player_mode`. Lu ici et non dans `_read_cmdline` parce que le
+			# terrain doit savoir s'il genere des collisions **avant**
+			# `_build_terrain()`, comme `use_lod` decide sa classe de noeud.
+			"--joueur":
+				player_mode = true
 		i += 1
 
 
@@ -318,7 +338,10 @@ func _read_cmdline() -> void:
 			"--altitude":
 				if i + 1 < args.size():
 					i += 1
-					camera.position.y += float(args[i])
+					if player_mode:
+						player.global_position.y += float(args[i])
+					else:
+						camera.position.y += float(args[i])
 			# Viser un objet plutot que le hasard de l'orientation par defaut.
 			# `--ici` pose la camera, `--vers` la tourne : sans les deux, une
 			# capture d'un objet pose a cent blocs de la est une capture de
@@ -339,7 +362,10 @@ func _read_cmdline() -> void:
 				if i + 1 < args.size():
 					i += 1
 					_pitch = deg_to_rad(float(args[i]))
-					camera.rotation = Vector3(_pitch, _yaw, 0.0)
+					if player_mode:
+						player.set_look_angles(_pitch, _yaw)
+					else:
+						camera.rotation = Vector3(_pitch, _yaw, 0.0)
 			# Les deux couches posees au-dessus du champ, isolables une a une :
 			# c'est ce qui permet de mesurer ce que chacune coute au chargement
 			# et de comparer deux captures du meme endroit.
@@ -510,6 +536,9 @@ func _build_terrain() -> void:
 		lod.view_distance = lod_view_distance
 		lod.lod_distance = lod_distance
 		lod.lod_fade_duration = lod_fade_duration
+		# ⚠️ Toujours fausses, meme en `player_mode` : les collisions du mode
+		# LOD ne sont pas verifiees (nextsteps.md, §0). `--joueur --lod`
+		# ensemble laisserait le joueur traverser le sol.
 		lod.generate_collisions = false
 		# Meme raison qu'en mode plat : des blocs de maillage de 32 au lieu de 16
 		# donnent huit fois moins de maillages et d'appels de rendu pour la meme
@@ -531,7 +560,16 @@ func _build_terrain() -> void:
 		# d'appels de rendu pour la meme quantite de voxels. Les blocs de donnees
 		# restent a 16, donc le cout de generation ne bouge pas.
 		flat.mesh_block_size = 32
-		flat.generate_collisions = false
+		# Toujours vraies, meme quand on demarre en camera libre : F5 fait
+		# entrer en `player_mode` **en jeu**, sur un terrain deja charge, et
+		# rien ici ne sait donner retroactivement une collision aux blocs deja
+		# maillés (VoxelTerrain n'expose aucun remaillage a la demande — vu au
+		# jalon 3.1, deuxieme tranche). Les generer des le debut est la seule
+		# facon d'eviter que le joueur tombe au travers du sol au moment ou il
+		# apparait. Cout mesure negligeable pour la camera libre, qui n'y
+		# touche de toute facon jamais par la physique — seulement par
+		# `VoxelTool.raycast`, sur les donnees.
+		flat.generate_collisions = true
 		flat.bounds = box
 		# Le format se pose avant tout chargement : un tampon deja cree garde la
 		# profondeur qu'il avait, et la couleur sortirait tronquee a un octet.
@@ -575,21 +613,31 @@ func _apply_rendered_distance() -> void:
 
 
 func _build_camera() -> void:
-	camera = Camera3D.new()
-	camera.name = "FlyCamera"
-	camera.fov = 72.0
-	add_child(camera)
+	if player_mode:
+		_build_player()
+	else:
+		_build_flycam()
+	_apply_rendered_distance()
 
-	var viewer := VoxelViewer.new()
-	viewer.name = "VoxelViewer"
-	_viewer = viewer
-	viewer.view_distance = rendered_distance()
-	# Le poste dominant n'est pas le cout d'un bloc mais leur nombre, et il croit
-	# avec le produit des trois axes. A l'horizontale la portee sert a voir loin ;
-	# a la verticale elle ne sert qu'a couvrir l'epaisseur du relief autour du
-	# joueur, ce qui demande beaucoup moins.
-	viewer.view_distance_vertical_ratio = 0.22
-	camera.add_child(viewer)
+
+## Une `FlyCamera` nue, sans position ni observateur : `_build_flycam` la pose
+## au point d'apparition, `_exit_player_mode` a l'endroit ou le joueur
+## regardait. `current = true` la designe explicitement plutot que de compter
+## sur la regle par defaut (seule camera du viewport) — vraie au demarrage,
+## plus depuis que F5 peut faire coexister une camera l'espace d'une image
+## avec celle qu'elle remplace, le temps que sa liberation differee s'applique.
+func _new_flycam() -> Camera3D:
+	var cam := Camera3D.new()
+	cam.name = "FlyCamera"
+	cam.fov = 72.0
+	add_child(cam)
+	cam.current = true
+	return cam
+
+
+func _build_flycam() -> void:
+	camera = _new_flycam()
+	_attach_viewer(camera)
 
 	# On se pose au-dessus du terrain, au point de depart du monde d'origine.
 	var start_h: float = generator.field().sample_column(
@@ -599,7 +647,115 @@ func _build_camera() -> void:
 			maxf(start_h, float(params.sea_level)) + 26.0,
 			float(spawn_offset.y))
 	camera.rotation = Vector3(_pitch, _yaw, 0.0)
+
+
+## Le joueur physique : voir `CWPlayerController`. `camera` pointe vers son
+## enfant `camera` — le reste de la demo (ATH, flore, nuages, raycast
+## d'edition) ne connait qu'une camera, jamais le corps qui la porte.
+func _build_player() -> void:
+	player = CWPlayerController.new()
+	player.name = "Player"
+	add_child(player)
+	camera = player.camera
+	camera.current = true
+	_attach_viewer(camera)
+
+	# Pose au-dessus du sol, pas dessus : la gravite fait le dernier pas, comme
+	# elle le ferait pour un saut. Coller le joueur au sol exact le laisserait
+	# parfois y naitre encastre, une colonne pouvant avoir change d'un souffle
+	# entre cet echantillon et le maillage reellement charge.
+	var start_h: float = generator.field().sample_column(
+			params.world_origin.x + spawn_offset.x,
+			params.world_origin.y + spawn_offset.y).x
+	player.global_position = Vector3(float(spawn_offset.x),
+			maxf(start_h, float(params.sea_level)) + 4.0,
+			float(spawn_offset.y))
+	player.set_look_angles(_pitch, _yaw)
+
+
+## Bascule `player_mode` en jeu (touche F5), sans relancer avec `--joueur`.
+##
+## N'existe qu'a partir du jalon 3.1, troisieme tranche : la premiere n'avait
+## que le corps physique, portee au demarrage seulement. Ce qui change ici,
+## par rapport a `_build_player`/`_build_flycam` : on part de la position et du
+## regard **courants** plutot que du point d'apparition, l'observateur
+## (`_viewer`) est **reparente** sur la nouvelle camera plutot que recree, et
+## deux couches qui gardent chacune leur propre reference a `camera` plutot
+## que de lire le champ `TerrainDemo.camera` — `flora`, `clouds` — doivent
+## etre reprevenues explicitement (`_relink_camera`), sans quoi elles
+## continueraient a suivre l'ancienne camera, libree ou immobile.
+func _toggle_player_mode() -> void:
+	if player_mode:
+		_exit_player_mode()
+	else:
+		_enter_player_mode()
+
+
+func _enter_player_mode() -> void:
+	var at: Vector3 = camera.global_position
+	var viewer: VoxelViewer = _viewer
+	camera.remove_child(viewer)
+	camera.queue_free()
+
+	player = CWPlayerController.new()
+	player.name = "Player"
+	add_child(player)
+	camera = player.camera
+	camera.current = true
+	camera.add_child(viewer)
+	player.global_position = at
+	player.set_look_angles(_pitch, _yaw)
+
+	player_mode = true
 	_apply_rendered_distance()
+	_relink_camera()
+
+
+func _exit_player_mode() -> void:
+	var angles: Vector2 = player.look_angles()
+	_pitch = angles.x
+	_yaw = angles.y
+	var at: Vector3 = camera.global_position
+	var viewer: VoxelViewer = _viewer
+	camera.remove_child(viewer)
+	player.queue_free()
+	player = null
+
+	camera = _new_flycam()
+	camera.add_child(viewer)
+	camera.position = at
+	camera.rotation = Vector3(_pitch, _yaw, 0.0)
+
+	player_mode = false
+	_apply_rendered_distance()
+	_relink_camera()
+
+
+## Les couches qui gardent leur propre reference a `camera` plutot que de lire
+## le champ `TerrainDemo.camera` a chaque image — `CWFloraRenderer._camera`,
+## `CWClouds._camera` — doivent etre reprevenues explicitement quand elle
+## change de noeud. `setup` n'y fait que trois affectations : le rappeler est
+## sans effet de bord sur le reste de leur etat.
+func _relink_camera() -> void:
+	if flora != null:
+		flora.setup(generator.scatter_grid(), params.world_origin, camera)
+	if clouds != null:
+		clouds.setup(params.world_seed, params.world_origin, camera)
+
+
+## Le rayon de chargement autour de la camera. Commun aux deux modes : c'est
+## la camera qui interesse le terrain, pas ce qui la porte.
+func _attach_viewer(cam: Camera3D) -> void:
+	var viewer := VoxelViewer.new()
+	viewer.name = "VoxelViewer"
+	_viewer = viewer
+	viewer.view_distance = rendered_distance()
+	# Le poste dominant n'est pas le cout d'un bloc mais leur nombre, et il croit
+	# avec le produit des trois axes. A l'horizontale la portee sert a voir loin ;
+	# a la verticale elle ne sert qu'a couvrir l'epaisseur du relief autour du
+	# joueur, ce qui demande beaucoup moins.
+	viewer.view_distance_vertical_ratio = 0.22
+	cam.add_child(viewer)
 
 
 ## Couche de flore : instanciee par-dessus le terrain, pas ecrite dedans. Les
@@ -738,10 +894,16 @@ func start_biome_search(target: int) -> void:
 ## differentes donneraient deux captures qu'on ne peut pas comparer.
 func place_at(world_xz: Vector2i) -> void:
 	var h: float = ground_top_at(world_xz)
-	camera.position = Vector3(
+	var pos := Vector3(
 			float(world_xz.x - params.world_origin.x),
 			maxf(h, float(params.sea_level)) + 26.0,
 			float(world_xz.y - params.world_origin.y))
+	if player_mode:
+		# Pose en vol, comme la camera libre : la gravite fait le reste, et
+		# c'est la meme hauteur de survol qui rend les deux modes comparables.
+		player.global_position = pos
+	else:
+		camera.position = pos
 
 
 ## Dessus d'une colonne, en coordonnees monde.
@@ -758,16 +920,22 @@ func look_at_world(world_xz: Vector2i) -> void:
 			float(world_xz.x - params.world_origin.x),
 			maxf(h, float(params.sea_level)) + 20.0,
 			float(world_xz.y - params.world_origin.y))
-	var d: Vector3 = target - camera.position
+	var d: Vector3 = target - camera.global_position
 	_yaw = atan2(-d.x, -d.z)
 	_pitch = atan2(d.y, Vector2(d.x, d.z).length())
-	camera.rotation = Vector3(_pitch, _yaw, 0.0)
+	if player_mode:
+		player.set_look_angles(_pitch, _yaw)
+	else:
+		camera.rotation = Vector3(_pitch, _yaw, 0.0)
 
 
 func _world_position() -> Vector2i:
+	# Position globale et non locale : en `player_mode`, la camera est
+	# l'enfant du corps du joueur, pas de la demo elle-meme.
+	var p: Vector3 = camera.global_position
 	return Vector2i(
-			params.world_origin.x + roundi(camera.position.x),
-			params.world_origin.y + roundi(camera.position.z))
+			params.world_origin.x + roundi(p.x),
+			params.world_origin.y + roundi(p.z))
 
 
 # -- Camera libre -------------------------------------------------------------
@@ -807,6 +975,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		_hud_timer = 0.0
 		_hud_timer = 0.0
 		_update_hud()
+	# Entrer ou sortir de `player_mode` sans relancer avec `--joueur` : voir
+	# `_toggle_player_mode`.
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_F5:
+		_toggle_player_mode()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_M:
 		world_map.toggle(_world_position())
 	elif event is InputEventKey and event.pressed and world_map.is_open() and (
@@ -822,10 +994,15 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventKey and event.pressed and BIOME_KEYS.has(event.keycode):
 		start_biome_search(BIOME_KEYS[event.keycode])
 	elif event is InputEventMouseMotion and _captured:
-		_yaw -= event.relative.x * mouse_sensitivity
-		_pitch = clampf(_pitch - event.relative.y * mouse_sensitivity,
-				-1.5, 1.5)
-		camera.rotation = Vector3(_pitch, _yaw, 0.0)
+		if player_mode:
+			# Le lacet tourne le corps, le tangage la seule camera : voir
+			# `CWPlayerController.look`.
+			player.look(event.relative)
+		else:
+			_yaw -= event.relative.x * mouse_sensitivity
+			_pitch = clampf(_pitch - event.relative.y * mouse_sensitivity,
+					-1.5, 1.5)
+			camera.rotation = Vector3(_pitch, _yaw, 0.0)
 
 
 ## Creuse ou pose au centre de l'ecran.
@@ -852,24 +1029,28 @@ func _process(delta: float) -> void:
 	if _shutting_down:
 		return
 
-	var dir := Vector3.ZERO
-	if Input.is_key_pressed(KEY_W):
-		dir -= camera.global_transform.basis.z
-	if Input.is_key_pressed(KEY_S):
-		dir += camera.global_transform.basis.z
-	if Input.is_key_pressed(KEY_A):
-		dir -= camera.global_transform.basis.x
-	if Input.is_key_pressed(KEY_D):
-		dir += camera.global_transform.basis.x
-	if Input.is_key_pressed(KEY_SPACE):
-		dir += Vector3.UP
-	if Input.is_key_pressed(KEY_CTRL):
-		dir += Vector3.DOWN
-	if dir != Vector3.ZERO:
-		var speed: float = move_speed
-		if Input.is_key_pressed(KEY_SHIFT):
-			speed *= boost_multiplier
-		camera.position += dir.normalized() * speed * delta
+	# En `player_mode`, `CWPlayerController._physics_process` porte le
+	# deplacement : la gravite et les collisions n'ont pas leur place dans une
+	# camera libre qui traverse le terrain a volonte.
+	if not player_mode:
+		var dir := Vector3.ZERO
+		if Input.is_key_pressed(KEY_W):
+			dir -= camera.global_transform.basis.z
+		if Input.is_key_pressed(KEY_S):
+			dir += camera.global_transform.basis.z
+		if Input.is_key_pressed(KEY_A):
+			dir -= camera.global_transform.basis.x
+		if Input.is_key_pressed(KEY_D):
+			dir += camera.global_transform.basis.x
+		if Input.is_key_pressed(KEY_SPACE):
+			dir += Vector3.UP
+		if Input.is_key_pressed(KEY_CTRL):
+			dir += Vector3.DOWN
+		if dir != Vector3.ZERO:
+			var speed: float = move_speed
+			if Input.is_key_pressed(KEY_SHIFT):
+				speed *= boost_multiplier
+			camera.position += dir.normalized() * speed * delta
 
 	var trouve: Variant = search.poll()
 	if trouve != null:
@@ -986,7 +1167,7 @@ func memoire() -> String:
 
 
 func _update_hud() -> void:
-	var p := camera.position
+	var p: Vector3 = camera.global_position
 	var wx: int = params.world_origin.x + roundi(p.x)
 	var wz: int = params.world_origin.y + roundi(p.z)
 	var sea: int = params.sea_level

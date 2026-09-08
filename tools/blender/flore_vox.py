@@ -51,6 +51,13 @@ INDEX_FILONS = frozenset([1] + list(range(14, 20)) + list(range(32, 41)))
 # enneige, et on ne pourrait plus ajuster l'un sans deplacer l'autre.
 INDEX_NUAGES = frozenset(range(240, 248))
 
+# Plages autorisees pour le **personnage de reference** (jalon 3.1). Les neuf
+# index concrets que le joueur emploie (`CWPalette.PLAYER_*`), rien d'autre :
+# un personnage n'a pas plus le droit a une teinte de feuillage qu'un filon
+# n'a le droit au vert. Voir la note au-dessus de ces constantes dans
+# `src/worldgen/cw_palette.gd`.
+INDEX_PERSONNAGE = frozenset([41, 88, 89, 91, 92, 96, 226, 227, 239])
+
 # Enveloppe verifiee par tests/flora_test.gd : 4 blocs de haut, 2 de rayon.
 #
 # **La grille du lot de flore est passee de 40/3 a 4 voxels par bloc le

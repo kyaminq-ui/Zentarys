@@ -221,6 +221,40 @@ const RANGE_BUILD_END: int = 239
 const RANGE_FX_BEGIN: int = 240
 const RANGE_FX_END: int = 255
 
+# -- Le personnage de reference : premier contenu reel de la plage creatures --
+#
+# `docs/ASSETS.md` §8.1 le disait depuis le 2026-09-10 : « a revoir au
+# jalon 3.1 ». La plage 41-95 existe depuis le 2026-09-05 et n'avait encore
+# **rien** de peint, l'apparence des creatures etant hors perimetre du jalon 2 ;
+# le joueur, lui, n'a jamais ete hors perimetre, et c'est donc lui qui l'ouvre.
+#
+# Peau et iris sont pris dans les rampes deja prevues pour ca (peaux 41-47,
+# huit teintes ponctuelles 88-95) : rien a ajouter, juste a choisir un pas.
+# `IRIS_FROID` (92) est repeinte au passage — nuance de depart jamais utilisee,
+# donc sans rien a casser — d'un cyan pale vers un bleu plus franc, plus proche
+# de l'original que le "iris clair" 91 dore, lui, garde tel quel et recycle en
+# **cheveu blond** : la teinte convient aux deux, et aucune plage n'est dediee
+# a la chevelure.
+#
+# La tunique, elle, n'a pas de rampe a elle nulle part dans la palette : ni les
+# rampes de peau/fourrure/ecailles/chitine de la plage creatures, ni les
+# metaux/manches/cuir/gemmes de la plage equipement ne sont du tissu porte. La
+# seule rampe de tissu du depot est "tissus, bannieres" (220-227,
+# plage **structures**, jalon 4, jamais peinte non plus) : ses deux derniers
+# pas sont repeints en tunique plutot que d'ouvrir une neuvieme rampe dans une
+# plage deja pleine — decision de ce projet, comme `gres`/`cristal_de_glace`
+# pour les filons. Les bottes reprennent le pas le plus sombre de "metal de
+# structure" (234-239), egalement encore vierge.
+const PLAYER_SKIN: int = 41
+const PLAYER_HAIR: int = 91
+const PLAYER_EYE: int = 92
+const PLAYER_EYE_WHITE: int = 88
+const PLAYER_PUPIL: int = 89
+const PLAYER_TUNIC: int = 227
+const PLAYER_TUNIC_LIGHT: int = 226
+const PLAYER_BOOTS: int = 239
+const PLAYER_BELT: int = 96
+
 # -- Les bandes d'altitude sont toutes tombees --------------------------------
 #
 # Il y en a eu quatre, et il n'en reste aucune. La roche nue et la neige de
@@ -563,8 +597,14 @@ static func _fill_asset_ranges(c: PackedColorArray) -> void:
 	c[88] = Color8(250, 250, 250)   # blanc de l'oeil
 	c[89] = Color8(20, 18, 22)      # pupille
 	c[90] = Color8(214, 48, 48)     # langue, sang
-	c[91] = Color8(255, 214, 66)    # iris clair
-	c[92] = Color8(126, 226, 226)   # iris froid
+	# Doree : c'est l'iris clair d'une creature, et le cheveu blond du
+	# personnage de reference (PLAYER_HAIR) — la meme teinte sert aux deux,
+	# et aucune plage n'a de rampe pour les cheveux.
+	c[91] = Color8(255, 214, 66)    # iris clair, cheveux blonds
+	# Repeinte pour le personnage de reference (PLAYER_EYE) : plus saturee que
+	# le cyan pale d'origine, jamais employe. Toujours utilisable comme iris
+	# froid d'une creature — rien ne distingue les deux usages dans la palette.
+	c[92] = Color8(58, 138, 226)    # iris froid, yeux bleus
 	c[93] = Color8(168, 120, 200)   # iris magique
 	c[94] = Color8(236, 226, 204)   # os, croc, corne claire
 	c[95] = Color8(120, 104, 78)    # corne sombre, sabot
@@ -602,6 +642,13 @@ static func _fill_asset_ranges(c: PackedColorArray) -> void:
 	_ramp(c, 200, 10, Color8(196, 84, 70), Color8(78, 34, 34))    # tuiles
 	_ramp(c, 210, 10, Color8(244, 238, 224), Color8(158, 146, 124)) # platre, torchis
 	_ramp(c, 220, 8, Color8(216, 66, 66), Color8(40, 62, 140))    # tissus, bannieres
+	# Les deux derniers pas de la rampe de tissu sont repeints pour la tunique
+	# du personnage de reference (PLAYER_TUNIC/PLAYER_TUNIC_LIGHT) : voir la
+	# note au-dessus de ces constantes. Ni 220-225 ni la rampe elle-meme ne
+	# bougent — seuls les deux pas les plus sombres, encore vierges de tout
+	# modele, changent de nuance.
+	c[226] = Color8(66, 60, 96)    # tunique, reflet
+	c[227] = Color8(44, 40, 66)    # tunique, ombre
 	c[228] = Color(0.78, 0.90, 0.96, 0.35)   # verre clair
 	c[229] = Color(0.62, 0.80, 0.92, 0.45)
 	c[230] = Color(0.90, 0.60, 0.30, 0.45)   # vitraux
@@ -609,6 +656,10 @@ static func _fill_asset_ranges(c: PackedColorArray) -> void:
 	c[232] = Color(0.60, 0.40, 0.78, 0.45)
 	c[233] = Color(0.94, 0.86, 0.42, 0.45)
 	_ramp(c, 234, 6, Color8(148, 152, 160), Color8(52, 54, 60))   # metal de structure
+	# Le pas le plus sombre double pour les bottes du personnage de reference
+	# (PLAYER_BOOTS) — legerement fonce vers le bleu nuit plutot que le gris
+	# neutre d'origine, jamais employe.
+	c[239] = Color8(34, 34, 46)    # metal de structure, sombre / bottes
 
 	# -- Effets et reperes 240-255 --
 	_ramp(c, 240, 8, Color8(255, 255, 255), Color8(120, 200, 255))  # lumiere, magie

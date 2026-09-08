@@ -15,10 +15,208 @@ invariants, les pièges, les décisions ouvertes.
 
 ## 0. La prochaine session
 
-*Rien n'est demandé pour l'instant.* Le jalon 2.6 (l'apparition) a été ouvert le
-2026-09-15 pour les filons ; son compte rendu suit. Le programme du 2026-09-12
-au soir — le LOD natif, et rien d'autre — est traité ; son compte rendu est en
-§0bis.
+*Rien n'est demandé pour l'instant.* Le jalon 3.1 (contrôleur, caméra,
+physique) a sa troisième tranche depuis le 2026-09-17 : nouveau modèle de
+personnage, bascule de mode en jeu, franchissement de marche, caméra lissée ;
+son compte rendu suit celui de la deuxième tranche, qu'il rend caduque sur le
+personnage (quatre pièces `.vox` → six pièces `.obj`) sans y toucher — le
+récit reste celui de ce qui s'est passé alors. Le jalon 2.6 (l'apparition) a
+été ouvert le 2026-09-15 pour les filons ; son compte rendu vient ensuite. Le
+programme du 2026-09-12 au soir — le LOD natif, et rien d'autre — est traité ;
+son compte rendu est en §0bis.
+
+### 3.1, troisième tranche — nouveau personnage, marche et caméra (fait le 2026-09-17)
+
+**Reprise demandée en session : remplacer le personnage par un nouvel export,
+puis quatre ajouts au contrôleur.**
+
+* **le personnage vient desormais de `assets/models/personnage/human/`**, six
+  pièces `.obj` exportées de MagicaVoxel (tête, torse, bras et jambes gauche
+  et droite separés) plutôt que quatre `.vox` repeints dans la palette du
+  projet. Les six partagent un seul repère (un dixième d'unité par voxel,
+  mesuré sur les sommets) : plus d'offset à calculer entre les pièces, plus de
+  reflet de nœud pour le côté manquant. `CWPlayerBody` (`src/demo/cw_player_body.gd`)
+  est réécrit en consequence — voir son en-tête pour la derivation des pivots
+  et `TEXTURE_FILTER_NEAREST` (la texture est une bande de palette 256×1, pas
+  une photo) ;
+* ⚠️ **defaut trouve a la capture, pas a la lecture** (meme famille que les
+  deux du 2026-09-16) : la tete et le torse sortent de l'export tournes de 180°
+  sur le lacet, seuls parmi les six pieces — un visage qui regardait vers +Z
+  alors que `CWPlayerController` avance vers -Z. Verifie en posant deux
+  cameras de part et d'autre du personnage instancie seul (`_attache(...,
+  flip = true)` corrige, chacune autour de son propre pivot) ;
+* **F5 fait entrer ou sortir de `player_mode` en jeu**, sans relancer avec
+  `--joueur` (`TerrainDemo._toggle_player_mode`). Ça oblige `flat.generate_collisions`
+  à rester **toujours vrai** desormais, meme en camera libre : `VoxelTerrain`
+  n'expose aucun remaillage a la demande, donc rien ne peut donner
+  retroactivement une collision aux blocs deja charges au moment ou on entre
+  dans le corps. Cout mesure negligeable (~150 ms sur 17 s de chargement a 384
+  blocs de vue). Deux couches qui gardent leur propre reference a la camera
+  plutot que de lire `TerrainDemo.camera` a chaque image — `CWFloraRenderer`,
+  `CWClouds` — doivent etre reprevenues explicitement au changement
+  (`_relink_camera`) ;
+* **`CWPlayerController._step_up`** franchit un rebord d'un bloc sans sauter :
+  souleve le corps de `STEP_HEIGHT` seulement quand c'est ce qui manque pour
+  avancer (bloque au ras du sol, degage plus haut, le mouvement passe
+  la-haut), puis laisse `move_and_slide` raccrocher seul au sol retrouve ;
+* **`_smooth_camera_height`** fait suivre la camera en hauteur avec un retard
+  exponentiel plutot que rigidement, pour que `_step_up` (et une pente prise
+  en marchant) ne se voient plus comme un bond sec — sauf ecart enorme
+  (teleportation de biome), cale au lieu de rattrape sur plusieurs secondes ;
+* **l'amble et le repos se fondent** (`_walk_blend`) au lieu de basculer d'une
+  image sur l'autre, et le torse rebondit legerement a chaque appui
+  (`BOB_AMPLITUDE`, deux fois par foulee). Verifie en jeu par teleoperation
+  (MCP `godot-ai`) : marche, arret en cours de foulee, F5 dans les deux sens,
+  aucune erreur au journal. Suite : **449 verifications, 0 echec**.
+* **hors perimetre pour cette tranche** : le franchissement de marche n'a pas
+  ete essaye contre une vraie marche du monde genere (seulement verifie sans
+  obstacle et par lecture de code) ; aucune pose d'animation en l'air
+  (chute, saut) ; l'evitement de mur de la camera reste absent.
+
+### 3.1, première tranche — le corps physique (fait le 2026-09-16)
+
+**Un `CharacterBody3D`, invente plutôt que porté, et c'est assumé.** La
+fonction qui ferait autorité pour le mouvement du joueur dans la source,
+`GameController::vfunc_10`, est la plus grosse fonction du binaire entier
+(77 Ko de pseudo-code Ghidra) et mélange indissociablement le déplacement, les
+menus, l'inventaire et l'artisanat en une seule mise à jour par image — il n'y
+a pas de sous-bloc « physique du joueur » à en extraire, c'est un agrégat, pas
+une fonction. Comme le réseau de chemins au jalon 1.16 : *une chose absente
+d'une source exploitable n'est pas hors périmètre, elle est à décider.*
+
+* `CWPlayerController` (`src/demo/cw_player_controller.gd`) : gravité, marche
+  (ZQSD), saut, capsule de collision a la hauteur de reference du personnage
+  (2,4 blocs, `docs/ASSETS.md`), lacet sur le corps et tangage sur la seule
+  camera — un corps qui tanguerait coucherait sa capsule. Les constantes de
+  vitesse, de gravite et de hauteur de saut n'ont pas de source a citer : ce
+  sont des choix de sensation de jeu, a revoir au clavier plutot qu'au banc ;
+* activé par `--joueur`, et il **s'ajoute** à la caméra libre plutôt que de la
+  remplacer — décision prise avant de coder, voir la question posée en
+  session. Tous les outils de capture (`--ici`, `--vers`, `--regard`, la
+  téléportation de biome) continuent de piloter la caméra libre par défaut ;
+  `TerrainDemo.camera` pointe simplement vers l'enfant `camera` du contrôleur
+  quand `player_mode` est vrai, et le reste de la démo (ATH, flore, nuages,
+  raycast d'édition) ne voit jamais la différence ;
+* ⚠️ **un vrai défaut trouvé à la première capture, pas au code.** Le joueur
+  apparaissait en l'air (quatre blocs au-dessus du sol, comme un saut) et
+  tombait **indéfiniment** — `y -1262` pour un sol à `120`, dix secondes après
+  le lancement. Cause : le terrain n'a pas fini de charger la collision de la
+  colonne de départ au moment où la gravité commence à s'appliquer ; la chute
+  démarre dans ce vide de chargement, et l'observateur de vue (`VoxelViewer`,
+  posé sur la caméra donc sur le joueur) suit la chute au lieu de rester sur
+  place — le terrain se met alors à charger la colonne *d'arrivée* plutôt que
+  celle de départ, et la chute s'auto-alimente jusqu'à ce qu'un bloc déjà
+  chargé, bien plus bas, l'arrête enfin. `_floor_within_reach()` sonde toute la
+  hauteur jouable (1 100 blocs) avant d'appliquer la gravité : si la sonde ne
+  trouve **rien du tout**, ce n'est pas une chute, c'est un chargement, et le
+  corps reste immobile le temps qu'il finisse. Vérifié en jeu
+  (`--joueur --shot 10`) : le joueur atterrit et se stabilise à `y 123` pour un
+  sol à `120`, conforme à la hauteur d'œil de la capsule ;
+* les fonctions de placement de la démo (`place_at`, `look_at_world`,
+  `_world_position`, `--altitude`, `--regard`) lisent et écrivent maintenant
+  `camera.global_position`/`global_rotation` plutôt que la position locale —
+  sans quoi elles se seraient trompées dès que la caméra est devenue l'enfant
+  d'un corps plutôt que de la démo elle-même. Elles marchent donc identiquement
+  dans les deux modes, y compris `--joueur --ici x z --regard d` ;
+* **collisions du terrain, activées seulement en `player_mode`**
+  (`flat.generate_collisions`) : la caméra libre creuse et se déplace sur les
+  *données* (`VoxelTool.raycast`) sans jamais y toucher par la physique, et n'a
+  donc jamais eu besoin de collisions. `--joueur --lod` ensemble laisse le
+  joueur traverser le sol : les collisions du mode LOD ne sont toujours pas
+  vérifiées (voir plus bas) ;
+* ⚠️ **hors périmètre pour cette tranche, et à faire avant de rouvrir 3.1** :
+  aucune vérification manette en main du saut ou du sprint au-delà de la
+  lecture de code, aucune interaction avec l'édition du terrain (creuser en
+  étant debout dessus n'a pas été essayé), et la collision du mode LOD reste
+  hors sujet. Suite : **449 vérifications, 0 échec**, aucune régression — cette
+  tranche ne touche à rien de la génération.
+
+### 3.1, deuxième tranche — le personnage visible et la troisième personne (fait le 2026-09-16)
+
+**Demandée en session, à partir de deux images de référence.** Un personnage
+chibi — cheveux blonds hérissés, yeux bleus, tunique sombre, boucle de
+ceinture claire — décomposé en quatre pièces articulées (tête, torse, bras,
+jambe) et animées proceduralement, plutôt qu'un modèle unique et figé.
+
+* **pas de MCP Blender connecté** ; la convention du dépôt pour la flore, les
+  arbres et les filons est déjà du **Python pur** sans `bpy`
+  (`tools/blender/generer_*.py`, malgré le nom du dossier) — suffisant pour des
+  pièces faites de boîtes, et c'est la voie prise
+  (`tools/blender/generer_personnage.py`) ;
+* **la plage de palette « créatures » (41-95), ouverte depuis le 2026-09-05 et
+  jamais peinte** (l'apparence des créatures étant hors périmètre du jalon 2),
+  reçoit son premier contenu réel : `CWPalette.PLAYER_*`. La tunique n'avait
+  pas de rampe à elle nulle part dans la palette — ni les rampes de peau, de
+  fourrure, d'écailles ou de chitine de la plage créatures, ni les métaux,
+  manches, cuir ou gemmes de la plage équipement ne sont du tissu porté.
+  **Décision de ce projet, comme `gres`/`cristal_de_glace` pour les filons** :
+  les deux pas les plus sombres de « tissus, bannières » (220-227, plage
+  structures, jalon 4, elle aussi jamais peinte) sont repeints en tunique
+  plutôt que d'ouvrir une neuvième rampe dans une plage déjà pleine ;
+* `CWPlayerBody` (`src/demo/cw_player_body.gd`) : quatre pivots (deux hanches,
+  deux épaules, plus un pivot de torse et un de tête) sous lesquels chaque
+  pièce se pose. Un seul bras et une seule jambe existent sur le disque —
+  l'autre côté est un reflet de nœud (`scale.x = -1`), pas un second fichier.
+  L'amble avance avec la **distance parcourue** et non le temps, pour que
+  l'appui au sol ne patine pas quand on accélère ;
+* le joueur passe donc en **troisième personne** — décision prise en session,
+  puisqu'on ne peut pas voir son propre personnage en vue subjective sans
+  modèle de mains/bras dédié, qui n'existe pas. La caméra est un enfant du
+  pivot de tangage, décalée en arrière ; ⚠️ **pas encore d'évitement de mur**
+  (un `SpringArm3D` le ferait), donc elle peut traverser le relief près d'une
+  paroi — défaut connu, pas un oubli ;
+* ⚠️ **deux défauts de repère trouvés à la capture, aucun à la lecture du
+  code.** (1) `VoxelVoxLoader` permute les axes en chargeant un `.vox`
+  (`vox(x,y,z) -> godot(y,z,x)`) : écrire largeur et profondeur d'auteur
+  directement dans le fichier les échange à l'arrivée, et le torse (9 de
+  large, 5 de profond) ressortait large de 0,375 bloc vu de face — un fil
+  qui semblait manquer entre la tête et les jambes. (2) Une fois les axes
+  redressés, le visage regardait **vers l'arrière** : la permutation ne
+  retourne pas le signe de la profondeur, et le personnage avance vers -Z
+  (`CWPlayerController`) — sans le correctif, marcher en avant l'aurait fait
+  reculer face à la caméra. Les deux sont corrigés dans `_pose`, au même
+  endroit, avec la mesure qui les a montrés en commentaire ;
+* vérifié en jeu sous trois angles (`--joueur`, caméra arrière puis avancée et
+  retournée manuellement pour l'inspection) : dos cohérent (cheveux, pas
+  d'yeux), face cohérente (yeux bleus, boucle au col), silhouette debout sans
+  interpénétration visible. Suite : **449 vérifications, 0 échec**, aucune
+  régression — ni la palette ni le pipeline de génération de modèles n'ont
+  bougé pour personne d'autre ;
+* **hors périmètre pour cette tranche** : animation du saut (accord explicite
+  en session, idle + marche seulement), vérification manette en main de
+  l'amble (la lecture de code et les captures fixes ne montrent pas le
+  mouvement), et tout évitement de mur pour la caméra.
+
+### 2.1 essayée puis abandonnée cette session — la source ne dit pas ce que sont les stats
+
+**Avant de se tourner vers 3.1**, cette session a cherché le modèle de
+statistiques de créature (jalon 2.1, `entity/Creature.cpp` selon
+`docs/ROADMAP.md`) et a dû rebrousser chemin — à savoir avant de recommencer.
+
+* `entity/Creature.cpp` (client **et** serveur) ne contient **que** de la
+  plomberie de conteneurs STL (constructeurs, destructeurs, érasion de
+  std::map/std::list en arbre rouge-noir) : aucun champ n'y est nommé
+  sémantiquement, tout est en offsets opaques. Ce n'est pas le bon fichier ;
+* les vraies fonctions de statistiques (`calc_attack_power`, `calc_stat_variant`,
+  `roll_random_level`, `calc_regen_total`...) sont mal attribuées dans
+  `server/_library/crt_stl.cpp` — même défaut que `GAP_ANALYSIS.md` signale
+  ailleurs (« misattributed »). Elles y sont, et une **vraie courbe de niveau à
+  rendements décroissants** (`niveauFacteur = 2^((1-1/((niveau-1)·0,05+1))·3)`)
+  y est réutilisée verbatim cinq fois — c'est portable tel quel ;
+* ⚠️ **mais aucune table espèce/race → stats de base n'a été trouvée**, et
+  l'hypothèse de départ (un commentaire de `GAP_ANALYSIS.md` disant
+  `generate_entity_appearance` fixerait un « stat block by race ») était
+  **fausse** : cette fonction fait du gréement de squelette, pas des stats.
+  Les neuf emplacements de stats/compétences repérés géométriquement (un même
+  bloc de 0x118 octets recyclé, niveau roulable à +0x18 de chacun) **n'ont
+  aucun nom retrouvable** dans le binaire — on sait qu'ils existent, pas ce
+  qu'ils représentent (force, vie, mana, une compétence ?) ;
+* **décision prise en session** : plutôt que d'inventer neuf stats sans rien à
+  quoi les accorder, la session a changé de phase pour 3.1. `get_value_range_a`
+  /`get_value_range_b` (@0040efc0/@0040f0a0, `crt_stl.cpp:4912,4964`) sont les
+  candidats les plus proches d'une table par contexte, **non lus** — c'est par
+  là qu'il faudra commencer si 2.1 est rouvert, plutôt que par relire
+  `entity/Creature.cpp`, qui ne mène nulle part.
 
 ### 2.6, l'apparition — les filons affleurent (fait le 2026-09-15)
 

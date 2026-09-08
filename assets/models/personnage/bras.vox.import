@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://ynh0tqekblqu"
+path="res://.godot/imported/bras.vox-8eaf32a0bf5aebf602e3595d30d07b3c.tscn"
+
+[deps]
+
+source_file="res://assets/models/personnage/bras.vox"
+dest_files=["res://.godot/imported/bras.vox-8eaf32a0bf5aebf602e3595d30d07b3c.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true
